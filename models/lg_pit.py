@@ -4,8 +4,13 @@
 # Picard, Management Science 22 (1976) 1268-1272  (maximum closure == minimum cut).
 #
 # LEGEND
+#   mk_v,mk_hand,mk_E : value, hand-case and precedence builders
+#   chk,mc,mc_nx,lp,bf : validator and four exact solve routes
+#   idx,go       : flat-index helper and closure-enumeration recursion
+#   np,nx,mf     : array, graph and OR-Tools maximum-flow modules
+#   linprog,csr_matrix : SciPy solver and sparse-matrix constructor
 #   nx_,ny_,nz_ : block model dimensions, nz_ counted downward from surface k=0
-#   i,j,k       : block coordinates                 di,dj : horizontal offsets
+#   i,j,k       : block coordinates
 #   b           : block index, flattened from (i,j,k) as (i*ny_ + j)*nz_ + k
 #   v           : economic block value vector, dollars; v[b] < 0 is waste
 #   E           : int32 precedence matrix; row (b,p) means b needs p
@@ -14,13 +19,19 @@
 #   aa,cc       : valid neighbour coordinates        h : arcs for one (i,j) column
 #   kk          : depth offsets                      p0 : predecessor column bases
 #   M           : big capacity standing in for infinity on precedence arcs
-#   G           : NetworkX reduction graph           s,t : source and sink
+#   G           : NetworkX reduction graph           F : OR-Tools flow solver
+#   s,t         : source and sink                    st : solver status
+#   sc          : exact integer units per dollar     w : scaled integer block values
+#   sv          : v multiplied by sc                 lim : largest int64 value
+#   pos,neg     : positive and negative block indices
+#   a0,a1,u     : arc tails, heads and capacities    lo,hi : arc slice boundaries
 #   cut,S       : minimum-cut value and source-side nodes
 #   C           : the maximum closure = the set of blocks inside the ultimate pit
 #   z           : pit value, sum of v over C
 #   p_pos       : sum of the positive block values; z = p_pos - mincut
 #   d           : squared normalised ellipsoid radius, 0 at lens centre, 1 at rim
 #   q           : relative grade at a block, 0 to about 1.3
+#   o           : ore value in the hand-worked instance
 #   g           : seeded random number generator      sd : random seed
 #   ci,cj,ck    : ore-lens centre                    ri,rj,rk : ore-lens radii
 #   c_m         : mining cost per block
@@ -29,13 +40,14 @@
 #   A           : sparse LP constraint matrix        x : LP block choices
 #   ii,jj       : CSR row boundaries and column indices
 #   y           : CSR coefficients, +1 for b and -1 for p
-#   o           : SciPy solve result                 arg : best closure found by bf
+#   res         : SciPy solve result                 arg : best closure found by bf
 #   P           : required blocks indexed by block   ord_ : requirements-first block order
 #   take        : blocks in the current bf closure   best : best bf value
 #   a_i         : position in ord_
 
 import numpy as np
 import networkx as nx
+from ortools.graph.python import max_flow as mf
 from scipy.optimize import linprog
 from scipy.sparse import csr_matrix
 
@@ -43,7 +55,7 @@ c_m, c_p, rev = 2.0, 8.0, 34.0
 
 
 def mk_v(nx_, ny_, nz_, sd=7):
-    """Synthetic block values: an ellipsoidal ore lens under barren overburden."""
+    """Synthetic cents-valued blocks: an ore lens under barren overburden."""
     g = np.random.default_rng(sd)
     v = np.full((nx_, ny_, nz_), -c_m)
     ci, cj, ck = nx_ / 2.0, ny_ / 2.0, nz_ * 0.35
@@ -55,7 +67,7 @@ def mk_v(nx_, ny_, nz_, sd=7):
                 if d <= 1.0:
                     q = (1.0 - d) ** 0.4 * g.uniform(0.7, 1.3)
                     v[i, j, k] = rev * q - c_p - c_m
-    return v.ravel()
+    return np.round(v.ravel(), 2)
 
 
 def mk_hand(o):
@@ -96,8 +108,8 @@ def chk(v, E):
     """Validate and normalise one closure instance."""
     v = np.asarray(v, dtype=float)
     E = np.asarray(E)
-    if v.ndim != 1 or not np.isfinite(v).all():
-        raise ValueError("v must be a finite vector")
+    if v.ndim != 1 or not len(v) or not np.isfinite(v).all():
+        raise ValueError("v must be a non-empty finite vector")
     if E.ndim != 2 or E.shape[1:] != (2,):
         raise ValueError("E must have two columns")
     if not np.issubdtype(E.dtype, np.integer):
@@ -107,8 +119,8 @@ def chk(v, E):
     return v, E.astype(np.int32, copy=False)
 
 
-def mc(v, E):
-    """Ultimate pit by minimum cut on the Picard reduction. Returns (z, C)."""
+def mc_nx(v, E):
+    """Reference minimum cut with float capacities in NetworkX."""
     v, E = chk(v, E)
     n = len(v)
     p_pos = float(v[v > 0].sum())
@@ -125,10 +137,48 @@ def mc(v, E):
         elif v[b] < 0:
             G.add_edge(b, t, capacity=float(-v[b]))
     for b, p in E:
-        G.add_edge(b, p, capacity=M)
-    cut, (S, _) = nx.minimum_cut(G, s, t)
-    C = sorted(x for x in S if x != s)
+        G.add_edge(int(b), int(p), capacity=M)
+    cut, (S, _) = nx.minimum_cut(G, s, t, flow_func=nx.algorithms.flow.preflow_push)
+    C = sorted(b for b in S if b != s)
     return p_pos - cut, C
+
+
+def mc(v, E, sc=100):
+    """Production minimum cut with exact integer capacities. Returns (z, C)."""
+    v, E = chk(v, E)
+    if isinstance(sc, (bool, np.bool_)) or not isinstance(sc, (int, np.integer)) or sc < 1:
+        raise ValueError("sc must be a positive integer")
+    sv = v * sc
+    lim = np.iinfo(np.int64).max
+    if not np.isfinite(sv).all() or (np.abs(sv) >= float(1 << 63)).any():
+        raise OverflowError("scaled block values exceed int64")
+    w = np.rint(sv)
+    if (np.abs(w / sc - v) > 4 * np.spacing(np.maximum(np.abs(v), 1.0))).any():
+        raise ValueError(f"v must be exact multiples of 1/{sc}")
+    w = w.astype(np.int64)
+    n = len(v)
+    s, t = n, n + 1
+    pos = np.flatnonzero(w > 0).astype(np.int32)
+    neg = np.flatnonzero(w < 0).astype(np.int32)
+    p_pos = sum(int(x) for x in w[pos])
+    if p_pos >= lim:
+        raise OverflowError("positive scaled values exceed int64")
+    M = p_pos + 1
+    a0 = np.empty(len(pos) + len(neg) + len(E) + 1, dtype=np.int32)
+    a1 = np.empty_like(a0)
+    u = np.empty(len(a0), dtype=np.int64)
+    lo, hi = len(pos), len(pos) + len(neg)
+    a0[:lo], a1[:lo], u[:lo] = s, pos, w[pos]
+    a0[lo:hi], a1[lo:hi], u[lo:hi] = neg, t, -w[neg]
+    a0[hi:-1], a1[hi:-1], u[hi:-1] = E[:, 0], E[:, 1], M
+    a0[-1], a1[-1], u[-1] = s, t, 0
+    F = mf.SimpleMaxFlow()
+    F.add_arcs_with_capacity(a0, a1, u)
+    st = F.solve(s, t)
+    if st != F.OPTIMAL:
+        raise RuntimeError(f"OR-Tools maximum flow failed with status {st}")
+    C = sorted(int(b) for b in F.get_source_side_min_cut() if 0 <= b < n)
+    return (p_pos - F.optimal_flow()) / sc, C
 
 
 def lp(v, E):
@@ -140,10 +190,10 @@ def lp(v, E):
     jj = E.ravel()
     y = np.tile([1.0, -1.0], m)
     A = csr_matrix((y, jj, ii), shape=(m, n))
-    o = linprog(-v, A_ub=A, b_ub=np.zeros(len(E)), bounds=(0, 1), method="highs")
-    if not o.success:
-        raise RuntimeError(o.message)
-    return -o.fun, o.x
+    res = linprog(-v, A_ub=A, b_ub=np.zeros(len(E)), bounds=(0, 1), method="highs")
+    if not res.success:
+        raise RuntimeError(res.message)
+    return -res.fun, res.x
 
 
 def bf(v, E):
