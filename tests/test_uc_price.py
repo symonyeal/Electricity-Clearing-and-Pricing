@@ -1,0 +1,326 @@
+# Verification for unit commitment and the three wholesale pricing rules.
+#
+# Published cases: Hua & Baldick (2017) Tables 1-5, and the Chen-O'Neill-Whitman FERC talk.
+#
+# LEGEND
+#   test_*    : one verification case            np,pytest : test support
+#   M         : the model under test             U,Sol,ck : container, result, validator
+#   uc,en,rx  : integer clearing, enumeration, relaxation
+#   hl,lmp,pc : convex hull program, fixed-commitment prices, the AIC output ceilings
+#   pay,qd,run : payments, the Lagrangian dual value, the whole workflow
+#   ex1,ex2,ex3 : the published cases
+#   g,d       : units and demand                 s,r : a clearing, a full market result
+#   P,pi      : payments and prices              cap : the AIC output ceilings
+#   x,y       : two results being compared       z,z1,z2 : objective values
+#   t,i,j     : period, unit and scratch indices q : a case, a saved function, or a scalar
+#   sd        : random seed                      h : a demand perturbation
+#   k         : the name of one price            a,b : a seeded generator, a best value
+#   AIC3,LMP3 : the talk's reported period-3 AIC and LMP prices
+
+import numpy as np
+import pytest
+from scipy.optimize import linprog
+
+import models.uc_price as M
+from models.uc_price import U, Sol, ck, en, ex1, ex2, ex3, hl, lmp, pay, pc, qd, run, rx, uc
+
+AIC3 = 4390.0 / 30.0
+LMP3 = 90.0
+
+
+def test_ex1_clearing():
+    """Hua-Baldick Example 1 has one feasible commitment; enumeration confirms it."""
+    g, d = ex1()
+    s, y = uc(g, d), en(g, d)
+    assert s.z == pytest.approx(1850.0)
+    assert s.p.ravel() == pytest.approx([35.0, 0.0])
+    assert s.u.tolist() == [[1.0], [0.0]]
+    assert y.z == pytest.approx(s.z)
+
+
+def test_ex1_published_prices():
+    """Table 2: LMP is $50 with uplift (100, 1900); exact CHP is $12 with uplift (1430, 0)."""
+    g, d = ex1()
+    r = run(g, d)
+    assert r.lmp.pi == pytest.approx([50.0])
+    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([100.0, 1900.0])
+    assert r.chp.pi == pytest.approx([12.0])
+    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([1430.0, 0.0], abs=1e-9)
+    assert r.chp.z == pytest.approx(420.0)
+
+
+def test_ex1_aic_removes_make_whole():
+    """The p-cut price is unit 1's average incremental cost, and it leaves no make-whole."""
+    g, d = ex1()
+    r = run(g, d, ep=1e-9)
+    assert r.aic.pi == pytest.approx([1850.0 / 35.0], abs=1e-6)
+    assert pay(g, r.uc, r.aic.pi).mw.sum() == pytest.approx(0.0, abs=1e-6)
+
+
+def test_ex2_clearing():
+    """Table 4: ramping forces unit 2 on at t=2 so it can reach 100 MW at t=3."""
+    g, d = ex2()
+    s, y = uc(g, d), en(g, d)
+    assert s.p.ravel() == pytest.approx([70.0, 40.0, 70.0, 0.0, 60.0, 100.0])
+    assert s.u.tolist() == [[1.0, 1.0, 1.0], [0.0, 1.0, 1.0]]
+    assert s.z == pytest.approx(20960.0)
+    assert y.z == pytest.approx(s.z)
+
+
+def test_ex2_published_prices():
+    """Table 5: LMP is 60 flat with uplift (0, 560); exact CHP is (60, 60, 65.6), (168, 0)."""
+    g, d = ex2()
+    r = run(g, d)
+    assert r.lmp.pi == pytest.approx([60.0, 60.0, 60.0])
+    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([0.0, 560.0], abs=1e-9)
+    assert r.chp.pi == pytest.approx([60.0, 60.0, 65.6])
+    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([168.0, 0.0], abs=1e-9)
+
+
+def test_ex3_clearing_and_lmp():
+    """The talk's case: its dispatch, its LMPs, and its period-by-period unit 2 profit."""
+    g, d = ex3()
+    s, y = uc(g, d), en(g, d)
+    assert s.p.ravel() == pytest.approx([75.0, 75.0, 100.0, 20.0, 25.0, 30.0])
+    assert y.z == pytest.approx(s.z) == pytest.approx(7340.0)
+    L = lmp(g, d, s)
+    assert L.pi == pytest.approx([10.0, 10.0, LMP3])
+    assert L.z == pytest.approx(s.z)
+    q = [(L.pi[t] - 50.0) * s.p[1][t] - 30.0 - (1000.0 if t == 0 else 0.0) for t in range(3)]
+    assert q == pytest.approx([-1830.0, -1030.0, 1170.0])
+    P = pay(g, s, L.pi)
+    assert P.r == pytest.approx([8000.0, -1690.0])
+    assert (P.mw.sum(), P.up.sum()) == pytest.approx((1690.0, 1690.0))
+
+
+def test_ex3_at_the_talks_aic_price():
+    """At the talk's own AIC price this model reproduces its profit and uplift line exactly."""
+    g, d = ex3()
+    s = uc(g, d)
+    P = pay(g, s, [10.0, 10.0, AIC3])
+    assert P.r.sum() == pytest.approx(13633.333333, abs=1e-5)
+    assert (P.r + P.up).sum() == pytest.approx(14770.833333, abs=1e-5)
+    assert P.up.sum() == pytest.approx(1137.5)
+    assert P.mw.sum() == pytest.approx(0.0, abs=1e-9)
+
+
+def test_ex3_exact_aic_is_not_the_talks_price():
+    """The exact hull prices the p-cut at 422, and 146.33 is one restricted mixture of it.
+
+    The talk reports $146.33 for period 3. That is exactly the slope of mixing unit 2's
+    cleared schedule with being off. The convex hull of the p-cut set also contains the
+    'start at period 2' schedule, whose mixture is worth more, so the exact price is $422.
+    Both leave zero make-whole, which is all the talk's Proposition 3 claims.
+    """
+    g, d = ex3()
+    s = uc(g, d)
+    cap = pc(g, d, s, 1e-7)
+    assert cap.ravel() == pytest.approx([100.0, 100.0, 100.0, 20.0, 25.0, 30.0], abs=1e-6)
+    a = hl(g, d, cap)
+    assert a.pi == pytest.approx([10.0, 10.0, 422.0], abs=1e-4)
+    assert pay(g, s, a.pi).mw.sum() == pytest.approx(0.0, abs=1e-6)
+    q = M._cl
+    try:
+        M._cl = lambda x, T, c=None: [
+            y for y in q(x, T, c) if x.su < 1.0 or tuple(y[0]) in {(0, 0, 0), (1, 1, 1)}
+        ]
+        assert hl(g, d, cap).pi == pytest.approx([10.0, 10.0, AIC3], abs=1e-4)
+    finally:
+        M._cl = q
+
+
+@pytest.mark.parametrize("q", [ex1, ex2, ex3])
+def test_hull_value_is_the_dual_maximum(q):
+    """Gribik-Hogan-Pope: the convex hull program's value is the Lagrangian dual maximum."""
+    g, d = q()
+    x = hl(g, d)
+    assert qd(g, d, x.pi) == pytest.approx(x.z, abs=1e-6)
+    a = np.random.default_rng(3)
+    for _ in range(25):
+        assert qd(g, d, x.pi + a.uniform(-40, 40, len(d))) <= x.z + 1e-6
+
+
+@pytest.mark.parametrize("q", [ex1, ex2, ex3])
+def test_uplift_is_the_duality_gap(q):
+    """At any price at all, total uplift is the cleared cost less the dual value."""
+    g, d = q()
+    r = run(g, d)
+    a = np.random.default_rng(11)
+    pi = [getattr(r, k).pi for k in ("lmp", "chp", "chp_r", "aic", "aic_r")]
+    pi += [a.uniform(-30, 300, len(d)) for _ in range(15)]
+    for x in pi:
+        assert pay(g, r.uc, x).up.sum() == pytest.approx(r.uc.z - qd(g, d, x), abs=1e-6)
+
+
+@pytest.mark.parametrize("q", [ex1, ex2, ex3])
+def test_convex_hull_price_minimises_uplift(q):
+    """That gap is smallest at the convex hull price; no other price can beat it."""
+    g, d = q()
+    r = run(g, d)
+    z = pay(g, r.uc, r.chp.pi).up.sum()
+    for k in ("lmp", "chp_r", "aic", "aic_r"):
+        assert pay(g, r.uc, getattr(r, k).pi).up.sum() >= z - 1e-6
+    a = np.random.default_rng(5)
+    for _ in range(25):
+        assert pay(g, r.uc, a.uniform(-30, 300, len(d))).up.sum() >= z - 1e-6
+
+
+@pytest.mark.parametrize("q", [ex1, ex2, ex3])
+def test_bounds_between_the_three_programs(q):
+    """The hull sits between the relaxed system and the integer clearing, as it must."""
+    g, d = q()
+    r = run(g, d)
+    assert r.chp_r.z <= r.chp.z + 1e-6
+    assert r.chp.z <= r.uc.z + 1e-6
+    assert r.aic_r.z <= r.aic.z + 1e-6
+    assert r.aic.z <= r.uc.z + 1e-6
+
+
+@pytest.mark.parametrize("sd", range(8))
+def test_two_feasible_set_descriptions_agree(sd):
+    """The trajectory columns and the algebraic rows must describe the same unit.
+
+    The best self-schedule is found by an integer program over the rows; the same figure
+    is recomputed here by enumerating trajectories and solving each polytope. A wrong row,
+    or a wrongly filtered trajectory, separates the two answers.
+    """
+    a = np.random.default_rng(sd)
+    T = int(a.integers(1, 5))
+    x = M.mk(U(float(a.integers(0, 20)), float(a.integers(20, 60)), float(a.integers(5, 60)),
+               nl=float(a.integers(0, 50)), su=float(a.integers(0, 500)),
+               ru=float(a.integers(5, 40)), rd=float(a.integers(5, 40)),
+               sr=float(a.integers(5, 40)), dr=float(a.integers(5, 40)),
+               mu=int(a.integers(1, 3)), md=int(a.integers(1, 3))))
+    pi = a.uniform(-10, 120, T)
+    b = -np.inf
+    for _, _, _, A, y, k in M._cl(x, T):
+        j = linprog(x.c - pi, A_ub=A, b_ub=y, bounds=(None, None))
+        if j.success:
+            b = max(b, -(float(j.fun) + k))
+    assert b == pytest.approx(M._om([x], T, pi)[0], abs=1e-6)
+
+
+@pytest.mark.parametrize("sd", range(10))
+def test_random_markets_clear_the_same_two_ways(sd):
+    """The integer program and joint enumeration must agree on seeded random markets."""
+    a = np.random.default_rng(100 + sd)
+    T = int(a.integers(1, 4))
+    g = [U(float(a.integers(0, 15)), float(a.integers(20, 50)), float(a.integers(5, 60)),
+           nl=float(a.integers(0, 40)), su=float(a.integers(0, 300)),
+           ru=float(a.integers(8, 40)), rd=float(a.integers(8, 40)),
+           sr=float(a.integers(8, 40)), dr=float(a.integers(8, 40))) for _ in range(3)]
+    d = a.uniform(0.2, 0.8, T) * sum(x.hi for x in g)
+    try:
+        x = uc(g, d)
+    except ValueError:
+        with pytest.raises(ValueError):
+            en(g, d)
+        return
+    assert x.z == pytest.approx(en(g, d).z, abs=1e-6)
+    assert lmp(g, d, x).z == pytest.approx(x.z, abs=1e-6)
+
+
+@pytest.mark.parametrize("sd", range(6))
+def test_p_cut_removes_make_whole(sd):
+    """The talk's Proposition 3: under the exact hull, the p-cut price pays every block."""
+    a = np.random.default_rng(200 + sd)
+    T = int(a.integers(1, 4))
+    g = [U(float(a.integers(0, 15)), float(a.integers(20, 50)), float(a.integers(5, 60)),
+           nl=float(a.integers(0, 40)), su=float(a.integers(0, 400)),
+           ru=float(a.integers(10, 40)), sr=float(a.integers(10, 40))) for _ in range(3)]
+    d = a.uniform(0.3, 0.7, T) * sum(x.hi for x in g)
+    try:
+        s = uc(g, d)
+    except ValueError:
+        return
+    x = hl(g, d, pc(g, d, s, 1e-9))
+    assert pay(g, s, x.pi).mw.sum() == pytest.approx(0.0, abs=1e-5)
+
+
+def test_price_is_a_left_hand_marginal_cost():
+    """Where the cost curve bends, the returned price is its lower slope, not an arbitrary one."""
+    g, d = ex3()
+    s = uc(g, d)
+    h = 1e-4
+    z1 = lmp(g, [95.0, 100.0, 130.0 - h], s).z
+    z2 = lmp(g, [95.0, 100.0, 130.0 + h], s).z
+    assert (s.z - z1) / h == pytest.approx(LMP3, abs=1e-4)
+    assert (z2 - s.z) / h > LMP3 + 1.0
+    assert lmp(g, d, s).pi[2] == pytest.approx(LMP3)
+
+
+def test_minimum_run_and_initial_state():
+    """Minimum run time, minimum down time and a carried-in commitment all bind."""
+    d = [40.0, 10.0, 10.0]
+    s = uc([U(10.0, 40.0, 1.0, nl=100.0), U(0.0, 100.0, 8.0)], d)
+    assert s.u[0].tolist() == [1.0, 0.0, 0.0] and s.z == pytest.approx(300.0)
+    s = uc([U(10.0, 40.0, 1.0, nl=100.0, mu=3), U(0.0, 100.0, 8.0)], d)
+    assert s.u[0].tolist() == [1.0, 1.0, 1.0] and s.z == pytest.approx(360.0)
+    d = [15.0, 15.0, 15.0]
+    s = uc([U(10.0, 40.0, 1.0), U(0.0, 100.0, 8.0)], d)
+    assert s.u[0].tolist() == [1.0, 1.0, 1.0] and s.z == pytest.approx(45.0)
+    s = uc([U(10.0, 40.0, 1.0, md=3, e0=0), U(0.0, 100.0, 8.0)], d)
+    assert s.u[0].tolist() == [0.0, 0.0, 0.0] and s.z == pytest.approx(360.0)
+    s = uc([U(10.0, 40.0, 5.0, ru=5.0, rd=5.0, u0=1, p0=20.0), U(0.0, 100.0, 90.0)], [30.0] * 3)
+    assert s.p[0] == pytest.approx([25.0, 30.0, 30.0])
+
+
+def test_relaxation_is_the_hull_for_a_one_period_unit():
+    """With one period and no ramp story, the plain relaxation already is the convex hull."""
+    g = [U(10.0, 50.0, 50.0, su=100.0), U(20.0, 60.0, 20.0, su=400.0)]
+    for d in ([35.0], [60.0], [80.0]):
+        assert rx(g, d).z == pytest.approx(hl(g, d).z, abs=1e-6)
+        assert rx(g, d).pi == pytest.approx(hl(g, d).pi, abs=1e-6)
+
+
+def test_no_fixed_cost_gives_marginal_cost():
+    """With nothing non-convex in the offers, every rule collapses onto marginal cost."""
+    g = [U(0.0, 50.0, 10.0), U(0.0, 50.0, 20.0)]
+    r = run(g, [70.0])
+    assert r.uc.z == pytest.approx(900.0)
+    for k in ("lmp", "chp", "chp_r", "aic", "aic_r"):
+        assert getattr(r, k).pi == pytest.approx([20.0])
+
+
+def test_bad():
+    """Malformed, infeasible and out-of-range inputs all fail loudly."""
+    g, d = ex1()
+    with pytest.raises(ValueError, match="non-empty vector"):
+        uc(g, [])
+    with pytest.raises(ValueError, match="at least one unit"):
+        uc([], [1.0])
+    with pytest.raises(ValueError, match="0 <= lo <= hi"):
+        uc([U(30.0, 10.0, 5.0)], [1.0])
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        uc(g, [np.nan])
+    with pytest.raises(ValueError, match="ramp limit must be positive"):
+        uc([U(0.0, 10.0, 5.0, ru=0.0)], [1.0])
+    with pytest.raises(ValueError, match="minimum run and down"):
+        uc([U(0.0, 10.0, 5.0, mu=0)], [1.0])
+    with pytest.raises(ValueError, match="initial commitment must be 0 or 1"):
+        uc([U(0.0, 10.0, 5.0, u0=2)], [1.0])
+    with pytest.raises(ValueError, match="starts offline must start at zero"):
+        uc([U(0.0, 10.0, 5.0, u0=0, p0=4.0)], [1.0])
+    with pytest.raises(ValueError, match="inside a running unit"):
+        uc([U(5.0, 10.0, 5.0, u0=1, p0=99.0)], [1.0])
+    with pytest.raises(ValueError, match="exceeds total generating capacity"):
+        uc(g, [500.0])
+    with pytest.raises(ValueError, match="no feasible unit commitment"):
+        uc([U(30.0, 40.0, 5.0)], [10.0])
+    with pytest.raises(ValueError, match="one binary value"):
+        lmp(g, d, Sol(0.0, np.zeros((2, 1)), np.full((2, 1), 0.5), np.zeros(1)))
+    with pytest.raises(ValueError, match="ep must be positive"):
+        pc(g, d, uc(g, d), ep=0.0)
+    with pytest.raises(ValueError, match="breaks a unit's own limits"):
+        pay(g, Sol(0.0, np.array([[99.0], [0.0]]), np.array([[1.0], [0.0]]), None), [1.0])
+    with pytest.raises(ValueError, match="limited to 16 periods"):
+        hl([U(0.0, 10.0, 5.0)], np.ones(17))
+    with pytest.raises(ValueError, match="joint commitments"):
+        en([U(0.0, 10.0, 5.0)] * 6, np.ones(4))
+
+
+def test_ck_fills_defaults():
+    """An unspecified ramp is the unit's full range, and a fresh unit carries no clock."""
+    x = ck([U(10.0, 40.0, 5.0, mu=3, md=2)], [1.0])[0][0]
+    assert (x.ru, x.rd, x.sr, x.dr) == (40.0, 40.0, 40.0, 40.0)
+    assert x.e0 == 3

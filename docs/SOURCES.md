@@ -4,7 +4,7 @@ Publication details and links were checked on 2026-09-14. The note beside each
 source says what it supports; a title was not added merely because it appeared
 in a reading list.
 
-## Current pit model
+## Ultimate pit model
 
 | Source | Use in this repository |
 | --- | --- |
@@ -12,6 +12,30 @@ in a reading list.
 | Picard, J.-C. (1976). ["Maximal Closure of a Graph and Applications to Combinatorial Problems"](https://pubsonline.informs.org/doi/10.1287/mnsc.22.11.1268). *Management Science* 22(11), 1268-1272. | Exact maximum-closure to minimum-cut reduction implemented by `mc` and `mc_nx`. |
 | Hochbaum, D. S. and Chen, A. (2000). ["Performance Analysis and Best Implementations of Old and New Algorithms for the Open-Pit Mining Problem"](https://pubsonline.informs.org/doi/abs/10.1287/opre.48.6.894.12392). *Operations Research* 48(6), 894-914. | Comparison of algorithms for the open-pit problem. |
 | Hochbaum, D. S. (2008). ["The Pseudoflow Algorithm: A New Algorithm for the Maximum-Flow Problem"](https://pubsonline.informs.org/doi/10.1287/opre.1080.0524). *Operations Research* 56(4), 992-1009. | Background on a specialized compiled maximum-flow method. OR-Tools is not claimed to use this algorithm. |
+
+## Unit commitment and electricity prices
+
+| Source | Use in this repository |
+| --- | --- |
+| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf). FERC Technical Conference on Increasing Real-Time and Day-Ahead Market Efficiency through Improved Software, 23-25 June 2020. | The targeted talk, read in full. It supplies the two-stage design used here, the average-incremental-cost output restriction, the make-whole and lost-opportunity definitions, and the two-generator case reproduced as `ex3`. Its period-three price of $146.33 is the one published figure this repository does not reproduce; see Decisions. |
+| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://optimization-online.org/2020/09/8004/). Optimization Online. | The talk's companion paper. Listed because the talk's own reference calls it "under review"; no journal version was found on a 2026-09-14 search, so it is cited as the preprint it is. |
+| Hua, B. and Baldick, R. (2017). ["A Convex Primal Formulation for Convex Hull Pricing"](https://arxiv.org/abs/1605.05002). *IEEE Transactions on Power Systems* 32(5), 3814-3823. | Read in full, from the author's arXiv version of 16 June 2020. Supplies the primal convex hull idea, and Examples 1 and 2, whose Tables 1-5 are reproduced exactly by `ex1` and `ex2`. |
+| Gribik, P., Hogan, W. and Pope, S. (2007). ["Market-Clearing Electricity Prices and Energy Uplift"](https://www.semanticscholar.org/paper/69578a6c6c9fcfdc686c0e0633fa360ac4f3fa4a). Harvard University working paper. | The origin of convex hull pricing, credited as such by both sources above. Not opened here: the definitions implemented came from the two sources above, which restate them. |
+| Balas, E. (1998). ["Disjunctive Programming: Properties of the Convex Hull of Feasible Points"](https://doi.org/10.1016/S0166-218X(98)00136-X). *Discrete Applied Mathematics* 89(1-3). | The standard reference for the union-of-polyhedra form `hl` uses. Not opened; the construction is textbook. Indexes give the page range as both 3-44 and 1-44 because the invited paper carries a two-page foreword. |
+| Rajan, D. and Takriti, S. (2005). ["Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs"](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070). IBM Research Report RC23628. | The minimum run and minimum down inequalities used in `_rw`. Not opened; the report is no longer served by IBM, so the link is a catalogue record. |
+| O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017). ["Dual Pricing Algorithm in ISO Markets"](https://ieeexplore.ieee.org/document/7742365). *IEEE Transactions on Power Systems* 32(4), 3301-3310. | The talk's source for average incremental cost pricing. Not opened; recorded because the rule implemented here is attributed to it. |
+| Yu, Y., Guan, Y. and Chen, Y. (2020). ["An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing"](https://arxiv.org/abs/1906.07862). *IEEE Transactions on Power Systems*. | The published route to a compact convex hull formulation, which is the open item in Decisions and the most likely explanation of the price difference recorded there. Not opened. |
+
+### Data used for the published cases
+
+No file is committed for these; the inputs are small enough to live in `ex1`, `ex2` and
+`ex3` in `models/uc_price.py`, each taken from the table named below.
+
+| Case | Taken from | Anything the source leaves unstated |
+| --- | --- | --- |
+| `ex1` | Hua and Baldick, Table 1 | Nothing. One period, so no ramp applies. |
+| `ex2` | Hua and Baldick, Table 3 | Start-up and shut-down ramps are not given. They are set equal to each unit's normal ramp, which is what makes the paper's own statement true, that ramping forces unit 2 to commit at t = 2 rather than start at t = 3. Any larger start-up ramp contradicts the paper's text. |
+| `ex3` | The FERC talk, slide 13 | Nothing. Limits, costs and all three ramp rates are tabulated there. |
 
 ## Flow and integer theory
 
@@ -80,7 +104,8 @@ evidence for the current synthetic mine economics.
 | --- | --- | --- |
 | OR-Tools | Maximum-flow interface and integer-capacity contract | [Maximum flow](https://developers.google.com/optimization/flow/maxflow) |
 | NetworkX | Minimum-cut and named preflow-push interfaces | [`minimum_cut`](https://networkx.org/documentation/latest/reference/algorithms/generated/networkx.algorithms.flow.minimum_cut.html) |
-| SciPy with HiGHS | Linear-program interface used for closure | [`linprog`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) |
+| SciPy with HiGHS | Linear-program interface used for closure, dispatch, relaxations and price selection | [`linprog`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) |
+| SciPy with HiGHS | Mixed-integer interface used for market clearing and for each unit's best self-schedule | [`milp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.milp.html) |
 | NumPy | Values, arcs, and sparse-matrix inputs | [NumPy documentation](https://numpy.org/doc/stable/) |
 | pytest | Verification runner | [pytest documentation](https://docs.pytest.org/) |
 | Ruff | Python lint check | [Ruff documentation](https://docs.astral.sh/ruff/) |
