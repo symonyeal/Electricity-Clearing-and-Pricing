@@ -596,13 +596,17 @@ def pay(g, s, pi):
     return Pay(r, mw, up - mw, up)
 
 
-def pc(g, d, s, ep=1e-6):
-    """The AIC p-cut: keep the full range where a block already pays, hold the rest near p*."""
+def pc(g, d, s, ep=1e-6, L=None):
+    """Cap a unit near its cleared output wherever a block failed to pay for itself at LMP.
+
+    L is the clearing's own LMP solution. run already has it, so it is passed in rather
+    than solved a second time; on its own pc solves it.
+    """
     g, d = ck(g, d)
     if ep <= 0 or not np.isfinite(ep):
         raise ValueError("ep must be positive and finite")
     T = len(d)
-    L = lmp(g, d, s)
+    L = lmp(g, d, s) if L is None else L
     p, u = np.atleast_2d(np.asarray(s.p, dtype=float)), np.atleast_2d(np.asarray(s.u, dtype=float))
     cap = np.array([np.full(T, x.hi) for x in g])
     for i, x in enumerate(g):
@@ -616,8 +620,9 @@ def pc(g, d, s, ep=1e-6):
 def run(g, d, ep=1e-6):
     """Clear the market once, then take every price in this file from that one clearing."""
     s = uc(g, d)
-    cap = pc(g, d, s, ep)
-    return Mkt(s, lmp(g, d, s), hl(g, d), rx(g, d), hl(g, d, cap), rx(g, d, cap))
+    L = lmp(g, d, s)
+    cap = pc(g, d, s, ep, L)
+    return Mkt(s, L, hl(g, d), rx(g, d), hl(g, d, cap), rx(g, d, cap))
 
 
 def mk_g(G, T, sd=7):
