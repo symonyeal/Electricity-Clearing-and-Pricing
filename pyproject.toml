@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# E741 rejects l, I and O as names. This project names variables after the
+# symbols in the cited papers, where single letters are the notation.
+ignore = ["E741"]
