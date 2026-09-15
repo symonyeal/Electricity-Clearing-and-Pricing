@@ -89,13 +89,48 @@ This file records design choices, rejected work, and what remains open. The
     supply barely meets demand, and it belongs in the README table rather than in a
     footnote.
 
+16. **The convex hull is also built compactly, and that is the default.** `hc` replaces the
+    2^T schedules with an interval graph: a node for each period the unit is free to start
+    in, an arc for each on-interval carrying that interval's own dispatch polytope, and a
+    jump over the minimum down time between one interval and the next. A schedule is a path,
+    so the graph's flow polytope with those polytopes attached is the convex hull. It is
+    exact for the same reason a dynamic program has a polyhedral description. `hl` is kept
+    as the independent check and the tests hold the two against each other before `hc` is
+    trusted; they agree exactly on every published case and on 146 of 146 seeded random
+    markets. `hc` has O(T^2) arcs, so it prices horizons `hl` refuses outright.
+17. **Dual feasibility is an equality.** The price-selection program constrains the dual
+    variables of the priced program. That constraint is an equality, but it reads correctly
+    as an inequality for as long as every variable carries a bound row, because the bound
+    row's own multiplier absorbs the slack. A voltage angle is free and has no such row, so
+    writing it as an inequality admitted prices that were not duals at all. The network
+    found this; no single-bus case could have.
+18. **The price refinement has a stated reach.** Minimising what is paid for demand leaves a
+    face rather than a point wherever the output ceilings have made the program integral, so
+    each period's price is then minimised in turn. That costs one program per balance row,
+    so `LIM` caps how many rows it walks. Past the cap only the payment is minimised and the
+    price is canonical only to that. Each finished stage is held by an inequality a hair
+    above its own optimum, not by an equality, because exact equalities accumulate rounding
+    until a stage reports infeasible and the refinement stops without saying so.
+19. **The remaining price disagreement is reported, not tuned away.** On one seeded market in
+    141, the two hulls return visibly different prices with the ceilings on. Both maximise
+    the Lagrangian dual, both pay exactly the same for demand, and the cost is identical to
+    nine figures: the data does not choose between them, and the refinement cannot close the
+    face below the solver's own tolerance. A test asserts the quantities that are determined
+    and asserts that the prices differ, so the fact stays visible.
+20. **The network is written once and every route reads it.** `_nw` adds one voltage angle
+    per bus and period to whatever program it is handed, puts the line flows into that
+    program's nodal balance rows, and adds the line limits. Flow is the angle difference over
+    the reactance, the ordinary direct-current reading. Prices are therefore one per bus per
+    period in every route, and a market with no network is the same code with one bus and no
+    lines rather than a second path through the model.
+
 ## Shared choices
 
-16. **Make `models` an explicit package.** Its empty `__init__.py` removes the accidental
+21. **Make `models` an explicit package.** Its empty `__init__.py` removes the accidental
     reliance on an implicit namespace package.
-17. **Declare Ruff in the one requirements file.** Ruff was already the required lint
+22. **Declare Ruff in the one requirements file.** Ruff was already the required lint
     check; the missing line made the documented install incomplete.
-18. **The source register was checked on 2026-09-14.** Incorrect publication details were
+23. **The source register was checked on 2026-09-14.** Incorrect publication details were
     corrected and unrelated scouting material was archived. Checked links and exact data
     hashes are in Sources.
 
@@ -104,16 +139,14 @@ This file records design choices, rejected work, and what remains open. The
 1. **Variable wall angles.** The pit model's nine-block pattern is one uniform 45-degree
    wall. A real deposit varies slope by direction and rock type. Only construction of `E`
    changes; the solve does not.
-2. **A transmission network in the market model.** Every published case here is a single
-   bus. Adding lines makes the price locational in fact as well as in name, and introduces
-   the congestion uplift the talk raises at its close.
-3. **Piecewise-linear and quadratic offers.** Offers here are one energy price per unit.
+2. **Piecewise-linear and quadratic offers.** Offers here are one energy price per unit.
    Hua and Baldick handle quadratic costs with a second-order cone program.
-4. **A compact convex hull formulation.** `hl` enumerates schedules, so its cost doubles
-   with every period. The published route to a compact form is the extended formulation of
-   Yu, Guan and Chen. That is the work that would make exact hull pricing usable at a real
-   horizon, and it is also the thing most likely to explain the difference recorded in
-   choice 14.
+3. **The cost of the price refinement.** It is one linear program per balance row, on the
+   transpose of an already large program, and over a full day it dominates everything else.
+   A cheaper canonical selection is what would make exact hull pricing practical at the
+   sizes the clearing itself already reaches.
+4. **Losses and contingencies.** `_nw` is the lossless direct-current approximation, which
+   is what wholesale markets clear on but not what the wires do.
 5. **Mine production scheduling.** The pit model chooses the final pit but not when to mine
    each block. Periods, discounting and capacity limits turn it into an integer program;
    the market model in this repository is that same class of problem for a different asset.

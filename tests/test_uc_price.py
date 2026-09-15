@@ -22,10 +22,14 @@ import pytest
 from scipy.optimize import linprog
 
 import models.uc_price as M
-from models.uc_price import U, Sol, ck, en, ex1, ex2, ex3, hl, lmp, pay, pc, qd, run, rx, uc
+from models.uc_price import (U, Net, Sol, ck, en, ex1, ex2, ex3, ex4, hc, hl, lmp, pay, pc, qd,
+                             run, rx, uc)
 
 AIC3 = 4390.0 / 30.0
 LMP3 = 90.0
+# Prices are canonical to about 1e-9 of the program's own objective, so dollar figures
+# derived from them carry sub-cent noise. Money is therefore compared to a tenth of a cent.
+CENT = 1e-3
 
 
 def test_ex1_clearing():
@@ -42,10 +46,10 @@ def test_ex1_published_prices():
     """Table 2: LMP is $50 with uplift (100, 1900); exact CHP is $12 with uplift (1430, 0)."""
     g, d = ex1()
     r = run(g, d)
-    assert r.lmp.pi == pytest.approx([50.0])
-    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([100.0, 1900.0])
-    assert r.chp.pi == pytest.approx([12.0])
-    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([1430.0, 0.0], abs=1e-9)
+    assert r.lmp.pi.ravel() == pytest.approx([50.0])
+    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([100.0, 1900.0], abs=1e-3)
+    assert r.chp.pi.ravel() == pytest.approx([12.0])
+    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([1430.0, 0.0], abs=1e-3)
     assert r.chp.z == pytest.approx(420.0)
 
 
@@ -53,8 +57,8 @@ def test_ex1_aic_removes_make_whole():
     """The p-cut price is unit 1's average incremental cost, and it leaves no make-whole."""
     g, d = ex1()
     r = run(g, d, ep=1e-9)
-    assert r.aic.pi == pytest.approx([1850.0 / 35.0], abs=1e-6)
-    assert pay(g, r.uc, r.aic.pi).mw.sum() == pytest.approx(0.0, abs=1e-6)
+    assert r.aic.pi.ravel() == pytest.approx([1850.0 / 35.0], abs=1e-5)
+    assert pay(g, r.uc, r.aic.pi).mw.sum() == pytest.approx(0.0, abs=1e-3)
 
 
 def test_ex2_clearing():
@@ -71,10 +75,10 @@ def test_ex2_published_prices():
     """Table 5: LMP is 60 flat with uplift (0, 560); exact CHP is (60, 60, 65.6), (168, 0)."""
     g, d = ex2()
     r = run(g, d)
-    assert r.lmp.pi == pytest.approx([60.0, 60.0, 60.0])
-    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([0.0, 560.0], abs=1e-9)
-    assert r.chp.pi == pytest.approx([60.0, 60.0, 65.6])
-    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([168.0, 0.0], abs=1e-9)
+    assert r.lmp.pi.ravel() == pytest.approx([60.0, 60.0, 60.0])
+    assert pay(g, r.uc, r.lmp.pi).up == pytest.approx([0.0, 560.0], abs=1e-3)
+    assert r.chp.pi.ravel() == pytest.approx([60.0, 60.0, 65.6])
+    assert pay(g, r.uc, r.chp.pi).up == pytest.approx([168.0, 0.0], abs=1e-3)
 
 
 def test_ex3_clearing_and_lmp():
@@ -84,9 +88,9 @@ def test_ex3_clearing_and_lmp():
     assert s.p.ravel() == pytest.approx([75.0, 75.0, 100.0, 20.0, 25.0, 30.0])
     assert y.z == pytest.approx(s.z) == pytest.approx(7340.0)
     L = lmp(g, d, s)
-    assert L.pi == pytest.approx([10.0, 10.0, LMP3])
+    assert L.pi.ravel() == pytest.approx([10.0, 10.0, LMP3])
     assert L.z == pytest.approx(s.z)
-    q = [(L.pi[t] - 50.0) * s.p[1][t] - 30.0 - (1000.0 if t == 0 else 0.0) for t in range(3)]
+    q = [(L.pi[0, t] - 50.0) * s.p[1][t] - 30.0 - (1000.0 if t == 0 else 0.0) for t in range(3)]
     assert q == pytest.approx([-1830.0, -1030.0, 1170.0])
     P = pay(g, s, L.pi)
     assert P.r == pytest.approx([8000.0, -1690.0])
@@ -117,14 +121,14 @@ def test_ex3_exact_aic_is_not_the_talks_price():
     cap = pc(g, d, s, 1e-7)
     assert cap.ravel() == pytest.approx([100.0, 100.0, 100.0, 20.0, 25.0, 30.0], abs=1e-6)
     a = hl(g, d, cap)
-    assert a.pi == pytest.approx([10.0, 10.0, 422.0], abs=1e-4)
+    assert a.pi.ravel() == pytest.approx([10.0, 10.0, 422.0], abs=1e-3)
     assert pay(g, s, a.pi).mw.sum() == pytest.approx(0.0, abs=1e-6)
     q = M._cl
     try:
         M._cl = lambda x, T, c=None: [
             y for y in q(x, T, c) if x.su < 1.0 or tuple(y[0]) in {(0, 0, 0), (1, 1, 1)}
         ]
-        assert hl(g, d, cap).pi == pytest.approx([10.0, 10.0, AIC3], abs=1e-4)
+        assert hl(g, d, cap).pi.ravel() == pytest.approx([10.0, 10.0, AIC3], abs=1e-3)
     finally:
         M._cl = q
 
@@ -134,7 +138,7 @@ def test_hull_value_is_the_dual_maximum(q):
     """Gribik-Hogan-Pope: the convex hull program's value is the Lagrangian dual maximum."""
     g, d = q()
     x = hl(g, d)
-    assert qd(g, d, x.pi) == pytest.approx(x.z, abs=1e-6)
+    assert qd(g, d, x.pi) == pytest.approx(x.z, rel=1e-8)
     a = np.random.default_rng(3)
     for _ in range(25):
         assert qd(g, d, x.pi + a.uniform(-40, 40, len(d))) <= x.z + 1e-6
@@ -159,10 +163,10 @@ def test_convex_hull_price_minimises_uplift(q):
     r = run(g, d)
     z = pay(g, r.uc, r.chp.pi).up.sum()
     for k in ("lmp", "chp_r", "aic", "aic_r"):
-        assert pay(g, r.uc, getattr(r, k).pi).up.sum() >= z - 1e-6
+        assert pay(g, r.uc, getattr(r, k).pi).up.sum() >= z - 1e-3
     a = np.random.default_rng(5)
     for _ in range(25):
-        assert pay(g, r.uc, a.uniform(-30, 300, len(d))).up.sum() >= z - 1e-6
+        assert pay(g, r.uc, a.uniform(-30, 300, len(d))).up.sum() >= z - 1e-3
 
 
 @pytest.mark.parametrize("q", [ex1, ex2, ex3])
@@ -197,7 +201,8 @@ def test_two_feasible_set_descriptions_agree(sd):
         j = linprog(x.c - pi, A_ub=A, b_ub=y, bounds=(None, None))
         if j.success:
             b = max(b, -(float(j.fun) + k))
-    assert b == pytest.approx(M._om([x], T, pi)[0], abs=1e-6)
+    assert b == pytest.approx(M._om([x], T, pi[None, :], M.Net(np.zeros(1, int), (), 1))[0],
+                              abs=1e-6)
 
 
 @pytest.mark.parametrize("sd", range(10))
@@ -246,7 +251,7 @@ def test_price_is_a_left_hand_marginal_cost():
     z2 = lmp(g, [95.0, 100.0, 130.0 + h], s).z
     assert (s.z - z1) / h == pytest.approx(LMP3, abs=1e-4)
     assert (z2 - s.z) / h > LMP3 + 1.0
-    assert lmp(g, d, s).pi[2] == pytest.approx(LMP3)
+    assert lmp(g, d, s).pi[0, 2] == pytest.approx(LMP3)
 
 
 def test_minimum_run_and_initial_state():
@@ -270,7 +275,7 @@ def test_relaxation_is_the_hull_for_a_one_period_unit():
     g = [U(10.0, 50.0, 50.0, su=100.0), U(20.0, 60.0, 20.0, su=400.0)]
     for d in ([35.0], [60.0], [80.0]):
         assert rx(g, d).z == pytest.approx(hl(g, d).z, abs=1e-6)
-        assert rx(g, d).pi == pytest.approx(hl(g, d).pi, abs=1e-6)
+        assert rx(g, d).pi.ravel() == pytest.approx(hl(g, d).pi.ravel(), abs=1e-5)
 
 
 def test_no_fixed_cost_gives_marginal_cost():
@@ -279,7 +284,7 @@ def test_no_fixed_cost_gives_marginal_cost():
     r = run(g, [70.0])
     assert r.uc.z == pytest.approx(900.0)
     for k in ("lmp", "chp", "chp_r", "aic", "aic_r"):
-        assert getattr(r, k).pi == pytest.approx([20.0])
+        assert getattr(r, k).pi.ravel() == pytest.approx([20.0])
 
 
 def test_bad():
@@ -308,7 +313,7 @@ def test_bad():
     with pytest.raises(ValueError, match="no feasible unit commitment"):
         uc([U(30.0, 40.0, 5.0)], [10.0])
     with pytest.raises(ValueError, match="one binary value"):
-        lmp(g, d, Sol(0.0, np.zeros((2, 1)), np.full((2, 1), 0.5), np.zeros(1)))
+        lmp(g, d, Sol(0.0, np.zeros((2, 1)), np.full((2, 1), 0.5), np.zeros((1, 1))))
     with pytest.raises(ValueError, match="ep must be positive"):
         pc(g, d, uc(g, d), ep=0.0)
     with pytest.raises(ValueError, match="breaks a unit's own limits"):
@@ -324,3 +329,137 @@ def test_ck_fills_defaults():
     x = ck([U(10.0, 40.0, 5.0, mu=3, md=2)], [1.0])[0][0]
     assert (x.ru, x.rd, x.sr, x.dr) == (40.0, 40.0, 40.0, 40.0)
     assert x.e0 == 3
+
+
+def _rand(sd, lo=0.15, hi=0.6):
+    """One seeded random market with ramps, minimum run times and a carried-in state."""
+    a = np.random.default_rng(sd)
+    T, G, g = int(a.integers(1, 6)), int(a.integers(2, 4)), []
+    for _ in range(G):
+        q, y = float(a.integers(30, 80)), float(a.integers(0, 12))
+        u0 = int(a.integers(0, 2))
+        g.append(U(y, q, float(a.integers(5, 60)), nl=float(a.integers(0, 40)),
+                   su=float(a.integers(0, 300)), ru=float(a.integers(15, 60)),
+                   rd=float(a.integers(15, 60)), sr=float(a.integers(15, 60)),
+                   dr=float(a.integers(15, 60)), mu=int(a.integers(1, 4)),
+                   md=int(a.integers(1, 4)), u0=u0,
+                   p0=float(a.integers(int(y), int(q))) if u0 else 0.0,
+                   e0=int(a.integers(0, 4))))
+    return g, a.uniform(lo, hi, T) * sum(x.hi for x in g)
+
+
+@pytest.mark.parametrize("q", [ex1, ex2, ex3])
+def test_compact_hull_equals_enumerated_hull(q):
+    """The O(T^2) interval program and the 2^T schedule program are the same convex hull."""
+    g, d = q()
+    a, b = hl(g, d), hc(g, d)
+    assert a.z == pytest.approx(b.z, rel=1e-9)
+    assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)
+
+
+@pytest.mark.parametrize("sd", range(25))
+def test_compact_hull_equals_enumerated_hull_at_random(sd):
+    """Same claim on seeded units with ramps, minimum run times and an initial state.
+
+    This is the check on Yu, Guan and Chen's theorem as implemented here: the interval graph
+    is only the convex hull if its arcs, its minimum-down jumps and its initial arcs are all
+    right, and any error in them separates it from the schedule-by-schedule hull.
+    """
+    g, d = _rand(sd)
+    try:
+        a, b = hl(g, d), hc(g, d)
+    except ValueError:
+        return
+    assert a.z == pytest.approx(b.z, rel=1e-9)
+    assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)
+
+
+def test_capped_hull_agrees_on_what_the_data_determines():
+    """With the AIC ceilings on, the two hulls can pick different prices from one flat face.
+
+    Seed 61 is such a market. Both prices maximise the Lagrangian dual and both pay exactly
+    the same for the demand, so the data does not choose between them; the refinement in _px
+    narrows the face but cannot close it to a point at solver tolerance. The cost and the
+    payment are determined, and those are what this asserts.
+    """
+    g, d = _rand(61)
+    s = uc(g, d)
+    cap = pc(g, d, s, 1e-6)
+    a, b = hl(g, d, cap), hc(g, d, cap)
+    assert a.z == pytest.approx(b.z, rel=1e-9)
+    assert (a.pi * np.atleast_2d(d)).sum() == pytest.approx((b.pi * np.atleast_2d(d)).sum(),
+                                                            rel=1e-9)
+    assert qd(g, d, a.pi, cap) == pytest.approx(a.z, rel=1e-8)
+    assert qd(g, d, b.pi, cap) == pytest.approx(b.z, rel=1e-8)
+    assert np.abs(a.pi - b.pi).max() > 1e-4
+
+
+def test_compact_hull_passes_the_enumeration_ceiling():
+    """hc prices a horizon that hl refuses, which is the whole point of the interval form."""
+    g = [U(10.0, 80.0, 20.0, nl=30.0, su=200.0, ru=60.0, sr=60.0, mu=2, md=2)] * 2
+    d = np.full(17, 90.0)
+    with pytest.raises(ValueError, match="limited to 16 periods"):
+        hl(g, d)
+    assert hc(g, d).z > 0.0
+
+
+def test_three_bus_loop():
+    """A symmetric loop splits flow two thirds to one, and its prices follow the congestion.
+
+    Unit 1 is cheap at bus 0, unit 2 dear at bus 2, and the load sits at bus 2. With equal
+    reactances the direct line carries two thirds of what bus 0 injects, so a 40 MW limit on
+    it caps that unit at 60 MW. Bus 1 is electrically midway and prices midway.
+    """
+    g, d, nw = ex4(lim=100.0)
+    s = uc(g, d, net=nw)
+    assert s.p.ravel() == pytest.approx([90.0, 0.0])
+    assert s.z == pytest.approx(900.0)
+    assert lmp(g, d, s, net=nw).pi.ravel() == pytest.approx([10.0, 10.0, 10.0])
+    g, d, nw = ex4()
+    s = uc(g, d, net=nw)
+    assert s.p.ravel() == pytest.approx([60.0, 30.0])
+    assert s.z == pytest.approx(2100.0)
+    assert lmp(g, d, s, net=nw).pi.ravel() == pytest.approx([10.0, 30.0, 50.0])
+    assert en(g, d, net=nw).z == pytest.approx(s.z)
+    assert hc(g, d, net=nw).z == pytest.approx(hl(g, d, net=nw).z, rel=1e-9)
+
+
+def test_network_reduces_to_one_bus_when_nothing_binds():
+    """Give a market a roomy network and every route returns its single-bus answer."""
+    g, d = ex2()
+    nw = Net([0, 1], ((0, 1, 0.1, 1000.0),), 2)
+    q = np.zeros((2, 3))
+    q[1] = d
+    a, b = run(g, d), run(g, q, net=nw)
+    assert a.uc.z == pytest.approx(b.uc.z)
+    assert b.lmp.pi[0] == pytest.approx(b.lmp.pi[1])
+    assert b.lmp.pi[0] == pytest.approx(a.lmp.pi[0])
+    assert b.chp.pi[0] == pytest.approx(a.chp.pi[0])
+
+
+def test_congestion_separates_prices_and_costs_money():
+    """A binding line raises the cleared cost and splits one price into two."""
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 40.0)]
+    d = [[0.0], [80.0]]
+    free = Net([0, 1], ((0, 1, 1.0, 100.0),), 2)
+    tight = Net([0, 1], ((0, 1, 1.0, 30.0),), 2)
+    a = uc(g, d, net=free)
+    b = uc(g, d, net=tight)
+    assert a.p.ravel() == pytest.approx([80.0, 0.0])
+    assert b.p.ravel() == pytest.approx([30.0, 50.0])
+    assert b.z > a.z
+    assert lmp(g, d, a, net=free).pi.ravel() == pytest.approx([10.0, 10.0])
+    assert lmp(g, d, b, net=tight).pi.ravel() == pytest.approx([10.0, 40.0])
+
+
+def test_network_bad():
+    """A malformed network is rejected before anything is solved."""
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)]
+    with pytest.raises(ValueError, match="sit at a bus"):
+        uc(g, [[0.0], [10.0]], net=Net([0, 5], (), 2))
+    with pytest.raises(ValueError, match="join two different buses"):
+        uc(g, [[0.0], [10.0]], net=Net([0, 1], ((1, 1, 1.0, 5.0),), 2))
+    with pytest.raises(ValueError, match="positive reactance and limit"):
+        uc(g, [[0.0], [10.0]], net=Net([0, 1], ((0, 1, 0.0, 5.0),), 2))
+    with pytest.raises(ValueError, match="one row per bus"):
+        uc(g, [10.0], net=Net([0, 1], ((0, 1, 1.0, 5.0),), 2))

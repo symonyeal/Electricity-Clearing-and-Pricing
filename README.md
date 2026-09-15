@@ -86,21 +86,64 @@ with more than one defensible answer:
 `models/uc_price.py` builds all of this on one description of a unit, written once in
 `_rw`, `_eq` and `_fx`. Everything else reads that description.
 
-### Six solve routes over one feasible set
+### Seven solve routes over one feasible set
 
 | Function | Route | Purpose |
 | --- | --- | --- |
 | `uc` | Mixed-integer program over the rows | Clears the market. Scales |
 | `rx` | The same rows with the commitment relaxed | Priced relaxation, and a lower bound. Scales |
 | `en` | Every joint commitment, each dispatched by its own program | Independent optimum, small cases |
-| `hl` | Convex hull of each unit's schedules, in Balas' union-of-polyhedra form | Exact convex hull and average incremental cost prices, small cases |
+| `hc` | Convex hull built from each unit's on-intervals | Exact convex hull and average incremental cost prices. Default |
+| `hl` | The same hull built from each unit's whole schedules | The independent check on `hc`, small cases |
 | `lmp` | The rows with the cleared commitment held fixed | Locational marginal prices |
 | `qd` | Best self-schedule per unit, as one small integer program each | The Lagrangian dual value, and every unit's foregone profit |
 
-`hl` reads the feasible set as enumerated schedules; `uc`, `rx` and `qd` read it as
-algebraic rows. Those are two different descriptions of the same set, which is what makes
-their agreement worth something. `run` clears once and derives every price from that one
+`hc` and `hl` read the feasible set as schedules; `uc`, `rx` and `qd` read it as algebraic
+rows. Those are two different descriptions of the same set, which is what makes their
+agreement worth something. `run` clears once and derives every price from that one
 clearing.
+
+### Why there are two convex hulls
+
+The convex hull price needs each unit replaced by the convex hull of everything it could
+have done. `hl` does that the obvious way: list every on/off schedule, attach the dispatch
+polytope each one allows, and take the convex hull of that union. It is exact, and it is
+useless past about twelve periods, because the list doubles with every period added.
+
+`hc` gets the same hull from a graph. A unit's schedule is a run of on-intervals separated
+by off time, so put a node at each period the unit is free to start in, draw an arc across
+each possible on-interval, and let that arc carry only its own interval's dispatch
+polytope. A schedule is then a path, the minimum down time is the length of the jump each
+arc makes, and the hull is the graph's flow polytope with those polytopes hung on its arcs.
+That is about T squared over two arcs in place of two-to-the-T schedules.
+
+Its exactness is Yu, Guan and Chen's result, and more generally it is what happens whenever
+a problem is solved by a recursion over an acyclic graph. It is not taken on trust here.
+The tests hold `hc` against `hl` on every published case and on seeded random units with
+ramps, minimum run times and carried-in initial states, and they agree exactly.
+
+### A transmission network
+
+`Net` gives each unit a bus and each line a reactance and a limit, and demand becomes one
+row per bus. Flow on a line is the difference of its end voltage angles over its reactance,
+which is the approximation wholesale markets actually clear on. `_nw` writes that once and
+every route reads it, so a market with no network is this same code with one bus and no
+lines rather than a second path through the model. Prices are therefore always one per bus
+per period.
+
+`ex4` is the standard symmetric three-bus loop, chosen because its answer is arithmetic.
+With equal reactances, two thirds of whatever bus 0 injects takes the direct line to bus 2,
+so a 40 MW limit on that line holds the cheap unit at bus 0 to exactly 60 MW. The model
+returns 60 MW, and prices of $10, $30 and $50 at buses 0, 1 and 2: bus 1 is electrically
+midway and prices midway. Open the limit and the three prices collapse to one.
+
+Adding the network also caught a real error. The program that picks a canonical price
+constrains the dual variables of the priced program, and that constraint is an equality. It
+had been written as an inequality, which is harmless for as long as every variable carries a
+bound row, because that row's own multiplier quietly absorbs the slack. A voltage angle is
+free and has no such row. With the inequality in place the three-bus loop priced an
+uncongested network at minus $10, $0 and $10 instead of $10 everywhere. No single-bus case
+could have exposed it.
 
 ### Prices at a kink
 
@@ -111,8 +154,18 @@ whichever of the equally optimal prices its basis happens to land on.
 
 Every priced solve here therefore re-picks, among exactly the prices that are optimal, the
 one that pays least for the demand served. That is the lower slope: the marginal cost of
-the megawatts actually delivered. Without this rule the same input returns different
-prices on different runs or different solver versions.
+the megawatts actually delivered. Without this rule the same input returns different prices
+on different runs or different solver versions.
+
+Even that leaves a face rather than a point, so each period's price is then minimised in
+turn and held. It still does not always close to a single point. On one seeded market in
+141, the two hulls return visibly different prices once the average incremental cost
+ceilings are on. Both maximise the Lagrangian dual, both pay exactly the same for the
+demand, and the cleared cost agrees to nine figures. The data genuinely does not choose
+between them, and the refinement cannot narrow the face below the solver's own tolerance. A
+test asserts what is determined and asserts that the prices differ, so the fact stays
+visible rather than being tuned away. It is one more reason to handle the average
+incremental cost price with care.
 
 ### Check against outside answers
 
@@ -127,15 +180,16 @@ returns the talk's whole line: total profit 13,633, best achievable profit 14,77
 1,138 and no make-whole payment. The unit data and the payment rules are therefore the
 same as the talk's.
 
-The one number this repository does **not** reproduce is that $146.33 itself. Taking the
-exact convex hull of the restricted set gives $422. The reason is exact and is kept as a
-test: $146.33 is precisely the value of mixing unit 2's cleared schedule with being off,
-and it is recovered here to the last digit when unit 2's hull is limited to those two
+The one number this repository does **not** reproduce is that $146.33 itself. Both exact
+hulls, the schedule-wise one and the compact one, give $422. The reason is exact and is kept
+as a test: $146.33 is precisely the value of mixing unit 2's cleared schedule with being
+off, and it is recovered here to the last digit when unit 2's hull is limited to those two
 schedules. The exact hull also contains the "start at period 2" schedule, whose mixture is
 worth more, and the price follows the better mixture. Both prices leave no make-whole
-payment, which is all the talk's Proposition 3 claims. The talk does not publish the rows
-of the formulation behind its figure, so no stronger statement is made here than that the
-two differ and why.
+payment, which is all the talk's Proposition 3 claims. The talk does not publish the rows of
+the formulation behind its figure, so no stronger statement is made here than that the two
+differ and why. Two independently built exact hulls now agree on $422, so the difference is
+at least not an artefact of how the hull was constructed.
 
 The talk's second figure, $1,161 from its three-binary formulation, is not reproduced
 either, and for the same reason: which valid inequalities a three-binary formulation
@@ -153,10 +207,14 @@ Two identities are checked on every case and on random prices, not assumed:
 
 ## Measured run
 
-`run_bench.py` prints the three tables below. This is the full run made on 2026-09-14 with
-Python 3.14.3, OR-Tools 9.15.6755, NetworkX 3.6.1, SciPy 1.17.1, NumPy 2.4.4, Windows 11
-build 26200, and an Intel64 family 6 model 186 processor. Times are elapsed seconds from
-one run, not projections, and will vary by machine.
+`run_bench.py` prints the four tables below, measured on 2026-09-14 with Python 3.14.3,
+OR-Tools 9.15.6755, NetworkX 3.6.1, SciPy 1.17.1, NumPy 2.4.4, Windows 11 build 26200, and
+an Intel64 family 6 model 186 processor. Times are elapsed seconds from one run, not
+projections, and will vary by machine.
+
+The pit table and the three market tables come from two runs on that same machine and day.
+The pit linear program builds a 2,082,896-row model and needs more memory than was free
+when the market tables were measured; it ran on its own earlier the same day.
 
 ### Ultimate pit limit
 
@@ -184,38 +242,74 @@ MiB. The linear program no longer makes another copy.
 
 | Units x periods | Variables | Cleared cost | uc | rx | pay | Relaxation gap | Units needing make-whole | LMP uplift |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 12 x 8 | 384 | 321,499 | 1.39s | 0.03s | 0.18s | 0.328% | 2 | 1,898 |
-| 24 x 16 | 1,536 | 1,264,174 | 2.57s | 0.13s | 0.43s | 0.085% | 6 | 5,478 |
-| 48 x 24 | 4,608 | 3,831,805 | 2.05s | 1.09s | 0.91s | 0.035% | 5 | 6,473 |
-| 96 x 24 | 9,216 | 7,721,565 | 3.74s | 2.75s | 2.00s | 0.013% | 5 | 6,346 |
+| 12 x 8 | 384 | 321,499 | 3.21s | 0.69s | 0.38s | 0.328% | 2 | 1,898 |
+| 24 x 16 | 1,536 | 1,264,174 | 7.14s | 5.63s | 0.82s | 0.085% | 6 | 5,478 |
+| 48 x 24 | 4,608 | 3,831,805 | 3.98s | 42.12s | 1.35s | 0.035% | 5 | 6,473 |
+| 96 x 24 | 9,216 | 7,721,565 | 5.67s | 137.53s | 3.12s | 0.013% | 5 | 6,346 |
 
 The synthetic market runs from cheap, slow, high-minimum baseload to costly, fast peakers
 over a daily demand shape. Its economic regression check is that at least one unit needs a
 make-whole payment under LMP; a market where none does has no pricing question to answer.
 
+The `rx` column is the odd one, and it is worth reading carefully: a relaxation has no
+business being slower than the integer program it relaxes. It is not the solve. It is the
+price. Picking one canonical price costs a further linear program per balance row, on the
+transpose of the model, and over a 24-period day that is 25 of them.
+
+That was measured on the 48 x 24 market. The relaxed solve and the payment-minimising stage
+together take 1.38 seconds; walking the periods one at a time takes 40.78 seconds, and it
+moves the price by 2.3 millionths of a dollar. On an uncongested relaxation the extra work
+buys almost nothing, because the face is already nearly a point. It earns its keep only
+where the average incremental cost ceilings have made the program integral and the face
+genuinely fat. Splitting that decision without adding a second code path is the largest
+thing still worth fixing here.
+
 ### Exact convex hull prices
 
-| Units x periods | Hull columns | Variables | CHP | AIC | LMP uplift | CHP uplift | AIC uplift | LMP make-whole | CHP make-whole | AIC make-whole |
+| Units x periods | Arcs | Schedules | CHP | AIC | Schedule-wise | Price gap | LMP uplift | CHP uplift | AIC uplift | AIC make-whole |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 6 x 4 | 70 | 350 | 0.03s | 0.03s | 762 | 260 | 486 | 634 | 200 | 0.00 |
-| 8 x 6 | 332 | 2,324 | 0.17s | 0.16s | 1,698 | 363 | 686 | 1,698 | 363 | 0.00 |
-| 10 x 8 | 1,528 | 13,752 | 1.37s | 1.06s | 1,924 | 366 | 38,478,836 | 1,513 | 207 | 0.00 |
-| 12 x 10 | 6,924 | 76,164 | 20.78s | 7.59s | 1,855 | 752 | 3,651 | 725 | 481 | 0.00 |
+| 6 x 4 | 79 | 70 | 0.11s | 0.07s | 0.13s | 4e-13 | 762 | 260 | 486 | 0.00 |
+| 8 x 6 | 200 | 332 | 0.38s | 0.40s | 1.40s | 2e-12 | 1,698 | 363 | 686 | 0.00 |
+| 10 x 8 | 409 | 1,528 | 1.89s | 1.18s | 14.37s | 1e-07 | 1,924 | 366 | 38,447,064 | 0.00 |
+| 12 x 10 | 730 | 6,924 | 5.65s | 4.01s | 212.67s | 8e-11 | 1,855 | 752 | 3,651 | 0.00 |
+| 8 x 14 | 896 | over the ceiling | 16.69s | 10.06s | refused | n/a | 5,460 | 1,964 | 4,727 | 0.00 |
 
-Three things are visible here and all three are real.
+The CHP and AIC columns are `hc`, the interval form. The schedule-wise column is `hl`
+solving the identical hull the obvious way, and the price gap is the largest difference
+between the two prices. They are the same answer: at 12 x 10, 730 arcs in place of 6,924
+schedules, 5.65 seconds in place of 212.67, and prices apart by eight in the eleventh
+decimal. At 8 x 14 the schedule-wise route will not start at all.
+
+Three economic things are visible here and all three are real.
 
 The convex hull price always leaves less uplift than LMP, as the theory requires. The
 average incremental cost price always removes the make-whole payment entirely, as its
 sponsors claim. And the price it charges to do so is not bounded: on the 10 x 8 market it
-leaves 38.5 million in foregone profit. That is not a defect in the solve. The restriction
+leaves 38.4 million in foregone profit. That is not a defect in the solve. The restriction
 squeezes the priced market until supply barely meets demand in the binding period, and the
 marginal cost of the last megawatt in such a market can be arbitrarily large. Anyone
-proposing this rule for real settlement has to answer that, and this repository measures
-it rather than describing it.
+proposing this rule for real settlement has to answer that, and this repository measures it
+rather than describing it.
 
-The column count is the practical limit on the exact hull. It doubles with every period
-added, and the cost of the solve grows faster than the count. The ceiling in `LIM` is a
-guard, not a promise of speed.
+### A congested network
+
+`ex4` again, at four limits on the direct line. Every number here can be checked by hand
+from the two-thirds flow split.
+
+| Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | Price at 1 | Price at 2 | Congestion rent |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
+| 60 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
+| 40 MW | 60 | 30 | 2,100 | 10.00 | 30.00 | 50.00 | 2,400 |
+| 20 MW | 30 | 60 | 3,300 | 10.00 | 30.00 | 50.00 | 1,200 |
+
+At a 60 MW limit the line is exactly full and nothing has yet been given up, so there is
+still one price. Tighten it and the cheap unit is held to one and a half times the limit,
+the three buses price apart, and the market collects a congestion rent it pays to nobody:
+load at bus 2 pays 90 MW at $50 while generators are paid $10 and $50 for what they made.
+That rent is the money financial transmission rights are written against, and it is also
+the reason the talk ends by warning that lines which do not bind in the clearing can bind
+in the pricing run.
 
 ## Run it
 
@@ -228,4 +322,4 @@ python -m ruff check .
 python run_bench.py
 ```
 
-The last full verification on 2026-09-14 passed 84 tests and the complete lint check.
+The last full verification on 2026-09-14 passed 118 tests and the complete lint check.
