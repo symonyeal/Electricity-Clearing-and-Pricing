@@ -283,5 +283,5 @@ python -m pip check
 python run_bench.py
 ```
 
-Verification on 2026-09-15: 236 tests passed; Ruff and dependency checks passed; all
+Verification on 2026-09-15: 241 tests passed; Ruff and dependency checks passed; all
 benchmark rows completed, including the 2,082,896-row LP.
