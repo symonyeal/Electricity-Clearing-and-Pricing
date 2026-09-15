@@ -1,12 +1,13 @@
 # Electricity Market Model
 
-Unit commitment, the prices dual to it, and the uplift each price leaves. A second exact
-model, the ultimate pit limit, is kept here as the maximum-closure case. Each model has
-independent checks.
+Unit commitment, the prices dual to it, and the uplift each price leaves. Two further exact
+models are kept beside it: the ultimate pit limit as the maximum-closure case, and the
+pglib-uc reference commitment as the external benchmark. Each model has independent checks.
 
 | Model | Formulation | Default solver |
 | --- | --- | --- |
 | Unit commitment and pricing | Mixed-integer clearing followed by linear pricing | SciPy with HiGHS |
+| pglib-uc reference commitment | Mixed-integer clearing, piecewise cost, start-up tiers, reserve | SciPy with HiGHS |
 | Ultimate pit limit | Maximum-weight closure | OR-Tools maximum flow |
 
 [Decisions](docs/DECISIONS.md) records modeling choices. [Sources](docs/SOURCES.md) records

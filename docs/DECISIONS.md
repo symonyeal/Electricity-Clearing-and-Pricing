@@ -86,6 +86,7 @@ different thing.
 | --- | --- | --- |
 | Built | Ultimate pit limit | Maximum closure |
 | Built | Unit commitment and pricing | Mixed-integer model with dual prices |
+| Built | pglib-uc reference commitment | Mixed-integer model, benchmarked, not priced |
 | Exact flow | Shortest path, maximum flow, transportation, transshipment, assignment | Network flow |
 | Branch point | Integer minimum-cost flow with one budget row | Integer optimization may be NP-hard |
 | Integer network | Production scheduling, multicommodity flow, fixed-charge flow | Mixed-integer optimization |
