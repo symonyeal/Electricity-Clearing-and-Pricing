@@ -1,48 +1,18 @@
-# Network Flow Models
+# Electricity Market Model
 
-This repository contains two exact optimization models and independent checks for each.
+Unit commitment, the prices dual to it, and the uplift each price leaves. A second exact
+model, the ultimate pit limit, is kept here as the maximum-closure case. Each model has
+independent checks.
 
 | Model | Formulation | Default solver |
 | --- | --- | --- |
-| Ultimate pit limit | Maximum-weight closure | OR-Tools maximum flow |
 | Unit commitment and pricing | Mixed-integer clearing followed by linear pricing | SciPy with HiGHS |
+| Ultimate pit limit | Maximum-weight closure | OR-Tools maximum flow |
 
 [Decisions](docs/DECISIONS.md) records modeling choices. [Sources](docs/SOURCES.md) records
 references and data provenance.
 
-## 1. Ultimate pit limit
-
-Let $B$ be the blocks, $v_b$ the net value of block $b$, and $P(b)$ the blocks that
-must be removed before $b$. The model is
-
-$$
-\begin{aligned}
-\max_x \quad & \sum_{b\in B} v_b x_b \\
-\text{s.t.}\quad & x_b \le x_p && b\in B,\ p\in P(b),\\
-& x_b\in\{0,1\} && b\in B.
-\end{aligned}
-$$
-
-This is a maximum-closure problem. Picard's reduction solves it by one minimum cut.
-
-| Function | Method | Role |
-| --- | --- | --- |
-| `mc` | OR-Tools maximum flow; exact integer capacities | Default |
-| `mc_nx` | NetworkX minimum cut | Independent implementation of the reduction |
-| `lp` | Linear programming relaxation | Independent formulation |
-| `bf` | Enumeration of closed sets | Exact check for at most 20 blocks |
-
-All routes use the same precedence array. Separate tests check arc direction, boundary
-counts, closure, and economic nontriviality.
-
-### External validation
-
-The MineLib Newman1 fixture has 1,060 blocks and 3,922 precedence arcs. The model returns
-26,086,899.025970 and the same 1,059 selected block IDs as the official solution. Its
-rounded value is MineLib's 26,086,899. OR-Tools, NetworkX, and the LP agree. File hashes are
-in [Sources](docs/SOURCES.md#minelib-benchmark).
-
-## 2. Unit commitment and pricing
+## 1. Unit commitment and pricing
 
 For generator $g$ and period $t$, let $p_{gt}$ be output, $u_{gt}$ commitment,
 $v_{gt}$ start-up, and $w_{gt}$ shut-down. With feasible unit set $X_g$, clearing is
@@ -134,22 +104,43 @@ $$
 
 Hence CHP minimizes total uplift over uniform prices.
 
+## 2. Ultimate pit limit
+
+Let $B$ be the blocks, $v_b$ the net value of block $b$, and $P(b)$ the blocks that
+must be removed before $b$. The model is
+
+$$
+\begin{aligned}
+\max_x \quad & \sum_{b\in B} v_b x_b \\
+\text{s.t.}\quad & x_b \le x_p && b\in B,\ p\in P(b),\\
+& x_b\in\{0,1\} && b\in B.
+\end{aligned}
+$$
+
+This is a maximum-closure problem. Picard's reduction solves it by one minimum cut.
+
+| Function | Method | Role |
+| --- | --- | --- |
+| `mc` | OR-Tools maximum flow; exact integer capacities | Default |
+| `mc_nx` | NetworkX minimum cut | Independent implementation of the reduction |
+| `lp` | Linear programming relaxation | Independent formulation |
+| `bf` | Enumeration of closed sets | Exact check for at most 20 blocks |
+
+All routes use the same precedence array. Separate tests check arc direction, boundary
+counts, closure, and economic nontriviality.
+
+### External validation
+
+The MineLib Newman1 fixture has 1,060 blocks and 3,922 precedence arcs. The model returns
+26,086,899.025970 and the same 1,059 selected block IDs as the official solution. Its
+rounded value is MineLib's 26,086,899. OR-Tools, NetworkX, and the LP agree. File hashes are
+in [Sources](docs/SOURCES.md#minelib-benchmark).
+
 ## 3. Computational results
 
 One run on 2026-09-15 used Python 3.14.3, OR-Tools 9.15.6755, NetworkX 3.6.1, SciPy
 1.17.1, NumPy 2.4.4, Windows 11 build 26200, and an Intel64 family 6 model 186 processor.
 Times are elapsed seconds.
-
-### Ultimate pit
-
-| Model | Blocks | Arcs | Pit value | OR-Tools | NetworkX | LP | Fractional | Strip ratio | Ore omitted |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 30x30x12 | 10,800 | 85,184 | 2,552.23 | 0.009s | 0.83s | 0.23s | 0 | 2.64 | 73 |
-| 60x60x20 | 72,000 | 601,996 | 20,102.47 | 0.085s | 8.14s | 2.06s | 0 | 2.06 | 230 |
-| 90x90x30 | 243,000 | 2,082,896 | 68,454.46 | 0.420s | 41.69s | 10.83s | 0 | 2.03 | 602 |
-
-The 90x90x30 arc array uses 15.90 MiB and took 0.410s to build. The former tuple list used
-270.51 MiB and took 4.454s.
 
 ### Market clearing
 
@@ -236,6 +227,17 @@ $-\bar f_{ij}\le f_{ij}\le\bar f_{ij}$. Nodal balances replace the single-system
 
 With equal reactances, two thirds of bus-0 injection uses the direct line. The 40 MW limit
 therefore caps bus-0 output at 60 MW. The computed nodal prices are $(10,30,50)$.
+
+### Ultimate pit
+
+| Model | Blocks | Arcs | Pit value | OR-Tools | NetworkX | LP | Fractional | Strip ratio | Ore omitted |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 30x30x12 | 10,800 | 85,184 | 2,552.23 | 0.009s | 0.83s | 0.23s | 0 | 2.64 | 73 |
+| 60x60x20 | 72,000 | 601,996 | 20,102.47 | 0.085s | 8.14s | 2.06s | 0 | 2.06 | 230 |
+| 90x90x30 | 243,000 | 2,082,896 | 68,454.46 | 0.420s | 41.69s | 10.83s | 0 | 2.03 | 602 |
+
+The 90x90x30 arc array uses 15.90 MiB and took 0.410s to build. The former tuple list used
+270.51 MiB and took 4.454s.
 
 ## Reproduce
 

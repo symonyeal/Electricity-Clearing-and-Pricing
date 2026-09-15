@@ -2,15 +2,6 @@
 
 Checked on 2026-09-15. Each note states the source's role and review status.
 
-## Ultimate pit model
-
-| Source | Use in this repository |
-| --- | --- |
-| Lerchs, H. and Grossmann, I. F. (1965). ["Optimum Design of Open-Pit Mines"](https://onetunnel.org/documents/optimum-design-of-open-pit-mines). *CIM Bulletin* 58(633), 47-54. | Original ultimate-pit problem. The often-repeated pages 17-24 belong to a later *Transactions of the CIM* reprint, not the 1965 Bulletin article. |
-| Picard, J.-C. (1976). ["Maximal Closure of a Graph and Applications to Combinatorial Problems"](https://pubsonline.informs.org/doi/10.1287/mnsc.22.11.1268). *Management Science* 22(11), 1268-1272. | Exact maximum-closure to minimum-cut reduction implemented by `mc` and `mc_nx`. |
-| Hochbaum, D. S. and Chen, A. (2000). ["Performance Analysis and Best Implementations of Old and New Algorithms for the Open-Pit Mining Problem"](https://pubsonline.informs.org/doi/abs/10.1287/opre.48.6.894.12392). *Operations Research* 48(6), 894-914. | Comparison of algorithms for the open-pit problem. |
-| Hochbaum, D. S. (2008). ["The Pseudoflow Algorithm: A New Algorithm for the Maximum-Flow Problem"](https://pubsonline.informs.org/doi/10.1287/opre.1080.0524). *Operations Research* 56(4), 992-1009. | Background on a specialized compiled maximum-flow method. OR-Tools is not claimed to use this algorithm. |
-
 ## Unit commitment and electricity prices
 
 | Source | Use in this repository |
@@ -36,6 +27,15 @@ The small published inputs are defined in `models/uc_price.py`.
 | `ex2` | Hua and Baldick, Table 3 | Start-up and shut-down ramps are omitted. Setting them equal to the normal ramps yields the paper's period-2 commitment; a larger start-up ramp does not. |
 | `ex3` | The FERC talk, slide 13 | Nothing. Limits, costs and all three ramp rates are tabulated there. |
 | `ex4` | Synthetic | Symmetric three-bus loop. Equal reactances send two thirds of an injection over the direct line. |
+
+## Ultimate pit model
+
+| Source | Use in this repository |
+| --- | --- |
+| Lerchs, H. and Grossmann, I. F. (1965). ["Optimum Design of Open-Pit Mines"](https://onetunnel.org/documents/optimum-design-of-open-pit-mines). *CIM Bulletin* 58(633), 47-54. | Original ultimate-pit problem. The often-repeated pages 17-24 belong to a later *Transactions of the CIM* reprint, not the 1965 Bulletin article. |
+| Picard, J.-C. (1976). ["Maximal Closure of a Graph and Applications to Combinatorial Problems"](https://pubsonline.informs.org/doi/10.1287/mnsc.22.11.1268). *Management Science* 22(11), 1268-1272. | Exact maximum-closure to minimum-cut reduction implemented by `mc` and `mc_nx`. |
+| Hochbaum, D. S. and Chen, A. (2000). ["Performance Analysis and Best Implementations of Old and New Algorithms for the Open-Pit Mining Problem"](https://pubsonline.informs.org/doi/abs/10.1287/opre.48.6.894.12392). *Operations Research* 48(6), 894-914. | Comparison of algorithms for the open-pit problem. |
+| Hochbaum, D. S. (2008). ["The Pseudoflow Algorithm: A New Algorithm for the Maximum-Flow Problem"](https://pubsonline.informs.org/doi/10.1287/opre.1080.0524). *Operations Research* 56(4), 992-1009. | Background on a specialized compiled maximum-flow method. OR-Tools is not claimed to use this algorithm. |
 
 ## Flow and integer theory
 
