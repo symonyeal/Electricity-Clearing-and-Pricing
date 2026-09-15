@@ -281,6 +281,7 @@ python -m pytest -q
 python -m ruff check .
 python -m pip check
 python run_bench.py
+python run_face_scan.py
 ```
 
 Verification on 2026-09-15: 241 tests passed; Ruff and dependency checks passed; all
