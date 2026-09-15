@@ -120,7 +120,7 @@ def chk(v, E):
 
 
 def mc_nx(v, E):
-    """Reference minimum cut with float capacities in NetworkX."""
+    """Independent minimum cut, float capacities, NetworkX."""
     v, E = chk(v, E)
     n = len(v)
     p_pos = float(v[v > 0].sum())
@@ -144,7 +144,7 @@ def mc_nx(v, E):
 
 
 def mc(v, E, sc=100):
-    """Production minimum cut with exact integer capacities. Returns (z, C)."""
+    """Default minimum cut, exact integer capacities. Returns (z, C)."""
     v, E = chk(v, E)
     if isinstance(sc, (bool, np.bool_)) or not isinstance(sc, (int, np.integer)) or sc < 1:
         raise ValueError("sc must be a positive integer")
@@ -182,7 +182,7 @@ def mc(v, E, sc=100):
 
 
 def lp(v, E):
-    """Closure as an LP; its transposed node-arc matrix has whole-number vertices."""
+    """Closure as a linear program. Its transposed node-arc matrix is totally unimodular."""
     v, E = chk(v, E)
     n = len(v)
     m = len(E)
@@ -197,7 +197,7 @@ def lp(v, E):
 
 
 def bf(v, E):
-    """Generate every closure; ground truth up to 20 blocks."""
+    """Enumerate every closed set; exact for at most 20 blocks."""
     v, E = chk(v, E)
     n = len(v)
     if n > 20:

@@ -244,7 +244,7 @@ def test_p_cut_removes_make_whole(sd):
 
 
 def test_price_is_a_left_hand_marginal_cost():
-    """Where the cost curve bends, the returned price is its lower slope, not an arbitrary one."""
+    """At a kink in the cost curve the returned price is the lower slope, not an arbitrary one."""
     g, d = ex3()
     s = uc(g, d)
     h = 1e-4
@@ -272,7 +272,7 @@ def test_minimum_run_and_initial_state():
 
 
 def test_relaxation_is_the_hull_for_a_one_period_unit():
-    """With one period and no ramp story, the plain relaxation already is the convex hull."""
+    """With one period and no ramp rows, the relaxation is already the convex hull."""
     g = [U(10.0, 50.0, 50.0, su=100.0), U(20.0, 60.0, 20.0, su=400.0)]
     for d in ([35.0], [60.0], [80.0]):
         assert rx(g, d).z == pytest.approx(hl(g, d).z, abs=1e-6)
@@ -280,7 +280,7 @@ def test_relaxation_is_the_hull_for_a_one_period_unit():
 
 
 def test_no_fixed_cost_gives_marginal_cost():
-    """With nothing non-convex in the offers, every rule collapses onto marginal cost."""
+    """With convex offers, every pricing rule collapses onto marginal cost."""
     g = [U(0.0, 50.0, 10.0), U(0.0, 50.0, 20.0)]
     r = run(g, [70.0])
     assert r.uc.z == pytest.approx(900.0)
@@ -289,7 +289,7 @@ def test_no_fixed_cost_gives_marginal_cost():
 
 
 def test_thin_price_face_skips_the_period_walk(monkeypatch):
-    """A measured sub-mill face costs one probe, not one solve per period."""
+    """A face narrower than a tenth of a cent costs one probe, not one solve per period."""
     f, n = M.linprog, 0
 
     def lp(*a, **k):
@@ -304,7 +304,7 @@ def test_thin_price_face_skips_the_period_walk(monkeypatch):
 
 
 def test_wide_price_face_keeps_the_period_walk(monkeypatch):
-    """The measured wide capped face still takes every lexicographic stage."""
+    """A measurably wide capped face still takes every lexicographic stage."""
     g, d = _rand(61)
     s = uc(g, d)
     cap = pc(g, d, s, 1e-6)
@@ -321,7 +321,7 @@ def test_wide_price_face_keeps_the_period_walk(monkeypatch):
 
 
 def test_bad():
-    """Malformed, infeasible and out-of-range inputs all fail loudly."""
+    """Malformed, infeasible and out-of-range inputs are rejected."""
     g, d = ex1()
     with pytest.raises(ValueError, match="non-empty vector"):
         uc(g, [])
@@ -358,7 +358,7 @@ def test_bad():
 
 
 def test_ck_fills_defaults():
-    """An unspecified ramp is the unit's full range, and a fresh unit carries no clock."""
+    """An unspecified ramp is the unit's full range; a fresh unit carries no initial duration."""
     x = ck([U(10.0, 40.0, 5.0, mu=3, md=2)], [1.0])[0][0]
     assert (x.ru, x.rd, x.sr, x.dr) == (40.0, 40.0, 40.0, 40.0)
     assert x.e0 == 3
@@ -418,10 +418,10 @@ def test_compact_hull_equals_enumerated_hull_at_random(sd):
 def test_capped_hull_agrees_on_what_the_data_determines():
     """With the AIC ceilings on, the two hulls can pick different prices from one flat face.
 
-    Seed 61 is such a market. Both prices maximise the Lagrangian dual and both pay exactly
-    the same for the demand, so the data does not choose between them; the refinement in _px
-    narrows the face but cannot close it to a point at solver tolerance. The cost and the
-    payment are determined, and those are what this asserts.
+    Seed 61 is such a market. Both prices maximise the Lagrangian dual and both pay the
+    same for demand, so the data does not determine one; the refinement in _px narrows the
+    face but cannot close it to a point at solver tolerance. Cost and payment are
+    determined, and those are what this asserts.
     """
     g, d = _rand(61)
     s = uc(g, d)
@@ -436,7 +436,7 @@ def test_capped_hull_agrees_on_what_the_data_determines():
 
 
 def test_compact_hull_passes_the_enumeration_ceiling():
-    """hc prices a horizon that hl refuses, which is the whole point of the interval form."""
+    """hc prices a horizon hl refuses. That is the purpose of the interval form."""
     g = [U(10.0, 80.0, 20.0, nl=30.0, su=200.0, ru=60.0, sr=60.0, mu=2, md=2)] * 2
     d = np.full(17, 90.0)
     with pytest.raises(ValueError, match="limited to 16 periods"):
@@ -447,9 +447,9 @@ def test_compact_hull_passes_the_enumeration_ceiling():
 def test_three_bus_loop():
     """A symmetric loop splits flow two thirds to one, and its prices follow the congestion.
 
-    Unit 1 is cheap at bus 0, unit 2 dear at bus 2, and the load sits at bus 2. With equal
-    reactances the direct line carries two thirds of what bus 0 injects, so a 40 MW limit on
-    it caps that unit at 60 MW. Bus 1 is electrically midway and prices midway.
+    Unit 1 is cheap at bus 0, unit 2 costly at bus 2, and the load sits at bus 2. With
+    equal reactances the direct line carries two thirds of any bus-0 injection, so a 40 MW
+    limit on it caps that unit at 60 MW. Bus 1 lies electrically midway and prices midway.
     """
     g, d, nw = ex4(lim=100.0)
     s = uc(g, d, net=nw)
@@ -466,7 +466,7 @@ def test_three_bus_loop():
 
 
 def test_network_reduces_to_one_bus_when_nothing_binds():
-    """Give a market a roomy network and every route returns its single-bus answer."""
+    """With no binding line, every route returns the single-bus answer."""
     g, d = ex2()
     nw = Net([0, 1], ((0, 1, 0.1, 1000.0),), 2)
     q = np.zeros((2, 3))

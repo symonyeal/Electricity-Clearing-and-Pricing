@@ -1,4 +1,4 @@
-# Scale bench for both models. Prints the tables in README.md.
+# Scale bench for both models. Source of the measured tables in README.md.
 #
 # LEGEND
 #   DIMS,MKT,HUL : the measured pit sizes, market sizes and convex-hull sizes
@@ -25,7 +25,7 @@
 #   h     : capped spare MW                     tag : one market label
 #   net   : one row of the network table       lim : one line limit
 #   nw,pi : the three-bus network and its nodal prices
-#   rent  : what the congested network collects and pays to nobody
+#   rent  : congestion rent, demand payment less generator revenue
 #   e,K   : the schedule-wise column, and the schedule count
 
 import time
@@ -131,7 +131,7 @@ def aic(tag, g, d, eps):
 
 
 def aseed():
-    """Summarise the default epsilon across fifteen independently seeded 10x8 markets."""
+    """The default epsilon across fifteen independently seeded 10x8 markets."""
     up, mw, peak, scarce = [], [], [], 0
     for sd in range(15):
         g, d = mk_g(10, 8, sd)
@@ -195,22 +195,20 @@ if __name__ == "__main__":
     print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for d in HUL:
         hul(*d)
-    print("\n## Average incremental cost price against epsilon\n")
+    print("\n## AIC sensitivity to epsilon\n")
     print(
-        "| Market | epsilon MW | Period prices ($/MWh) | Uplift ($) | Make-whole ($) | "
-        "Cleared cost ($/MWh) | Load-weighted price premium ($/MWh) | "
-        "Highest-price period / capped spare MW |"
+        "| Market | epsilon MW | Prices ($/MWh) | Uplift ($) | Make-whole ($) | "
+        "Cost ($/MWh) | Weighted premium ($/MWh) | Peak period / spare MW |"
     )
     print("| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |")
     aic("ex3", *ex3(), EPS)
     aic("8 x 6, seed 7", *mk_g(8, 6), EPS)
     aic("10 x 8, seed 7", *mk_g(10, 8), EPS10)
-    print("\n## Average incremental cost price across 10x8 seeds\n")
+    print("\n## AIC across 10x8 seeds\n")
     print(
-        "| Seeds | Peak price >$1,000/MWh: count (uplift range, $) | "
-        "Peak price <=$1,000/MWh: count (uplift range, $) | "
-        "Highest-price period at epsilon headroom | Make-whole below $0.001 | "
-        "Largest make-whole ($) |"
+        "| Seeds | Peak >$1,000/MWh: markets (uplift range, $) | "
+        "Peak <=$1,000/MWh: markets (uplift range, $) | Peak at epsilon headroom | "
+        "Make-whole <$0.001 | Maximum make-whole ($) |"
     )
     print("| ---: | --- | --- | ---: | ---: | ---: |")
     aseed()

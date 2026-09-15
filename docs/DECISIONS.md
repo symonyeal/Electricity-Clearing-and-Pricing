@@ -1,197 +1,86 @@
 # Decisions and remaining work
 
-This file records design choices, rejected work, and what remains open. The
-[README](../README.md) owns measured results and run instructions.
-[Sources](SOURCES.md) owns citations and data provenance.
+[README](../README.md) contains results. [Sources](SOURCES.md) contains references and data
+provenance.
 
-## Rules for every model
+## Model standards
 
-- Solve it by at least two routes. Use exhaustive enumeration when the instance is small
-  enough.
-- Prefer two different *descriptions* of the feasible set over two solvers reading one
-  description. Two solvers on one description cannot detect a wrong description.
-- Compare objective values when several optimal solutions exist. Comparing sets in a tie
-  creates a false failure.
-- Check against an answer published by someone else, and say plainly where the result
-  differs from theirs.
-- Label synthetic inputs and give each generator a measurable economic check.
-- Add a dependency only when it replaces existing work, is measured on the actual model,
-  and leaves an independent check in place.
+1. Use at least two exact solve routes.
+2. Prefer independent formulations to multiple solvers on one formulation.
+3. Compare objective values when optima are nonunique.
+4. Test against published results and state every difference.
+5. Label synthetic data and test its intended property.
+6. Add a dependency only after measurement on the implemented model.
 
-## Ultimate pit limit
+## Ultimate pit
 
-1. **Use Picard's minimum-cut reduction.** A positive block gets an arc from the source, a
-   negative block gets an arc to the sink, and a deep block `b` gets a precedence arc to
-   each required upper block `p`. The returned pit is the source side without the source.
-   A precedence capacity is the sum of all positive scaled values plus one, so cutting even
-   one costs more than the always-available cut of every source arc.
-2. **OR-Tools 9.15.6755 is the default solver.** It replaced NetworkX in `mc` after it ran
-   faster at all three measured sizes. NetworkX remains as `mc_nx`, and the SciPy linear
-   program remains the separate formulation.
-3. **Integer scaling must be exact.** Synthetic values are rounded to cents. The MineLib
-   reader derives the required decimal scale from the file. `mc` rejects a value that is
-   not an exact multiple of its declared unit and rejects capacities that do not fit in a
-   signed 64-bit integer. Multiplying every closure value by one positive scale preserves
-   the order of all pits, so it preserves the optimum.
-4. **Charge mining cost to every block.** An ore block is worth `rev * q - c_p - c_m`;
-   waste is worth `-c_m`. This is what makes a profitable block capable of losing money
-   after stripping.
-5. **Keep one compact arc array.** `mk_E` returns a two-column `int32` array used directly
-   by all solvers. The measured memory result is in the README.
-6. **Keep `bf` as a small exact check.** It generates valid closed sets in
-   prerequisite-first order instead of testing every raw subset. Its ceiling is 20 blocks.
-7. **Keep direct economic and geometric tests.** Solver agreement cannot detect a shared
-   bad `E`. The suite checks arc direction, boundary counts, closure, a non-trivial
-   synthetic pit, hand-worked cases, and the external MineLib pit.
+| ID | Decision | Reason |
+| ---: | --- | --- |
+| 1 | Use Picard's maximum-closure reduction. Positive values connect from the source; negative values connect to the sink; precedence arcs point from a block to its required predecessor. | One minimum cut gives an exact solution. |
+| 2 | Use OR-Tools 9.15.6755 in `mc`; retain NetworkX in `mc_nx` and SciPy in `lp`. | OR-Tools was fastest; the other routes remain checks. |
+| 3 | Scale values exactly to signed 64-bit integer capacities. Set each precedence capacity to the sum of positive capacities plus one. | Scaling preserves the ordering of pits; no optimum can cut a precedence arc. |
+| 4 | Set ore value to revenue minus processing and mining cost; set waste value to negative mining cost. | Every removed block incurs mining cost. |
+| 5 | Store precedence arcs once in a two-column `int32` array. | All solvers use the same compact representation. |
+| 6 | Limit `bf` to 20 blocks. | It enumerates closed sets and serves only as small-instance ground truth. |
+| 7 | Test geometry directly. | Solver agreement cannot detect a shared error in the precedence array. |
 
-## Unit commitment and electricity prices
+## Unit commitment and pricing
 
-8. **One unit description, read two ways.** `_rw`, `_eq` and `_fx` hold every row, equality
-   and bound: output limits, start-up and shut-down output ceilings, ramp limits, minimum
-   run and down times after Rajan and Takriti, the start/stop state equation, and the
-   carried-in initial state. `uc`, `rx` and `qd` read those rows algebraically. `_pl` fixes
-   the binaries in those same rows to produce one schedule's dispatch polytope, and `hl`
-   and `en` read the feasible set that way instead. The two descriptions are checked
-   against each other directly, not merely compared through a solver.
-9. **Two separate output ceilings, not one combined row.** A unit that starts and stops
-   inside the horizon needs `p <= start-up ramp` and `p <= shut-down ramp` both to hold.
-   The usual single combined row is only valid when the minimum run time is at least two
-   periods, and it can cut off feasible points otherwise. Two rows are weaker and always
-   correct, and the exact hull is a separate route anyway.
-10. **The convex hull is built by Balas' union-of-polyhedra form.** Each feasible on/off
-    schedule contributes a weight and a scaled output vector constrained by that schedule's
-    own polytope. This is exact for a union of bounded polyhedra, so the balance dual is
-    the exact convex hull price, and the same machinery with the average-incremental-cost
-    ceilings gives the exact price of the restricted market. No vertex enumeration and no
-    iterative algorithm are involved.
-11. **Every priced solve re-picks the cheapest of its equally optimal prices.** A balance
-    dual is a subgradient of cost in demand, and at a kink many prices are optimal. The
-    average-incremental-cost restriction manufactures such kinks deliberately, so leaving
-    the choice to the solver's basis makes the answer depend on the solver version. A
-    second program keeps the dual optimal and minimises what is paid for the demand
-    served, which is the lower slope: the marginal cost of what was actually delivered.
-12. **A unit's best self-schedule is its own integer program.** `_om` solves one small
-    integer program per unit over that unit's rows. It therefore does not inherit the
-    schedule-enumeration ceiling, payments and dual values work at any horizon, and the
-    agreement between `hl` and `qd` becomes a check across the two descriptions.
-13. **Make-whole is summed per commitment block.** A block is a run of consecutive on
-    periods, and its start-up cost is charged to it when it starts inside the horizon. The
-    talk's own restricted set is defined per block, so the payment is too. Lost opportunity
-    is total uplift less make-whole, reported as computed rather than clamped at zero.
-14. **The talk's average incremental cost figure is not reproduced, and the reason is a
-    test.** Its $146.33 is exactly the value of mixing the cleared schedule with being off.
-    The exact hull also contains the "start at period 2" schedule, and prices at $422. Both
-    remove the make-whole payment. The companion paper's Proposition 3 only guarantees that
-    result in the epsilon limit for the commitment blocks in its restricted set. The talk
-    does not publish its formulation's rows, so the repository states the difference and
-    its mechanism rather than guessing at a match.
-15. **The 38.4 million uplift is a corner regime, not a typical result.** At the default
-    epsilon, 3 of 15 seeded 10 x 8 markets have peak prices above $1,000/MWh and uplift from
-    32.8 to 38.4 million; the other 12 have uplift from $283.70 to $14,585.92. Six markets
-    have only epsilon MW spare in their peak-price period, so depleted capped headroom is
-    not sufficient. In seed 7 the price collapses between epsilon 0.0025 and 0.00275 without
-    a new feasible schedule: a fixed-cost hull face changes as the ceiling moves. One seed
-    also retains $10.38 make-whole on a block outside Proposition 3's restricted set.
+| ID | Decision | Reason |
+| ---: | --- | --- |
+| 8 | Define unit feasibility once in `_rw`, `_eq`, and `_fx`. Read it algebraically in `uc`, `rx`, and `qd`; read schedule polytopes through `_pl` in `hl` and `en`. | The two representations provide an independent formulation check. |
+| 9 | Impose separate start-up and shut-down output ceilings. | A combined row can exclude feasible one-period runs. |
+| 10 | Build `hl` with Balas' union-of-polyhedra formulation. | It is the exact convex hull of the schedule polytopes. |
+| 11 | Among dual-optimal prices, first minimize demand payment. | This selects the lower slope at a cost kink. |
+| 12 | Compute each unit's best self-schedule with one integer program in `_om`. | Payments and dual values then have no schedule-enumeration limit. |
+| 13 | Compute make-whole by commitment block; define lost opportunity as uplift minus make-whole. | The AIC restriction is block-specific. |
+| 14 | Retain the exact AIC value $422 for `ex3`. Recover $146.33 only when unit 2 is limited to the cleared and off schedules. | The published talk omits the rows required to obtain its value from the full restricted hull. |
+| 15 | Treat the $38.4 million AIC uplift as a corner case. | Only 3 of 15 seeded 10 x 8 markets have peak prices above $1,000/MWh. Depleted capped headroom occurs in 6 and is not sufficient. |
+| 16 | Use the interval-graph hull `hc` by default; retain the schedule hull `hl`. | `hc` has $O(T^2)$ arcs; `hl` has $2^T$ schedules. They agree within stated tolerances on all 104 feasible markets among seeds 0 through 140. |
+| 17 | Impose dual feasibility as an equality. | An inequality admits false prices when a primal variable, such as a voltage angle, is free. |
+| 18 | After payment minimization, apply one no-crossover interior-point probe. Skip the lexicographic walk when its price distance is at most $0.001/MWh. Do not branch on output ceilings. | In 410 routes, 391 were skipped; the largest omitted change was $0.00000444/MWh. Materially wide faces retain the original walk. |
+| 19 | Preserve the capped seed-61 disagreement between `hc` and `hl`. | Both prices are dual-optimal and have equal demand payment; the optimal face is not numerically resolved to one point. |
+| 20 | Add network equations once in `_nw` and use them in every solve route. | A one-bus market is the same model with no lines. |
 
-16. **The convex hull is also built compactly, and that is the default.** `hc` replaces the
-    2^T schedules with an interval graph: a node for each period the unit is free to start
-    in, an arc for each on-interval carrying that interval's own dispatch polytope, and a
-    jump over the minimum down time between one interval and the next. A schedule is a path,
-    so the graph's flow polytope with those polytopes attached is the convex hull. It is
-    exact for the same reason a dynamic program has a polyhedral description. `hl` is kept
-    as the independent check and the tests hold the two against each other before `hc` is
-    trusted. They agree within the declared numeric tolerances on every published case and
-    all 104 feasible markets among seeds 0 through 140. `hc` has O(T^2) arcs, so it prices
-    horizons `hl` refuses outright.
-17. **Dual feasibility is an equality.** The price-selection program constrains the dual
-    variables of the priced program. That constraint is an equality, but it reads correctly
-    as an inequality for as long as every variable carries a bound row, because the bound
-    row's own multiplier absorbs the slack. A voltage angle is free and has no such row, so
-    writing it as an inequality admitted prices that were not duals at all. The network
-    found this; no single-bus case could have.
-18. **Probe the price face before walking it.** After minimising the payment for demand, one
-    zero-objective interior-point program probes the tolerance-relaxed face without
-    crossover. If every balance price is within $0.001/MWh of the payment vertex, the
-    per-row walk is skipped; otherwise the original lexicographic rule is retained. The rule
-    never branches on output ceilings. A forced-walk scan skipped 391 of 410 solve routes;
-    the largest omitted move was $0.00000444/MWh. At 48 x 24 the default took 2.66 seconds
-    against 32.50 for a forced walk and omitted $0.00000226/MWh. At 96 x 24 the probe kept a
-    walk that moved price by $0.15225/MWh. `LIM` remains the row cap. Each completed stage is
-    held just above its optimum because exact equalities accumulate solver rounding.
-19. **The remaining price disagreement is reported, not tuned away.** On one seeded market in
-    141, the two hulls return visibly different prices with the ceilings on. Both maximise
-    the Lagrangian dual, both pay exactly the same for demand, and the cost is identical to
-    nine figures: the data does not choose between them, and the refinement cannot close the
-    face below the solver's own tolerance. A test asserts the quantities that are determined
-    and asserts that the prices differ, so the fact stays visible.
-20. **The network is written once and every route reads it.** `_nw` adds one voltage angle
-    per bus and period to whatever program it is handed, puts the line flows into that
-    program's nodal balance rows, and adds the line limits. Flow is the angle difference over
-    the reactance, the ordinary direct-current reading. Prices are therefore one per bus per
-    period in every route, and a market with no network is the same code with one bus and no
-    lines rather than a second path through the model.
+Proposition 3 of Chen, O'Neill, and Whitman applies only to restricted commitment blocks as
+epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blocks.
 
-## Shared choices
+## Shared decisions
 
-21. **Make `models` an explicit package.** Its empty `__init__.py` removes the accidental
-    reliance on an implicit namespace package.
-22. **Declare Ruff in the one requirements file.** Ruff was already the required lint
-    check; the missing line made the documented install incomplete.
-23. **The source register was checked on 2026-09-15.** Incorrect publication details were
-    corrected, the exact boundary of the average-incremental-cost result was checked against
-    Proposition 3, and unrelated scouting material was archived. Checked links and exact
-    data hashes are in Sources.
+| ID | Decision |
+| ---: | --- |
+| 21 | Keep `models/__init__.py`; do not rely on an implicit namespace package. |
+| 22 | Declare Ruff in `requirements.txt`. |
+| 23 | Record only checked sources. The source register was last checked on 2026-09-15. |
 
-## Still open
+## Remaining work
 
-1. **Variable wall angles.** The pit model's nine-block pattern is one uniform 45-degree
-   wall. A real deposit varies slope by direction and rock type. Only construction of `E`
-   changes; the solve does not.
-2. **Piecewise-linear and quadratic offers.** Offers here are one energy price per unit.
-   Hua and Baldick handle quadratic costs with a second-order cone program.
-3. **Losses and contingencies.** `_nw` is the lossless direct-current approximation, which
-   is what wholesale markets clear on but not what the wires do.
-4. **Mine production scheduling.** The pit model chooses the final pit but not when to mine
-   each block. Periods, discounting and capacity limits turn it into an integer program;
-   the market model in this repository is that same class of problem for a different asset.
+1. Variable pit-wall angles by direction and rock type.
+2. Piecewise-linear and quadratic generation offers.
+3. Losses and contingency constraints in the network model.
+4. Mine production scheduling with periods, discounting, and capacity limits.
 
-## Model path
+## Model sequence
 
-| Stage | Model | Solution class |
+| Stage | Model | Class |
 | --- | --- | --- |
-| Built | Ultimate pit limit | Maximum closure, solved by minimum cut |
-| Built | Unit commitment, dispatch and pricing | Mixed-integer program, with prices from linear duals |
-| Exact flow | Shortest path and maximum flow | Network flow |
-| Exact flow | Transportation and transshipment | Minimum-cost flow |
-| Exact flow | Assignment | Bipartite minimum-cost flow |
-| Branch point | Integer minimum-cost flow plus one budget row | The continuous relaxation is a linear program, but the required whole-flow version loses the network guarantee and can be NP-hard |
-| Integer network | Mine production scheduling and integral multicommodity flow | Mixed-integer models with shared limits |
-| Integer network | Fixed-charge flow | Binary arc opening with variable-specific upper bounds |
-| Integer network | Facility location and set covering | Mixed-integer selection models |
-| Bilevel network | Network interdiction | Attacker and operator models, commonly reformulated with duality |
+| Built | Ultimate pit limit | Maximum closure |
+| Built | Unit commitment and pricing | Mixed-integer model with dual prices |
+| Exact flow | Shortest path, maximum flow, transportation, transshipment, assignment | Network flow |
+| Branch point | Integer minimum-cost flow with one budget row | Integer optimization may be NP-hard |
+| Integer network | Production scheduling, multicommodity flow, fixed-charge flow | Mixed-integer optimization |
+| Integer selection | Facility location and set covering | Mixed-integer optimization |
+| Bilevel network | Network interdiction | Bilevel optimization, often reformulated by duality |
 
-Learning to branch becomes relevant from the branch point onward. The two machine-learning
-sources actually reviewed for that direction are recorded in Sources. The unit commitment
-model is now a real integer program, so it is the first place in this repository where a
-learned branching rule could be measured against an exact baseline rather than argued for.
+## Rejected alternatives
 
-## Rejected work
-
-- **A single solve route:** it cannot catch a bad formulation.
-- **The original 1965 graph procedure as a second code path:** Picard's exact reduction
-  already has three checks. A historical duplicate would add upkeep, not evidence.
-- **A subgradient search for the convex hull price:** Hua and Baldick measure a standard
-  subgradient method at 0.88% sub-optimal after 550 iterations with no non-heuristic
-  stopping rule. An exact linear program with no tuning is strictly better here.
-- **scikit-opt or another metaheuristic for the pit:** it would replace nothing and cannot
-  improve an exact optimum. Heuristics may be reconsidered for scheduling or interdiction
-  after those models exist.
-- **A neural dependency:** the relevant research is retained as a future direction, not
-  code.
-- **A warm-started price walk:** the prototype changed seed 61's capped price selection and
-  erased the required disagreement between the two hulls without proving that the face had
-  closed. It was not a valid performance trade.
-- **Copying titles from reading lists:** the lists reviewed are finding aids. Only sources
-  that were opened and used appear in the bibliography.
-- **Random geometry or random offers with no economic test:** every generated benchmark
-  must state and test what it is supposed to exhibit.
+| Alternative | Reason |
+| --- | --- |
+| One solve route | It cannot detect a wrong formulation. |
+| Original 1965 pit graph procedure | Picard's reduction already has three independent checks. |
+| Subgradient CHP search | Hua and Baldick report 0.88% suboptimality after 550 iterations; the LP is exact. |
+| Pit metaheuristic | It cannot improve an exact minimum-cut solution. |
+| Neural dependency | No implemented model requires it. |
+| Warm-started price walk | The prototype erased the required seed-61 price difference without proving closure of the face. |
+| Unreviewed reading-list entries | A title is not evidence. |
+| Synthetic inputs without a tested property | A benchmark must state what it is designed to exhibit. |

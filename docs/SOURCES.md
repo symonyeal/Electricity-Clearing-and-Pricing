@@ -1,8 +1,6 @@
 # Sources
 
-Publication details and links were checked on 2026-09-15. The note beside each
-source says what it supports; a title was not added merely because it appeared
-in a reading list.
+Checked on 2026-09-15. Each note states the source's role and review status.
 
 ## Ultimate pit model
 
@@ -17,28 +15,27 @@ in a reading list.
 
 | Source | Use in this repository |
 | --- | --- |
-| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf). FERC Technical Conference on Increasing Real-Time and Day-Ahead Market Efficiency through Improved Software, 23-25 June 2020. | The targeted talk, read in full. It supplies the two-stage design used here, the average-incremental-cost output restriction, the make-whole and lost-opportunity definitions, and the two-generator case reproduced as `ex3`. Its period-three price of $146.33 is the one published figure this repository does not reproduce; see Decisions. |
-| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://optimization-online.org/2020/09/8004/). Optimization Online. | The talk's companion paper, read in full. Proposition 3 applies the output restriction to commitment blocks that lose money under LMP and proves that those blocks' make-whole tends to zero with epsilon, while their added uplift is order epsilon. It does not cover losses induced on unrestricted blocks; that boundary is used to interpret the epsilon sweep. No journal version was found on a 2026-09-15 search, so this is cited as a preprint. |
-| Hua, B. and Baldick, R. (2017). ["A Convex Primal Formulation for Convex Hull Pricing"](https://arxiv.org/abs/1605.05002). *IEEE Transactions on Power Systems* 32(5), 3814-3823. | Read in full, from the author's arXiv version of 16 June 2020. Supplies the primal convex hull idea, and Examples 1 and 2, whose Tables 1-5 are reproduced exactly by `ex1` and `ex2`. |
-| Gribik, P., Hogan, W. and Pope, S. (2007). ["Market-Clearing Electricity Prices and Energy Uplift"](https://www.semanticscholar.org/paper/69578a6c6c9fcfdc686c0e0633fa360ac4f3fa4a). Harvard University working paper. | The origin of convex hull pricing, credited as such by both sources above. Not opened here: the definitions implemented came from the two sources above, which restate them. |
-| Balas, E. (1998). ["Disjunctive Programming: Properties of the Convex Hull of Feasible Points"](https://doi.org/10.1016/S0166-218X(98)00136-X). *Discrete Applied Mathematics* 89(1-3). | The standard reference for the union-of-polyhedra form `hl` uses. Not opened; the construction is textbook. Indexes give the page range as both 3-44 and 1-44 because the invited paper carries a two-page foreword. |
-| Rajan, D. and Takriti, S. (2005). ["Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs"](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070). IBM Research Report RC23628. | The minimum run and minimum down inequalities used in `_rw`. Not opened; the report is no longer served by IBM, so the link is a catalogue record. |
-| O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017). ["Dual Pricing Algorithm in ISO Markets"](https://ieeexplore.ieee.org/document/7742365). *IEEE Transactions on Power Systems* 32(4), 3301-3310. | The talk's source for average incremental cost pricing. Not opened; recorded because the rule implemented here is attributed to it. |
-| Yu, Y., Guan, Y. and Chen, Y. (2020). ["An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing"](https://arxiv.org/abs/1906.07862). *IEEE Transactions on Power Systems*. | Read in full. Its result is that one unit's convex hull, with ramping, minimum run times and start-up costs all present, has a compact description whose linear program is integral, proved through a dynamic-programming argument. `hc` implements that as an interval graph. The paper also states plainly that Hua and Baldick's primal form only approximates the hull once ramping is present. |
-| Martin, R. K., Rardin, R. L. and Campbell, B. A. (1990). ["Polyhedral Characterization of Discrete Dynamic Programming"](https://doi.org/10.1287/opre.38.1.127). *Operations Research* 38(1), 127-138. | The general reason `hc` is exact: a problem solved by a recursion over an acyclic graph has a polyhedral description built from that graph, and the flow polytope is integral. Not opened; cited as the general result behind the specific one above. |
-| Stott, B., Jardim, J. and Alsac, O. (2009). ["DC Power Flow Revisited"](https://doi.org/10.1109/TPWRS.2009.2021235). *IEEE Transactions on Power Systems* 24(3), 1290-1300. | The direct-current flow approximation `_nw` uses, and what it does and does not capture. Not opened; cited for the standard method and its known limits. |
+| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf). FERC Technical Conference on Increasing Real-Time and Day-Ahead Market Efficiency through Improved Software, 23-25 June 2020. | Read. Defines AIC, payments, and `ex3`. The repository does not reproduce its $146.33 price; see Decisions. |
+| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://optimization-online.org/2020/09/8004/). Optimization Online. | Read. Proposition 3 gives vanishing make-whole and order-epsilon uplift for restricted blocks only. No journal version was found. |
+| Hua, B. and Baldick, R. (2017). ["A Convex Primal Formulation for Convex Hull Pricing"](https://arxiv.org/abs/1605.05002). *IEEE Transactions on Power Systems* 32(5), 3814-3823. | Read. Supplies the primal CHP formulation and Examples 1-2. |
+| Gribik, P., Hogan, W. and Pope, S. (2007). ["Market-Clearing Electricity Prices and Energy Uplift"](https://www.semanticscholar.org/paper/69578a6c6c9fcfdc686c0e0633fa360ac4f3fa4a). Harvard University working paper. | Not opened. Original CHP reference cited by Chen et al. and Hua-Baldick. |
+| Balas, E. (1998). ["Disjunctive Programming: Properties of the Convex Hull of Feasible Points"](https://doi.org/10.1016/S0166-218X(98)00136-X). *Discrete Applied Mathematics* 89(1-3). | Not opened. Union-of-polyhedra formulation used by `hl`. |
+| Rajan, D. and Takriti, S. (2005). ["Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs"](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070). IBM Research Report RC23628. | Not opened; catalogue record. Source for minimum up/down inequalities. |
+| O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017). ["Dual Pricing Algorithm in ISO Markets"](https://ieeexplore.ieee.org/document/7742365). *IEEE Transactions on Power Systems* 32(4), 3301-3310. | Not opened. Source to which Chen et al. attribute AIC pricing. |
+| Yu, Y., Guan, Y. and Chen, Y. (2020). ["An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing"](https://arxiv.org/abs/1906.07862). *IEEE Transactions on Power Systems*. | Read. Proves the compact integral unit hull implemented by `hc`; also states the limit of the Hua-Baldick relaxation with ramps. |
+| Martin, R. K., Rardin, R. L. and Campbell, B. A. (1990). ["Polyhedral Characterization of Discrete Dynamic Programming"](https://doi.org/10.1287/opre.38.1.127). *Operations Research* 38(1), 127-138. | Not opened. General polyhedral basis for acyclic dynamic programs. |
+| Stott, B., Jardim, J. and Alsac, O. (2009). ["DC Power Flow Revisited"](https://doi.org/10.1109/TPWRS.2009.2021235). *IEEE Transactions on Power Systems* 24(3), 1290-1300. | Not opened. Reference for the DC network model. |
 
 ### Data used for the published cases
 
-No file is committed for these; the inputs are small enough to live in `ex1`, `ex2` and
-`ex3` in `models/uc_price.py`, each taken from the table named below.
+The small published inputs are defined in `models/uc_price.py`.
 
 | Case | Taken from | Anything the source leaves unstated |
 | --- | --- | --- |
 | `ex1` | Hua and Baldick, Table 1 | Nothing. One period, so no ramp applies. |
-| `ex2` | Hua and Baldick, Table 3 | Start-up and shut-down ramps are not given. They are set equal to each unit's normal ramp, which is what makes the paper's own statement true, that ramping forces unit 2 to commit at t = 2 rather than start at t = 3. Any larger start-up ramp contradicts the paper's text. |
+| `ex2` | Hua and Baldick, Table 3 | Start-up and shut-down ramps are omitted. Setting them equal to the normal ramps yields the paper's period-2 commitment; a larger start-up ramp does not. |
 | `ex3` | The FERC talk, slide 13 | Nothing. Limits, costs and all three ramp rates are tabulated there. |
-| `ex4` | Not from any source | The symmetric three-bus loop is a teaching case, not a published result. It is here because its answer is arithmetic: with equal reactances the direct line carries two thirds of the injection, so every number in it can be checked without the model. |
+| `ex4` | Synthetic | Symmetric three-bus loop. Equal reactances send two thirds of an injection over the direct line. |
 
 ## Flow and integer theory
 
@@ -48,24 +45,22 @@ No file is committed for these; the inputs are small enough to live in `ex1`, `e
 | Ahuja, R. K., Magnanti, T. L. and Orlin, J. B. (1993). [*Network Flows: Theory, Algorithms, and Applications*](https://www.pearson.com/en-us/subject-catalog/p/Ahuja-Network-Flows-Theory-Algorithms-and-Applications/P200000003456/9780136175490). Prentice Hall. | General network-flow formulations and algorithms. |
 | Goldberg, A. V. and Tarjan, R. E. (1988). ["A New Approach to the Maximum-Flow Problem"](https://dl.acm.org/doi/10.1145/48014.61051). *Journal of the ACM* 35(4), 921-940. | Push-relabel maximum flow. NetworkX is asked explicitly to use its preflow-push implementation. |
 | Hoffman, A. J. and Kruskal, J. B. (1956). ["Integral Boundary Points of Convex Polyhedra"](https://www.cs.umd.edu/~gasarch/BLOGPAPERS/kruskalhoffman.pdf). In *Linear Inequalities and Related Systems*, Annals of Mathematics Studies 38, 223-246. | Total unimodularity behind the whole-valued closure relaxation. |
-| Schrijver, A. (1986). [*Theory of Linear and Integer Programming*](https://www.wiley.com/en-us/Theory+of+Linear+and+Integer+Programming-p-9780471982326). Wiley. | Network matrices and total unimodularity. The linked paperback is later; 1986 is the original publication year. |
+| Schrijver, A. (1986). [*Theory of Linear and Integer Programming*](https://www.wiley.com/en-us/Theory+of+Linear+and+Integer+Programming-p-9780471982326). Wiley. | Network matrices and total unimodularity. |
 | Nemhauser, G. L. and Wolsey, L. A. (1988). [*Integer and Combinatorial Optimization*](https://onlinelibrary.wiley.com/doi/book/10.1002/9781118627372). Wiley. | Integer-programming foundation for the later model path. |
 | Wolsey, L. A. (2020). [*Integer Programming*, second edition](https://onlinelibrary.wiley.com/doi/10.1002/9781119606475.oth1). Wiley. | Strong formulations and variable-specific upper bounds for fixed-charge models. |
-| Holzhauser, M., Krumke, S. O. and Thielen, C. (2016). ["Budget-Constrained Minimum Cost Flows"](https://link.springer.com/article/10.1007/s10878-015-9865-y). *Journal of Combinatorial Optimization* 31(4), 1720-1745. | The complexity change caused by a budget row when flows must remain integral. It prevents the false claim that every continuous flow with one extra row is automatically a mixed-integer problem. |
+| Holzhauser, M., Krumke, S. O. and Thielen, C. (2016). ["Budget-Constrained Minimum Cost Flows"](https://link.springer.com/article/10.1007/s10878-015-9865-y). *Journal of Combinatorial Optimization* 31(4), 1720-1745. | Complexity of integral flow with a budget constraint. |
 | Gasse, M., Chetelat, D., Ferroni, N., Charlin, L. and Lodi, A. (2019). ["Exact Combinatorial Optimization with Graph Convolutional Neural Networks"](https://papers.nips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html). *NeurIPS 32*. | Concrete learning-to-branch method for a future integer model. |
-| Bengio, Y., Lodi, A. and Prouvost, A. (2021). ["Machine Learning for Combinatorial Optimization: a Methodological Tour d'Horizon"](https://doi.org/10.1016/j.ejor.2020.07.063). *European Journal of Operational Research* 290(2), 405-421. | Limits and roles of machine learning around exact combinatorial optimization. |
+| Bengio, Y., Lodi, A. and Prouvost, A. (2021). ["Machine Learning for Combinatorial Optimization: a Methodological Tour d'Horizon"](https://doi.org/10.1016/j.ejor.2020.07.063). *European Journal of Operational Research* 290(2), 405-421. | Survey of machine learning in exact combinatorial optimization. |
 
 ## MineLib benchmark
 
-MineLib is the outside authority for the committed test case: Espinoza, D.,
-Goycoolea, M., Moreno, E. and Newman, A. (2013).
+The committed fixture is from Espinoza, D., Goycoolea, M., Moreno, E. and Newman, A. (2013),
 ["MineLib: a Library of Open Pit Mining Problems"](https://link.springer.com/article/10.1007/s10479-012-1258-3).
 *Annals of Operations Research* 206(1), 93-114.
 
-The [Newman1 record](https://minelib.org/v1/newman1.xhtml) documents the
-instance, and MineLib's [results table](https://minelib.org/v1/Results.xhtml)
-gives the rounded ultimate-pit value. These exact official downloads are kept
-locally so the test does not depend on the network:
+The [Newman1 record](https://minelib.org/v1/newman1.xhtml) defines the instance; the
+[results table](https://minelib.org/v1/Results.xhtml) gives its rounded value. Tests use
+these committed files:
 
 | Local file | Official file | SHA-256 |
 | --- | --- | --- |
@@ -86,8 +81,7 @@ locally so the test does not depend on the network:
 
 ## Production applications reviewed
 
-These papers show where the later model classes have been used. They are not
-evidence for the current synthetic mine economics.
+These applications concern later model classes, not the synthetic mine data.
 
 | Application | Model class | Source |
 | --- | --- | --- |
@@ -117,11 +111,10 @@ evidence for the current synthetic mine economics.
 
 | Repository | Outcome |
 | --- | --- |
-| [google/or-tools](https://github.com/google/or-tools) | Read for the `SimpleMaxFlow` Python interface and integer-capacity requirement. |
-| [guofei9987/scikit-opt](https://github.com/guofei9987/scikit-opt) | Reviewed its heuristic algorithms and common `.run()` interface. |
-| [ebrahimpichka/awesome-optimization](https://github.com/ebrahimpichka/awesome-optimization) | Used only as a finding aid. No unread title was copied into this file. |
-| [Thinklab-SJTU/awesome-ml4co](https://github.com/Thinklab-SJTU/awesome-ml4co) | Led to the two machine-learning papers above. |
+| [google/or-tools](https://github.com/google/or-tools) | Checked `SimpleMaxFlow` and its integer-capacity requirement. |
+| [guofei9987/scikit-opt](https://github.com/guofei9987/scikit-opt) | Checked its heuristic algorithms and `.run()` interface. |
+| [ebrahimpichka/awesome-optimization](https://github.com/ebrahimpichka/awesome-optimization) | Finding aid only. |
+| [Thinklab-SJTU/awesome-ml4co](https://github.com/Thinklab-SJTU/awesome-ml4co) | Finding aid for the two machine-learning papers above. |
 
-No commercial pit package or real deposit was used. The synthetic geometry is
-the simple nine-block pattern for a uniform 45-degree wall; it is not presented
-as a site design.
+No commercial pit package or real deposit was used. Synthetic pits use a nine-block,
+uniform 45-degree precedence pattern.

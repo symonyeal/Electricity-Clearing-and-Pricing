@@ -30,14 +30,14 @@ D = Path(__file__).parents[1] / "data" / "minelib"
 
 
 def test_hand_pos():
-    """One ore block at $40 under nine waste blocks at $2 is worth mining: 40 - 18 = 22."""
+    """One ore block at $40 under nine waste blocks at $2. The pit is worth 40 - 18 = 22."""
     z, C = mc(mk_hand(40.0), mk_E(3, 3, 2))
     assert z == pytest.approx(40.0 - 9 * c_m)
     assert len(C) == 10
 
 
 def test_hand_neg():
-    """The same block at $10 does not cover its own stripping, so the pit is empty."""
+    """At $10 the same block does not cover its stripping cost; the pit is empty."""
     z, C = mc(mk_hand(10.0), mk_E(3, 3, 2))
     assert z == pytest.approx(0.0)
     assert C == []
@@ -45,7 +45,7 @@ def test_hand_neg():
 
 @pytest.mark.parametrize("val", [40.0, 10.0, 18.0, 18.01])
 def test_hand_z(val):
-    """Against exhaustive search, which is only affordable at this size."""
+    """Against enumeration, affordable only at this size."""
     v, E = mk_hand(val), mk_E(3, 3, 2)
     assert mc(v, E)[0] == pytest.approx(bf(v, E)[0])
 
@@ -54,9 +54,9 @@ def test_hand_z(val):
 def test_hand_C(val):
     """The chosen blocks agree too, wherever the optimum is unique.
 
-    val = 18.0 is excluded on purpose: nine waste blocks at c_m cost exactly 18, so
-    the empty pit and the full pit are both worth zero and the two methods are
-    free to return different sets. The value test above still covers that case.
+    val = 18.0 is excluded: nine waste blocks at c_m cost exactly 18, so the empty pit
+    and the full pit both have value zero and the two methods may return different sets.
+    The value test above covers that case.
     """
     v, E = mk_hand(val), mk_E(3, 3, 2)
     assert mc(v, E)[1] == bf(v, E)[1]
@@ -81,10 +81,10 @@ def test_mc_nx(dims):
 
 @pytest.mark.parametrize("dims", SMALL)
 def test_lp_int(dims):
-    """The constraint matrix is a network matrix, so the relaxation needs no branching.
+    """The constraint matrix is a network matrix, so the relaxation is integral.
 
-    This checks the formulation's expected structure. Arc direction and geometry
-    are checked separately because integrality alone cannot establish either one.
+    Integrality is a property of the formulation. Arc direction and geometry are tested
+    separately; integrality alone establishes neither.
     """
     v, E = mk_v(*dims), mk_E(*dims)
     x = lp(v, E)[1]
@@ -101,7 +101,7 @@ def test_mc_z(dims):
 
 @pytest.mark.parametrize("dims", SMALL)
 def test_closed(dims):
-    """Every block in the pit has everything above it in the pit. The slope constraint."""
+    """Closure: every block in the pit has its required blocks in the pit."""
     v, E = mk_v(*dims), mk_E(*dims)
     C = set(mc(v, E)[1])
     assert not [(b, p) for b, p in E if b in C and p not in C]
@@ -118,7 +118,7 @@ def test_mono():
 
 
 def test_waste():
-    """No ore, no pit. The degenerate case that leaves the source isolated."""
+    """No ore, no pit: the degenerate case that isolates the source."""
     dims = (6, 6, 3)
     v = np.full(6 * 6 * 3, -c_m)
     z, C = mc(v, mk_E(*dims))
@@ -150,7 +150,7 @@ def test_econ():
 
 
 def test_E_dir():
-    """Directly test the meaning and direction of every generated arc."""
+    """The meaning and direction of every generated arc."""
     dims = (4, 5, 3)
     E = mk_E(*dims)
     for b, p in E:
@@ -180,7 +180,7 @@ def test_E_mem():
 
 
 def test_bad():
-    """Bad values and dangling precedence blocks must not produce plausible answers."""
+    """Bad values and dangling precedence blocks are rejected, not answered."""
     with pytest.raises(ValueError, match="non-empty"):
         mc(np.array([]), np.empty((0, 2), dtype=int))
     with pytest.raises(ValueError, match="finite vector"):

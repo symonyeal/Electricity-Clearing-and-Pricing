@@ -1,13 +1,12 @@
-# Unit commitment, the wholesale energy prices drawn from it, and the uplift each price leaves.
+# Unit commitment, the prices dual to it, and the uplift each price leaves.
 #
-# The market clears once as an integer program. Every price is then a linear dual read off
-# that one clearing: LMP holds the commitment fixed, the convex hull price replaces each
-# unit by the convex hull of its schedules, and the average incremental cost price does the
-# same after capping each unit that needed a make-whole payment near what it was told to
-# produce. docs/SOURCES.md carries the citations and what each one supports.
+# The market clears once as a mixed-integer program. Every price is the dual of a linear
+# program built from that one clearing: LMP fixes the cleared commitment; CHP replaces each
+# unit by the convex hull of its schedules; AIC prices that hull after restricting the
+# blocks that failed to cover their cost at LMP. Citations: docs/SOURCES.md.
 #
 # LEGEND
-#   U,Net        : one unit's offer and state, and where the units sit
+#   U,Net        : one unit's offer and initial state; unit buses and lines
 #   Sol          : one solved outcome
 #   Mkt,Pay      : every price from one clearing, and the payment split
 #   mk,ck        : fill one unit's optional fields, validate a whole market
@@ -95,10 +94,10 @@ class U(NamedTuple):
 
 
 class Net(NamedTuple):
-    """Which bus each unit sits at, and the lines between buses. Bus 0 is the angle reference.
+    """Unit-to-bus assignment and the lines between buses. Bus 0 is the angle reference.
 
-    A line is (from bus, to bus, reactance, MW limit). ck supplies one bus and no lines when
-    a market is given no network, so a single-bus market is this one with nothing in it.
+    A line is (from bus, to bus, reactance, MW limit). Given no network, ck supplies one bus
+    and no lines; a single-bus market is this container, empty.
     """
 
     bus: np.ndarray
@@ -325,10 +324,10 @@ def _cl(x, T, cap=None):
 def _nw(net, T, n, A, b, Ae, c, lb, ub, it):
     """Append one voltage angle per bus and period, then the line flows and the line limits.
 
-    The last nb*T equality rows are the nodal balance rows, so the flow terms belong in
-    them. Every route calls this, which is why they all price the same network. Flow along
-    a line is its angle difference over its reactance, the usual direct-current reading,
-    and bus 0 is held at zero because only differences matter.
+    The last nb*T equality rows are the nodal balance rows; the flow terms enter there.
+    Flow is f_ij = (theta_i - theta_j) / x_ij with -lim <= f_ij <= lim, the direct-current
+    reading. Only angle differences matter, so bus 0 is held at zero. Every solve route
+    calls this, so all of them price the same network.
     """
     B = net.nb
     if not net.ln:
@@ -447,11 +446,11 @@ def _ce(v):
 def _fp(D, c, R, rhs, bd, m, e, nt, pi):
     """Probe the payment-optimal price face from a tolerance-relaxed interior point.
 
-    A zero-objective interior-point solve stays inside the face instead of crossing over to
-    another arbitrary vertex. The face rows are relaxed by the solver's feasibility
-    tolerance so it does not call a numerically thin but feasible face infeasible. If even
-    that relaxed point and the payment-minimising vertex agree within ptol, the probe found
-    no settlement-sized distinction for the period walk to preserve.
+    A zero-objective interior-point solve without crossover returns a relative-interior
+    point of the face rather than a vertex. The face rows carry the solver's feasibility
+    tolerance, so a thin but feasible face is not reported infeasible. If that point and the
+    payment-minimising vertex agree within ptol, no price difference of settlement size
+    remains for the lexicographic walk to resolve.
     """
     q = np.asarray(rhs, dtype=float)
     q = q + tol * np.maximum(1.0, np.abs(q))
@@ -473,27 +472,25 @@ def _fp(D, c, R, rhs, bd, m, e, nt, pi):
 
 
 def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
-    """Solve a priced program, then pick one canonical vector from its optimal prices.
+    """Solve a priced program, then select one canonical vector from its optimal duals.
 
-    A balance dual is a subgradient of cost in demand. At a kink, and everywhere pc's
-    ceilings have made the program integral, a whole face of prices is optimal and a solver
-    returns whichever corner its basis lands on. The last nt equality rows are the balance
-    rows, so be[-nt:] is the demand. Among the optimal prices this first minimises what is
-    paid for that demand, which is the lower slope: the marginal cost of what was served.
-    That face can itself be more than one point. One tolerance-relaxed interior-point
-    program probes it before each period's price is minimised in turn and held. If the probe
-    finds no difference as large as ptol, the walk is skipped; otherwise the full rule is
-    kept. LIM caps how many rows that rule will walk; past the cap only the payment is
-    minimised, and the price is canonical only to that.
+    A balance dual is a subgradient of cost in demand. At a kink, and wherever pc's ceilings
+    have made the program integral, the optimal duals form a face and the solver returns
+    whichever vertex its basis reaches. The last nt equality rows are the balance rows, so
+    be[-nt:] is demand. Stage 1 minimises the demand payment over that face; this selects
+    the lower slope, the marginal cost of what was served. The payment-optimal face may hold
+    more than one point. Stage 2 probes it with one tolerance-relaxed interior-point solve.
+    If the probe moves no price by ptol, stage 3 is skipped; otherwise stage 3 minimises each
+    balance price in turn and holds it. LIM caps the number of rows walked; past the cap only
+    the payment is minimised, and the price is canonical only to that.
 
-    Each stage is held by an inequality a hair above its own optimum rather than by an
-    equality. Exact equalities accumulate rounding until a later stage reports infeasible
-    and the refinement silently stops, which made two routes disagree on the same market.
+    Each stage is held by an inequality just above its own optimum, not by an equality.
+    Exact equalities accumulate rounding until a later stage reports infeasible and
+    refinement stops silently, which made two routes disagree on one market.
 
-    Dual feasibility is an equality, not an inequality. It looks like an inequality while
-    every variable carries a bound row, because the bound row's own multiplier absorbs the
-    slack; a genuinely free variable such as a voltage angle has no such row, and writing
-    it as an inequality then admits prices that are not duals at all.
+    Dual feasibility is an equality. An inequality looks correct while every variable carries
+    a bound row, whose multiplier absorbs the slack; a free variable such as a voltage angle
+    has no such row, and the inequality then admits vectors that are not duals.
     """
     A = csc_array(A)
     Ae = csc_array(Ae)
@@ -612,7 +609,7 @@ def hl(g, d, cap=None, net=None):
     """Convex hull program: each unit becomes the convex hull of its trajectory polytopes.
 
     Balas' union-of-polyhedra form is exact, so the balance dual is the exact convex hull
-    price of the feasible set it is handed. Handing it pc's ceilings makes that price the AIC.
+    price of the set it is given. Given pc's ceilings, that price is the AIC.
     """
     g, d, net = ck(g, d, net)
     G, T = len(g), d.shape[1]
@@ -663,11 +660,11 @@ def hl(g, d, cap=None, net=None):
 
 
 def _iv(x, T, s, e, cap=None):
-    """One on-interval's dispatch polytope, in the periods s..e only, or None if impossible.
+    """One on-interval's dispatch polytope over the periods s..e, or None if infeasible.
 
-    Built by fixing the single-interval schedule in the same rows every other route reads,
-    then keeping the columns that interval owns. A row left with no column of its own is a
-    constant the interval must satisfy, which is how an impossible interval is detected.
+    Built by fixing the single-interval schedule in the rows every other route reads, then
+    keeping the columns that interval owns. A row left with no column of its own is a
+    constant the interval must satisfy; a violated constant proves the interval infeasible.
     """
     u = np.zeros(T)
     u[s : e + 1] = 1.0
@@ -684,11 +681,11 @@ def _iv(x, T, s, e, cap=None):
 def _ar(x, T, cap=None):
     """Every arc of one unit's on/off graph: a node it leaves, a node it enters, an interval.
 
-    A schedule is exactly one path from the source to node T, so the graph's flow polytope
-    with one dispatch polytope hung on each run arc is the exact convex hull of the unit.
-    The graph has O(T^2) arcs where _cl enumerates 2^T schedules. Node t means the unit is
-    off and free to start in period t; a run arc over s..e enters node e+1+md, which is how
-    the minimum down time is enforced between one interval and the next.
+    A schedule is one source-to-T path, so the flow polytope of this graph, carrying one
+    dispatch polytope on each run arc, is the exact convex hull of the unit. The graph has
+    O(T^2) arcs where _cl enumerates 2^T schedules. Node t means the unit is off and free to
+    start in period t; a run arc over s..e enters node e+1+md, which enforces the minimum
+    down time between consecutive intervals.
     """
     y = U(x.lo, x.hi, x.c, x.nl, x.su, x.ru, x.rd, x.sr, x.dr, x.mu, x.md, 0, 0.0,
           max(x.mu, x.md))
@@ -714,9 +711,9 @@ def _ar(x, T, cap=None):
 def hc(g, d, cap=None, net=None):
     """The same convex hull as hl, built from O(T^2) intervals instead of 2^T schedules.
 
-    Yu, Guan and Chen prove this per-unit form is exact with ramping and minimum run times
-    present, by a dynamic-programming argument. `hl` is kept as the independent check on
-    that claim; the tests hold the two against each other before this one is trusted.
+    Yu, Guan and Chen prove this per-unit form exact with ramping and minimum run times
+    present, by a dynamic-programming argument. `hl` is retained as the independent check on
+    that claim; the tests hold the two against each other.
     """
     g, d, net = ck(g, d, net)
     G, T = len(g), d.shape[1]
@@ -772,11 +769,11 @@ def hc(g, d, cap=None, net=None):
 
 
 def _om(g, T, pi, net, cap=None):
-    """The most profit each unit could earn by self-scheduling at the given prices.
+    """Maximum profit each unit can earn by self-scheduling at the given prices.
 
-    One integer program per unit, over that unit's own rows. It reads the feasible set
-    through the algebraic description while hl reads it through the trajectory columns,
-    so the two agree only if both descriptions are right.
+    One integer program per unit over that unit's own rows. It reads the feasible set
+    algebraically; hl reads it through the trajectory columns. The two agree only if both
+    descriptions are correct.
     """
     om = np.zeros(len(g))
     for i, x in enumerate(g):
@@ -850,10 +847,10 @@ def pay(g, s, pi, net=None):
 
 
 def pc(g, d, s, ep=1e-6, L=None, net=None):
-    """Cap a unit near its cleared output wherever a block failed to pay for itself at LMP.
+    """Cap a unit near its cleared output on each block that failed to cover its cost at LMP.
 
-    L is the clearing's own LMP solution. run already has it, so it is passed in rather
-    than solved a second time; on its own pc solves it.
+    L is the clearing's LMP solution. run already holds it and passes it in; called alone,
+    pc solves it.
     """
     g, d, net = ck(g, d, net)
     if ep <= 0 or not np.isfinite(ep):
@@ -880,10 +877,10 @@ def run(g, d, ep=1e-6, net=None):
 
 
 def mk_g(G, T, sd=7):
-    """A synthetic market: cheap slow baseload through costly fast peakers, over a daily shape.
+    """Synthetic market: cheap slow baseload through costly fast peakers, over a daily shape.
 
-    Labelled synthetic. The bench checks its economics, not just its size: some unit must
-    need a make-whole payment under LMP, or the market has no pricing question to answer.
+    Labelled synthetic. The bench tests its economics, not only its size: some unit must
+    require a make-whole payment under LMP, or the market poses no pricing question.
     """
     a = np.random.default_rng(sd)
     g = []
@@ -917,12 +914,12 @@ def ex2():
 
 
 def ex4(lim=40.0):
-    """The standard symmetric three-bus loop, where the answer can be checked by hand.
+    """The symmetric three-bus loop, checkable by hand.
 
-    Equal reactances, cheap unit at bus 0, dear unit at bus 2, all the load at bus 2. Two
-    thirds of whatever bus 0 injects takes the direct line, so a 40 MW limit on it holds
-    that unit to 60 MW. Bus 1 sits electrically midway and prices midway. Raise lim and the
-    congestion goes away, leaving one price everywhere.
+    Equal reactances, cheap unit at bus 0, costly unit at bus 2, all load at bus 2. Two
+    thirds of any bus-0 injection takes the direct line, so a 40 MW limit on it holds that
+    unit to 60 MW. Bus 1 lies electrically midway and prices midway. Raising lim removes the
+    congestion and leaves one price at every bus.
     """
     return (
         [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)],
