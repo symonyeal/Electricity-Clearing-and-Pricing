@@ -1,6 +1,6 @@
 # Sources
 
-Publication details and links were checked on 2026-09-14. The note beside each
+Publication details and links were checked on 2026-09-15. The note beside each
 source says what it supports; a title was not added merely because it appeared
 in a reading list.
 
@@ -18,7 +18,7 @@ in a reading list.
 | Source | Use in this repository |
 | --- | --- |
 | Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf). FERC Technical Conference on Increasing Real-Time and Day-Ahead Market Efficiency through Improved Software, 23-25 June 2020. | The targeted talk, read in full. It supplies the two-stage design used here, the average-incremental-cost output restriction, the make-whole and lost-opportunity definitions, and the two-generator case reproduced as `ex3`. Its period-three price of $146.33 is the one published figure this repository does not reproduce; see Decisions. |
-| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://optimization-online.org/2020/09/8004/). Optimization Online. | The talk's companion paper. Listed because the talk's own reference calls it "under review"; no journal version was found on a 2026-09-14 search, so it is cited as the preprint it is. |
+| Chen, Y., O'Neill, R. P. and Whitman, P. (2020). ["A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing"](https://optimization-online.org/2020/09/8004/). Optimization Online. | The talk's companion paper, read in full. Proposition 3 applies the output restriction to commitment blocks that lose money under LMP and proves that those blocks' make-whole tends to zero with epsilon, while their added uplift is order epsilon. It does not cover losses induced on unrestricted blocks; that boundary is used to interpret the epsilon sweep. No journal version was found on a 2026-09-15 search, so this is cited as a preprint. |
 | Hua, B. and Baldick, R. (2017). ["A Convex Primal Formulation for Convex Hull Pricing"](https://arxiv.org/abs/1605.05002). *IEEE Transactions on Power Systems* 32(5), 3814-3823. | Read in full, from the author's arXiv version of 16 June 2020. Supplies the primal convex hull idea, and Examples 1 and 2, whose Tables 1-5 are reproduced exactly by `ex1` and `ex2`. |
 | Gribik, P., Hogan, W. and Pope, S. (2007). ["Market-Clearing Electricity Prices and Energy Uplift"](https://www.semanticscholar.org/paper/69578a6c6c9fcfdc686c0e0633fa360ac4f3fa4a). Harvard University working paper. | The origin of convex hull pricing, credited as such by both sources above. Not opened here: the definitions implemented came from the two sources above, which restate them. |
 | Balas, E. (1998). ["Disjunctive Programming: Properties of the Convex Hull of Feasible Points"](https://doi.org/10.1016/S0166-218X(98)00136-X). *Discrete Applied Mathematics* 89(1-3). | The standard reference for the union-of-polyhedra form `hl` uses. Not opened; the construction is textbook. Indexes give the page range as both 3-44 and 1-44 because the invited paper carries a two-page foreword. |

@@ -81,13 +81,17 @@ This file records design choices, rejected work, and what remains open. The
 14. **The talk's average incremental cost figure is not reproduced, and the reason is a
     test.** Its $146.33 is exactly the value of mixing the cleared schedule with being off.
     The exact hull also contains the "start at period 2" schedule, and prices at $422. Both
-    remove the make-whole payment. The talk does not publish its formulation's rows, so the
-    repository states the difference and its mechanism rather than guessing at a match.
-15. **The restricted price is measured, not defended.** On the 10 x 8 synthetic market the
-    average incremental cost price leaves 38.5 million in foregone profit while removing a
-    1,513 make-whole payment. That is a property of squeezing the priced market until
-    supply barely meets demand, and it belongs in the README table rather than in a
-    footnote.
+    remove the make-whole payment. The companion paper's Proposition 3 only guarantees that
+    result in the epsilon limit for the commitment blocks in its restricted set. The talk
+    does not publish its formulation's rows, so the repository states the difference and
+    its mechanism rather than guessing at a match.
+15. **The 38.4 million uplift is a corner regime, not a typical result.** At the default
+    epsilon, 3 of 15 seeded 10 x 8 markets have peak prices above $1,000/MWh and uplift from
+    32.8 to 38.4 million; the other 12 have uplift from $283.70 to $14,585.92. Six markets
+    have only epsilon MW spare in their peak-price period, so depleted capped headroom is
+    not sufficient. In seed 7 the price collapses between epsilon 0.0025 and 0.00275 without
+    a new feasible schedule: a fixed-cost hull face changes as the ceiling moves. One seed
+    also retains $10.38 make-whole on a block outside Proposition 3's restricted set.
 
 16. **The convex hull is also built compactly, and that is the default.** `hc` replaces the
     2^T schedules with an interval graph: a node for each period the unit is free to start
@@ -96,21 +100,24 @@ This file records design choices, rejected work, and what remains open. The
     so the graph's flow polytope with those polytopes attached is the convex hull. It is
     exact for the same reason a dynamic program has a polyhedral description. `hl` is kept
     as the independent check and the tests hold the two against each other before `hc` is
-    trusted; they agree exactly on every published case and on 146 of 146 seeded random
-    markets. `hc` has O(T^2) arcs, so it prices horizons `hl` refuses outright.
+    trusted. They agree within the declared numeric tolerances on every published case and
+    all 104 feasible markets among seeds 0 through 140. `hc` has O(T^2) arcs, so it prices
+    horizons `hl` refuses outright.
 17. **Dual feasibility is an equality.** The price-selection program constrains the dual
     variables of the priced program. That constraint is an equality, but it reads correctly
     as an inequality for as long as every variable carries a bound row, because the bound
     row's own multiplier absorbs the slack. A voltage angle is free and has no such row, so
     writing it as an inequality admitted prices that were not duals at all. The network
     found this; no single-bus case could have.
-18. **The price refinement has a stated reach.** Minimising what is paid for demand leaves a
-    face rather than a point wherever the output ceilings have made the program integral, so
-    each period's price is then minimised in turn. That costs one program per balance row,
-    so `LIM` caps how many rows it walks. Past the cap only the payment is minimised and the
-    price is canonical only to that. Each finished stage is held by an inequality a hair
-    above its own optimum, not by an equality, because exact equalities accumulate rounding
-    until a stage reports infeasible and the refinement stops without saying so.
+18. **Probe the price face before walking it.** After minimising the payment for demand, one
+    zero-objective interior-point program probes the tolerance-relaxed face without
+    crossover. If every balance price is within $0.001/MWh of the payment vertex, the
+    per-row walk is skipped; otherwise the original lexicographic rule is retained. The rule
+    never branches on output ceilings. A forced-walk scan skipped 391 of 410 solve routes;
+    the largest omitted move was $0.00000444/MWh. At 48 x 24 the default took 2.66 seconds
+    against 32.50 for a forced walk and omitted $0.00000226/MWh. At 96 x 24 the probe kept a
+    walk that moved price by $0.15225/MWh. `LIM` remains the row cap. Each completed stage is
+    held just above its optimum because exact equalities accumulate solver rounding.
 19. **The remaining price disagreement is reported, not tuned away.** On one seeded market in
     141, the two hulls return visibly different prices with the ceilings on. Both maximise
     the Lagrangian dual, both pay exactly the same for demand, and the cost is identical to
@@ -130,9 +137,10 @@ This file records design choices, rejected work, and what remains open. The
     reliance on an implicit namespace package.
 22. **Declare Ruff in the one requirements file.** Ruff was already the required lint
     check; the missing line made the documented install incomplete.
-23. **The source register was checked on 2026-09-14.** Incorrect publication details were
-    corrected and unrelated scouting material was archived. Checked links and exact data
-    hashes are in Sources.
+23. **The source register was checked on 2026-09-15.** Incorrect publication details were
+    corrected, the exact boundary of the average-incremental-cost result was checked against
+    Proposition 3, and unrelated scouting material was archived. Checked links and exact
+    data hashes are in Sources.
 
 ## Still open
 
@@ -141,13 +149,9 @@ This file records design choices, rejected work, and what remains open. The
    changes; the solve does not.
 2. **Piecewise-linear and quadratic offers.** Offers here are one energy price per unit.
    Hua and Baldick handle quadratic costs with a second-order cone program.
-3. **The cost of the price refinement.** It is one linear program per balance row, on the
-   transpose of an already large program, and over a full day it dominates everything else.
-   A cheaper canonical selection is what would make exact hull pricing practical at the
-   sizes the clearing itself already reaches.
-4. **Losses and contingencies.** `_nw` is the lossless direct-current approximation, which
+3. **Losses and contingencies.** `_nw` is the lossless direct-current approximation, which
    is what wholesale markets clear on but not what the wires do.
-5. **Mine production scheduling.** The pit model chooses the final pit but not when to mine
+4. **Mine production scheduling.** The pit model chooses the final pit but not when to mine
    each block. Periods, discounting and capacity limits turn it into an integer program;
    the market model in this repository is that same class of problem for a different asset.
 
@@ -184,6 +188,9 @@ learned branching rule could be measured against an exact baseline rather than a
   after those models exist.
 - **A neural dependency:** the relevant research is retained as a future direction, not
   code.
+- **A warm-started price walk:** the prototype changed seed 61's capped price selection and
+  erased the required disagreement between the two hulls without proving that the face had
+  closed. It was not a valid performance trade.
 - **Copying titles from reading lists:** the lists reviewed are finding aids. Only sources
   that were opened and used appear in the bibliography.
 - **Random geometry or random offers with no economic test:** every generated benchmark

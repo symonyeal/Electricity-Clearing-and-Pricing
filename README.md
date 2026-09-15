@@ -81,7 +81,8 @@ with more than one defensible answer:
   payments as small as any uniform price can.
 - **Average incremental cost pricing** first restricts each unit that needed a side
   payment to roughly the output it was told to produce, then prices that restricted
-  market. It aims to make the make-whole payment disappear entirely.
+  market. As the restriction shrinks, it aims to remove make-whole from the commitment
+  blocks placed in that restricted set.
 
 `models/uc_price.py` builds all of this on one description of a unit, written once in
 `_rw`, `_eq` and `_fx`. Everything else reads that description.
@@ -120,7 +121,9 @@ That is about T squared over two arcs in place of two-to-the-T schedules.
 Its exactness is Yu, Guan and Chen's result, and more generally it is what happens whenever
 a problem is solved by a recursion over an acyclic graph. It is not taken on trust here.
 The tests hold `hc` against `hl` on every published case and on seeded random units with
-ramps, minimum run times and carried-in initial states, and they agree exactly.
+ramps, minimum run times and carried-in initial states. The suite covers all 104 feasible
+markets among seeds 0 through 140; objectives agree to relative tolerance 1e-9 and prices
+to $0.0001/MWh.
 
 ### A transmission network
 
@@ -157,15 +160,19 @@ one that pays least for the demand served. That is the lower slope: the marginal
 the megawatts actually delivered. Without this rule the same input returns different prices
 on different runs or different solver versions.
 
-Even that leaves a face rather than a point, so each period's price is then minimised in
-turn and held. It still does not always close to a single point. On one seeded market in
-141, the two hulls return visibly different prices once the average incremental cost
-ceilings are on. Both maximise the Lagrangian dual, both pay exactly the same for the
-demand, and the cleared cost agrees to nine figures. The data genuinely does not choose
-between them, and the refinement cannot narrow the face below the solver's own tolerance. A
-test asserts what is determined and asserts that the prices differ, so the fact stays
-visible rather than being tuned away. It is one more reason to handle the average
-incremental cost price with care.
+Even that can leave a face rather than a point. Before minimising each period's price in
+turn, one zero-objective interior-point program probes the payment-optimal face without
+crossover. If its balance prices are within $0.001/MWh of the payment-minimising vertex,
+the walk is skipped. Otherwise every period is still minimised and held. This is a measured
+screen, not a bound on the face's diameter, and it does not branch on whether output
+ceilings are present.
+
+A forced-walk scan covered 410 compact, schedule-wise, capped and uncapped solve routes
+from seeds 0 through 140. The probe skipped 391; the largest price change it omitted was
+$0.00000444/MWh. It retained the materially wide seeded faces. One of those, seed 61 with
+the ceilings on, still makes the two hulls return visibly different prices. Both maximise
+the Lagrangian dual, pay the same for demand, and agree on cleared cost to nine figures.
+A regression test preserves those facts, including the price difference.
 
 ### Check against outside answers
 
@@ -186,10 +193,13 @@ as a test: $146.33 is precisely the value of mixing unit 2's cleared schedule wi
 off, and it is recovered here to the last digit when unit 2's hull is limited to those two
 schedules. The exact hull also contains the "start at period 2" schedule, whose mixture is
 worth more, and the price follows the better mixture. Both prices leave no make-whole
-payment, which is all the talk's Proposition 3 claims. The talk does not publish the rows of
-the formulation behind its figure, so no stronger statement is made here than that the two
-differ and why. Two independently built exact hulls now agree on $422, so the difference is
-at least not an artefact of how the hull was constructed.
+payment. This is consistent with Proposition 3 of
+[Chen, O'Neill and Whitman (2020)](docs/SOURCES.md#unit-commitment-and-electricity-prices),
+whose precise claim is zero make-whole in the epsilon limit for the commitment blocks in
+its restricted set. The talk does not publish the rows of the formulation behind its
+figure, so no stronger statement is made here than that the two differ and why. Two
+independently built exact hulls agree on $422, so the difference is not an artefact of how
+the hull was constructed.
 
 The talk's second figure, $1,161 from its three-binary formulation, is not reproduced
 either, and for the same reason: which valid inequalities a three-binary formulation
@@ -207,22 +217,21 @@ Two identities are checked on every case and on random prices, not assumed:
 
 ## Measured run
 
-`run_bench.py` prints the four tables below, measured on 2026-09-14 with Python 3.14.3,
+`run_bench.py` prints the six tables below, measured on 2026-09-15 with Python 3.14.3,
 OR-Tools 9.15.6755, NetworkX 3.6.1, SciPy 1.17.1, NumPy 2.4.4, Windows 11 build 26200, and
 an Intel64 family 6 model 186 processor. Times are elapsed seconds from one run, not
 projections, and will vary by machine.
 
-The pit table and the three market tables come from two runs on that same machine and day.
-The pit linear program builds a 2,082,896-row model and needs more memory than was free
-when the market tables were measured; it ran on its own earlier the same day.
+Every table came from one complete run. The largest pit linear program built and solved all
+2,082,896 rows without a memory failure.
 
 ### Ultimate pit limit
 
 | Model | Blocks | Arcs | Pit value | OR-Tools | NetworkX | LP | Fractional | Strip ratio | Ore left out |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 30x30x12 | 10,800 | 85,184 | 2,552.23 | 0.009s | 0.92s | 0.22s | 0 | 2.64 | 73 |
-| 60x60x20 | 72,000 | 601,996 | 20,102.47 | 0.080s | 8.67s | 2.21s | 0 | 2.06 | 230 |
-| 90x90x30 | 243,000 | 2,082,896 | 68,454.46 | 0.317s | 40.34s | 10.83s | 0 | 2.03 | 602 |
+| 30x30x12 | 10,800 | 85,184 | 2,552.23 | 0.009s | 0.83s | 0.23s | 0 | 2.64 | 73 |
+| 60x60x20 | 72,000 | 601,996 | 20,102.47 | 0.085s | 8.14s | 2.06s | 0 | 2.06 | 230 |
+| 90x90x30 | 243,000 | 2,082,896 | 68,454.46 | 0.420s | 41.69s | 10.83s | 0 | 2.03 | 602 |
 
 The ore left out is the useful result: each of those blocks makes money by itself, but not
 after paying for the waste above it. The linear program returned no fractional block
@@ -242,54 +251,109 @@ MiB. The linear program no longer makes another copy.
 
 | Units x periods | Variables | Cleared cost | uc | rx | pay | Relaxation gap | Units needing make-whole | LMP uplift |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 12 x 8 | 384 | 321,499 | 3.21s | 0.69s | 0.38s | 0.328% | 2 | 1,898 |
-| 24 x 16 | 1,536 | 1,264,174 | 7.14s | 5.63s | 0.82s | 0.085% | 6 | 5,478 |
-| 48 x 24 | 4,608 | 3,831,805 | 3.98s | 42.12s | 1.35s | 0.035% | 5 | 6,473 |
-| 96 x 24 | 9,216 | 7,721,565 | 5.67s | 137.53s | 3.12s | 0.013% | 5 | 6,346 |
+| 12 x 8 | 384 | 321,499 | 1.69s | 0.29s | 0.18s | 0.328% | 2 | 1,898 |
+| 24 x 16 | 1,536 | 1,264,174 | 2.64s | 0.40s | 0.39s | 0.085% | 6 | 5,478 |
+| 48 x 24 | 4,608 | 3,831,805 | 2.14s | 2.71s | 0.90s | 0.035% | 5 | 6,473 |
+| 96 x 24 | 9,216 | 7,721,565 | 3.95s | 95.18s | 1.82s | 0.013% | 5 | 6,346 |
 
 The synthetic market runs from cheap, slow, high-minimum baseload to costly, fast peakers
 over a daily demand shape. Its economic regression check is that at least one unit needs a
 make-whole payment under LMP; a market where none does has no pricing question to answer.
 
-The `rx` column is the odd one, and it is worth reading carefully: a relaxation has no
-business being slower than the integer program it relaxes. It is not the solve. It is the
-price. Picking one canonical price costs a further linear program per balance row, on the
-transpose of the model, and over a 24-period day that is 25 of them.
+`rx` includes price selection as well as the relaxation. On the 48 x 24 market, an isolated
+split measured 1.46 seconds for the relaxation and payment stage, 2.66 seconds with the
+face probe, and 32.50 seconds when the 24-period walk was forced. The walk changed the price
+by only $0.00000226/MWh, so the default route skips it. The full benchmark's corresponding
+`rx` time is 2.71 seconds.
 
-That was measured on the 48 x 24 market. The relaxed solve and the payment-minimising stage
-together take 1.38 seconds; walking the periods one at a time takes 40.78 seconds, and it
-moves the price by 2.3 millionths of a dollar. On an uncongested relaxation the extra work
-buys almost nothing, because the face is already nearly a point. It earns its keep only
-where the average incremental cost ceilings have made the program integral and the face
-genuinely fat. Splitting that decision without adding a second code path is the largest
-thing still worth fixing here.
+The screen does not hide a wide face. At 96 x 24 the probe differed from the payment vertex
+by $0.02298/MWh, so the walk ran. A forced comparison moved the selected price by
+$0.15225/MWh; the cheap path took 6.48 seconds and the specified walk took 94.82 seconds.
+`LIM` remains the explicit cap on how many balance rows may be walked.
 
 ### Exact convex hull prices
 
 | Units x periods | Arcs | Schedules | CHP | AIC | Schedule-wise | Price gap | LMP uplift | CHP uplift | AIC uplift | AIC make-whole |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 6 x 4 | 79 | 70 | 0.11s | 0.07s | 0.13s | 4e-13 | 762 | 260 | 486 | 0.00 |
-| 8 x 6 | 200 | 332 | 0.38s | 0.40s | 1.40s | 2e-12 | 1,698 | 363 | 686 | 0.00 |
-| 10 x 8 | 409 | 1,528 | 1.89s | 1.18s | 14.37s | 1e-07 | 1,924 | 366 | 38,447,064 | 0.00 |
-| 12 x 10 | 730 | 6,924 | 5.65s | 4.01s | 212.67s | 8e-11 | 1,855 | 752 | 3,651 | 0.00 |
-| 8 x 14 | 896 | over the ceiling | 16.69s | 10.06s | refused | n/a | 5,460 | 1,964 | 4,727 | 0.00 |
+| 6 x 4 | 79 | 70 | 0.05s | 0.04s | 0.06s | 3e-13 | 762 | 260 | 486 | 0.00 |
+| 8 x 6 | 200 | 332 | 0.15s | 0.11s | 0.39s | 4e-12 | 1,698 | 363 | 686 | 0.00 |
+| 10 x 8 | 409 | 1,528 | 0.51s | 0.87s | 4.60s | 7e-11 | 1,924 | 366 | 38,447,064 | 0.00 |
+| 12 x 10 | 730 | 6,924 | 4.37s | 0.80s | 134.49s | 8e-11 | 1,855 | 752 | 3,651 | 0.00 |
+| 8 x 14 | 896 | over the ceiling | 2.84s | 6.26s | refused | n/a | 5,460 | 1,964 | 4,727 | 0.00 |
 
 The CHP and AIC columns are `hc`, the interval form. The schedule-wise column is `hl`
 solving the identical hull the obvious way, and the price gap is the largest difference
 between the two prices. They are the same answer: at 12 x 10, 730 arcs in place of 6,924
-schedules, 5.65 seconds in place of 212.67, and prices apart by eight in the eleventh
+schedules, 4.37 seconds in place of 134.49, and prices apart by eight in the eleventh
 decimal. At 8 x 14 the schedule-wise route will not start at all.
 
-Three economic things are visible here and all three are real.
+The convex hull price leaves less uplift than LMP in every row, as the theory requires.
+The average incremental cost rows all round to zero make-whole at the default epsilon, but
+the wider sweep below shows why neither that result nor the 38.4 million uplift should be
+generalised from one market.
 
-The convex hull price always leaves less uplift than LMP, as the theory requires. The
-average incremental cost price always removes the make-whole payment entirely, as its
-sponsors claim. And the price it charges to do so is not bounded: on the 10 x 8 market it
-leaves 38.4 million in foregone profit. That is not a defect in the solve. The restriction
-squeezes the priced market until supply barely meets demand in the binding period, and the
-marginal cost of the last megawatt in such a market can be arbitrarily large. Anyone
-proposing this rule for real settlement has to answer that, and this repository measures it
-rather than describing it.
+### Average incremental cost price against epsilon
+
+Epsilon is the extra MW allowed above each restricted commitment block's cleared output.
+Cleared cost per MWh is the integer clearing objective divided by total demand. The premium
+is the demand-weighted average energy price minus that cleared cost. Capped spare MW is
+total capped capacity less demand in the period with the highest price.
+
+| Market | epsilon MW | Period prices ($/MWh) | Uplift ($) | Make-whole ($) | Cleared cost ($/MWh) | Load-weighted price premium ($/MWh) | Highest-price period / capped spare MW |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
+| ex3 | 1e-06 | 10.000, 10.000, 422.000 | 730.00 | 0.00 | 22.58 | 152.22 | 3 / 0.000001 |
+| ex3 | 0.0001 | 10.000, 10.000, 421.988 | 729.97 | 0.00 | 22.58 | 152.21 | 3 / 0.000100 |
+| ex3 | 0.001 | 10.000, 10.000, 421.883 | 729.71 | 0.00 | 22.58 | 152.17 | 3 / 0.001000 |
+| ex3 | 0.1 | 10.000, 10.000, 410.769 | 701.92 | 0.00 | 22.58 | 147.72 | 3 / 0.100000 |
+| ex3 | 1 | 10.000, 10.000, 338.571 | 521.43 | 0.00 | 22.58 | 118.84 | 3 / 1.000000 |
+| ex3 | 10 | 10.000, 10.000, 276.000 | 365.00 | 0.00 | 22.58 | 93.82 | 3 / 5.000000 |
+| 8 x 6, seed 7 | 1e-06 | 74.724, 36.850, 56.210, 65.113, 58.745, 36.850 | 686.11 | 0.00 | 30.40 | 24.84 | 1 / 486.715002 |
+| 8 x 6, seed 7 | 0.0001 | 74.724, 36.850, 56.210, 65.113, 58.745, 36.850 | 686.11 | 0.00 | 30.40 | 24.84 | 1 / 486.715200 |
+| 8 x 6, seed 7 | 0.001 | 74.724, 36.850, 56.210, 65.113, 58.745, 36.850 | 686.11 | 0.02 | 30.40 | 24.84 | 1 / 486.717000 |
+| 8 x 6, seed 7 | 0.1 | 74.704, 36.850, 56.210, 65.113, 58.729, 36.850 | 685.75 | 2.14 | 30.40 | 24.84 | 1 / 486.915000 |
+| 8 x 6, seed 7 | 1 | 74.529, 36.850, 56.210, 65.113, 58.589, 36.850 | 682.58 | 21.10 | 30.40 | 24.79 | 1 / 488.715000 |
+| 8 x 6, seed 7 | 10 | 73.699, 36.850, 56.210, 65.113, 57.357, 36.850 | 658.72 | 151.97 | 30.40 | 24.45 | 1 / 506.715000 |
+| 10 x 8, seed 7 | 1e-06 | 84.020, 40.440, 40.440, 52.880, 55.564, 82,085.019, 46.387, 31.520 | 38,447,063.94 | 0.00 | 30.53 | 12,219.15 | 6 / 0.000001 |
+| 10 x 8, seed 7 | 1e-05 | 84.020, 40.440, 40.440, 52.880, 55.564, 82,221.562, 46.370, 31.520 | 38,511,081.04 | 0.00 | 30.53 | 12,239.46 | 6 / 0.000010 |
+| 10 x 8, seed 7 | 0.0001 | 84.020, 40.440, 40.440, 52.880, 55.564, 57,979.259, 49.360, 31.520 | 27,145,243.51 | 0.00 | 30.53 | 8,634.66 | 6 / 0.000100 |
+| 10 x 8, seed 7 | 0.001 | 84.020, 40.440, 40.440, 52.880, 55.564, 57,979.206, 49.360, 31.520 | 27,145,218.58 | 0.01 | 30.53 | 8,634.66 | 6 / 0.001000 |
+| 10 x 8, seed 7 | 0.0025 | 84.019, 40.440, 40.440, 52.880, 55.564, 57,978.079, 49.360, 31.520 | 27,144,689.94 | 0.03 | 30.53 | 8,634.49 | 6 / 0.002500 |
+| 10 x 8, seed 7 | 0.00275 | 84.019, 40.440, 40.440, 52.880, 55.664, 67.146, 52.692, 31.520 | 1,559.91 | 0.08 | 30.53 | 22.76 | 1 / 747.982750 |
+| 10 x 8, seed 7 | 0.005 | 84.018, 40.440, 40.440, 52.880, 61.048, 52.880, 52.693, 31.520 | 416.91 | 0.09 | 30.53 | 21.49 | 1 / 747.985000 |
+| 10 x 8, seed 7 | 0.1 | 83.992, 40.440, 40.440, 52.880, 61.043, 52.880, 52.693, 31.520 | 416.46 | 1.87 | 30.53 | 21.49 | 1 / 748.080000 |
+| 10 x 8, seed 7 | 1 | 83.751, 40.440, 40.440, 52.880, 60.989, 52.880, 52.693, 31.520 | 412.25 | 18.42 | 30.53 | 21.46 | 1 / 748.980000 |
+| 10 x 8, seed 7 | 10 | 81.830, 40.440, 40.440, 52.880, 60.488, 52.880, 52.693, 31.520 | 377.90 | 159.98 | 30.53 | 21.20 | 1 / 757.980000 |
+
+`ex3` is stable near $422/MWh through epsilon 0.001 and declines as the restriction
+loosens. The 8 x 6 market is stable and has at least 486.7 MW spare in its highest-price
+period. Near-zero headroom alone therefore does not make a price explode.
+
+The 10 x 8 market has two high-price plateaus, then its period-six price falls from
+$57,978.08 to $67.15 between epsilon 0.0025 and 0.00275. The feasible schedule set is the
+same on both sides; only its output ceilings move. At the same point the highest-price
+period shifts from period 6, with only epsilon MW spare, to period 1, with 748 MW spare.
+In this market the blow-up coincides with depleted capped headroom, while its size and
+discontinuity indicate a change of face in the fixed-cost convex envelope rather than a
+simple inverse-epsilon rule.
+
+The 1e-6 row is numerically thin: the compact and schedule-wise hulls put period six in the
+same high-price regime but differ by $64.48/MWh. At 1e-5 they agree within $0.0002/MWh at
+about $82,221.56/MWh. The table reports the compact solve as measured, not cents of
+mathematical precision at the solver tolerance.
+
+The default epsilon was also measured on 15 independently seeded 10 x 8 markets. "At
+epsilon headroom" means capped spare MW is no more than 1.1e-6.
+
+| Seeds | Peak price >$1,000/MWh: count (uplift range, $) | Peak price <=$1,000/MWh: count (uplift range, $) | Highest-price period at epsilon headroom | Make-whole below $0.001 | Largest make-whole ($) |
+| ---: | --- | --- | ---: | ---: | ---: |
+| 15 | 3 (32,759,768.79-38,447,063.94) | 12 (283.70-14,585.92) | 6 | 14 | 10.38 |
+
+The 38.4 million result is one of three extreme markets, not the typical outcome. Six peak
+periods have only epsilon MW spare, but only three have a four- or five-digit price, so
+depleted headroom is not sufficient. Fourteen markets leave less than $0.001 make-whole.
+In the fifteenth, the restriction makes its targeted block whole but creates a $10.38 loss
+on another commitment block. That is outside Proposition 3's stated guarantee and is why
+the repository no longer says the rule always removes all make-whole.
 
 ### A congested network
 
@@ -322,4 +386,5 @@ python -m ruff check .
 python run_bench.py
 ```
 
-The last full verification on 2026-09-14 passed 118 tests and the complete lint check.
+The last full verification on 2026-09-15 passed 236 tests, the complete Ruff and dependency
+checks, and every benchmark row including the 2,082,896-row pit linear program.

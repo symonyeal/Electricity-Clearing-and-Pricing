@@ -115,7 +115,7 @@ def test_ex3_exact_aic_is_not_the_talks_price():
     The talk reports $146.33 for period 3. That is exactly the slope of mixing unit 2's
     cleared schedule with being off. The convex hull of the p-cut set also contains the
     'start at period 2' schedule, whose mixture is worth more, so the exact price is $422.
-    Both leave zero make-whole, which is all the talk's Proposition 3 claims.
+    Both leave zero make-whole for the restricted block, the scope of Proposition 3.
     """
     g, d = ex3()
     s = uc(g, d)
@@ -390,18 +390,26 @@ def test_compact_hull_equals_enumerated_hull(q):
     assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)
 
 
-@pytest.mark.parametrize("sd", range(25))
+@pytest.mark.parametrize("sd", range(141))
 def test_compact_hull_equals_enumerated_hull_at_random(sd):
     """Same claim on seeded units with ramps, minimum run times and an initial state.
 
     This is the check on Yu, Guan and Chen's theorem as implemented here: the interval graph
     is only the convex hull if its arcs, its minimum-down jumps and its initial arcs are all
-    right, and any error in them separates it from the schedule-by-schedule hull.
+    right, and any error in them separates it from the schedule-by-schedule hull. Seeds 0
+    through 140 cover 104 feasible markets; infeasible samples are ignored by both routes.
     """
     g, d = _rand(sd)
     try:
-        a, b = hl(g, d), hc(g, d)
+        a = hl(g, d)
     except ValueError:
+        a = None
+    try:
+        b = hc(g, d)
+    except ValueError:
+        b = None
+    assert (a is None) == (b is None)
+    if a is None:
         return
     assert a.z == pytest.approx(b.z, rel=1e-9)
     assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)

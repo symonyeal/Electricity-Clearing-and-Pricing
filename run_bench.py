@@ -2,8 +2,10 @@
 #
 # LEGEND
 #   DIMS,MKT,HUL : the measured pit sizes, market sizes and convex-hull sizes
+#   EPS,EPS10    : common epsilon sweep and the extra 10x8 transition points
 #   tm,time      : timer helper and the clock module
-#   pit,mkt,hul  : one row of each of the three tables
+#   pit,mkt,hul  : one row of each scale table
+#   aic,aseed    : the epsilon table and the 10x8 seed check
 #   z1,t1 : pit value and seconds from OR-Tools
 #   z2,t2 : pit value and seconds from NetworkX
 #   z3,t3 : pit value and seconds from the linear program
@@ -19,6 +21,8 @@
 #   s,R   : integer clearing and relaxed solve L,H,A : LMP, CHP and AIC solutions
 #   P     : payments at one price              K : hull columns, q : hull variables
 #   cap   : the AIC output ceilings            mw : units needing a make-whole payment
+#   ep    : the AIC output relaxation          cm,pm : cleared cost and price per MWh
+#   h     : capped spare MW                     tag : one market label
 #   net   : one row of the network table       lim : one line limit
 #   nw,pi : the three-bus network and its nodal prices
 #   rent  : what the congested network collects and pays to nobody
@@ -29,12 +33,14 @@ import time
 import numpy as np
 
 from models.lg_pit import lp, mc, mc_nx, mk_E, mk_v
-from models.uc_price import _ar, _cl, ck, ex4, hc, hl, lmp, mk_g, pay, pc, rx, uc
+from models.uc_price import _ar, _cl, ck, ex3, ex4, hc, hl, lmp, mk_g, pay, pc, rx, uc
 
 DIMS = [(30, 30, 12), (60, 60, 20), (90, 90, 30)]
 MKT = [(12, 8), (24, 16), (48, 24), (96, 24)]
 HUL = [(6, 4), (8, 6), (10, 8), (12, 10), (8, 14)]
 LIN = [100.0, 60.0, 40.0, 20.0]
+EPS = (1e-6, 1e-4, 1e-3, 0.1, 1.0, 10.0)
+EPS10 = (1e-6, 1e-5, 1e-4, 1e-3, 0.0025, 0.00275, 0.005, 0.1, 1.0, 10.0)
 
 
 def tm(f, *a):
@@ -103,6 +109,51 @@ def hul(G, T):
     assert P[2].mw.sum() < 1e-3
 
 
+def aic(tag, g, d, eps):
+    """Print one market's AIC prices and payments over an epsilon sweep."""
+    s = uc(g, d)
+    L = lmp(g, d, s)
+    d = np.asarray(d, dtype=float)
+    cm = s.z / d.sum()
+    for ep in eps:
+        cap = pc(g, d, s, ep, L)
+        A = hc(g, d, cap)
+        P = pay(g, s, A.pi)
+        pi = A.pi.ravel()
+        pm = float(pi @ d / d.sum())
+        t = int(np.argmax(pi))
+        h = float(cap[:, t].sum() - d[t])
+        q = ", ".join(f"{x:,.3f}" for x in pi)
+        print(
+            f"| {tag} | {ep:g} | {q} | {P.up.sum():,.2f} | {P.mw.sum():,.2f} | "
+            f"{cm:,.2f} | {pm - cm:,.2f} | {t + 1} / {h:,.6f} |"
+        )
+
+
+def aseed():
+    """Summarise the default epsilon across fifteen independently seeded 10x8 markets."""
+    up, mw, peak, scarce = [], [], [], 0
+    for sd in range(15):
+        g, d = mk_g(10, 8, sd)
+        s = uc(g, d)
+        L = lmp(g, d, s)
+        cap = pc(g, d, s, 1e-6, L)
+        A = hc(g, d, cap)
+        P = pay(g, s, A.pi)
+        t = int(np.argmax(A.pi))
+        up.append(float(P.up.sum()))
+        mw.append(float(P.mw.sum()))
+        peak.append(float(A.pi.max()))
+        scarce += bool(cap[:, t].sum() - d[t] <= 1.1e-6)
+    a = [x for x, p in zip(up, peak) if p <= 1000.0]
+    b = [x for x, p in zip(up, peak) if p > 1000.0]
+    print(
+        f"| 15 | {len(b)} ({min(b):,.2f}-{max(b):,.2f}) | {len(a)} "
+        f"({min(a):,.2f}-{max(a):,.2f}) | {scarce} | "
+        f"{sum(x < 1e-3 for x in mw)} | {max(mw):,.2f} |"
+    )
+
+
 def net(lim):
     """The three-bus loop at one line limit: dispatch, nodal prices and congestion rent."""
     g, d, nw = ex4(lim)
@@ -144,6 +195,25 @@ if __name__ == "__main__":
     print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for d in HUL:
         hul(*d)
+    print("\n## Average incremental cost price against epsilon\n")
+    print(
+        "| Market | epsilon MW | Period prices ($/MWh) | Uplift ($) | Make-whole ($) | "
+        "Cleared cost ($/MWh) | Load-weighted price premium ($/MWh) | "
+        "Highest-price period / capped spare MW |"
+    )
+    print("| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |")
+    aic("ex3", *ex3(), EPS)
+    aic("8 x 6, seed 7", *mk_g(8, 6), EPS)
+    aic("10 x 8, seed 7", *mk_g(10, 8), EPS10)
+    print("\n## Average incremental cost price across 10x8 seeds\n")
+    print(
+        "| Seeds | Peak price >$1,000/MWh: count (uplift range, $) | "
+        "Peak price <=$1,000/MWh: count (uplift range, $) | "
+        "Highest-price period at epsilon headroom | Make-whole below $0.001 | "
+        "Largest make-whole ($) |"
+    )
+    print("| ---: | --- | --- | ---: | ---: | ---: |")
+    aseed()
     print("\n## A congested network\n")
     print(
         "| Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | Price at 1 | "
