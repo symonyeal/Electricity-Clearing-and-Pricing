@@ -61,14 +61,18 @@
 #   ri,ci,va     : sparse row, column and value lists   ei,ec,ev : the same for equalities
 #   o            : variable offsets                tol : feasibility tolerance
 #   ptol         : smallest price difference retained by the lexicographic walk
+#   st           : how far price selection got: dual, raw, pay, probe, part, walk
+#   vr           : versions of the solvers behind a result
 #   LIM          : ceilings: enumerated periods, hull variables, joint commitments,
 #                  and balance rows the price refinement will walk one at a time
 
+import sys
 import warnings
 from itertools import product
 from typing import NamedTuple
 
 import numpy as np
+import scipy
 from scipy.optimize import Bounds, LinearConstraint, OptimizeWarning, linprog, milp
 from scipy.sparse import csc_array, hstack, vstack
 
@@ -126,12 +130,19 @@ class Sol(NamedTuple):
     """Cost, output, commitment and price of one solve. u is fractional in relaxed solves.
 
     pi carries one price per bus per period, so it is (1, T) on a market with no network.
+
+    st says how far price selection got, because a price this routine could not refine is
+    not the same object as one it walked: dual, the solver's own vertex with no selection
+    asked for; raw, the payment stage itself failed; pay, past LIM[3] so payment only and
+    the probe never reached; probe, the probe closed the face; part, the walk stopped on a
+    failed step; walk, the walk completed. Only the last two are canonical to the walk.
     """
 
     z: float
     p: np.ndarray
     u: np.ndarray
     pi: np.ndarray
+    st: str = ""
 
 
 class Mkt(NamedTuple):
@@ -491,7 +502,7 @@ def uc(g, d, cap=None, net=None):
     if not res.success:
         raise ValueError("this demand has no feasible unit commitment")
     p, u = _out(g, d.shape[1], res.x, o)
-    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan))
+    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan), "opt")
 
 
 def rx(g, d, cap=None, net=None):
@@ -502,7 +513,7 @@ def rx(g, d, cap=None, net=None):
     if res is None:
         raise ValueError("this demand has no feasible relaxed commitment")
     p, u = _out(g, d.shape[1], res[1], o)
-    return Sol(res[0], p, u, res[2][-d.size :].reshape(d.shape))
+    return Sol(res[0], p, u, res[2][-d.size :].reshape(d.shape), res[3])
 
 
 def _ce(v):
@@ -579,29 +590,31 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
         return None
     m, e = A.shape[0], Ae.shape[0]
     if not nt:
-        return float(res.fun), res.x, np.asarray(res.eqlin.marginals, dtype=float)
+        return float(res.fun), res.x, np.asarray(res.eqlin.marginals, dtype=float), "dual"
     D, bd = csc_array(hstack([A.T, Ae.T])), [(None, 0.0)] * m + [(None, None)] * e
     R, rhs = [-np.r_[b, be]], [_ce(-float(res.fun))]
     y, pi = np.zeros(m + e), np.asarray(res.eqlin.marginals, dtype=float)
     y[m + e - nt :] = be[e - nt :]
     q = linprog(y, A_ub=csc_array(np.array(R)), b_ub=rhs, A_eq=D, b_eq=c, bounds=bd)
     if not q.success:
-        return float(res.fun), res.x, pi
+        return float(res.fun), res.x, pi, "raw"
     pi = np.asarray(q.x[m:], dtype=float)
     R.append(y.copy())
     rhs.append(_ce(float(q.fun)))
-    if nt > LIM[3] or _fp(D, c, R, rhs, bd, m, e, nt, pi) <= ptol:
-        return float(res.fun), res.x, pi
+    if nt > LIM[3]:
+        return float(res.fun), res.x, pi, "pay"
+    if _fp(D, c, R, rhs, bd, m, e, nt, pi) <= ptol:
+        return float(res.fun), res.x, pi, "probe"
     for t in range(nt):
         y = np.zeros(m + e)
         y[m + e - nt + t] = 1.0
         q = linprog(y, A_ub=csc_array(np.array(R)), b_ub=rhs, A_eq=D, b_eq=c, bounds=bd)
         if not q.success:
-            return float(res.fun), res.x, pi
+            return float(res.fun), res.x, pi, "part"
         pi = np.asarray(q.x[m:], dtype=float)
         R.append(y.copy())
         rhs.append(_ce(float(q.fun)))
-    return float(res.fun), res.x, np.asarray(pi, dtype=float)
+    return float(res.fun), res.x, np.asarray(pi, dtype=float), "walk"
 
 
 def _jt(g, d, net, C, j):
@@ -623,7 +636,7 @@ def _jt(g, d, net, C, j):
     if res is None:
         return None
     k = sum(C[i][j[i]][5] for i in range(G))
-    return res[0] + k, res[1][:n].reshape(G, T), res[2].reshape(d.shape)
+    return res[0] + k, res[1][:n].reshape(G, T), res[2].reshape(d.shape), res[3]
 
 
 def en(g, d, cap=None, net=None):
@@ -644,7 +657,7 @@ def en(g, d, cap=None, net=None):
             best = (res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u)
     if best is None:
         raise ValueError("this demand has no feasible unit commitment")
-    return Sol(best[0], best[1], best[2], np.full(d.shape, np.nan))
+    return Sol(best[0], best[1], best[2], np.full(d.shape, np.nan), "enum")
 
 
 def _hold(g, T, u, cap=None):
@@ -669,7 +682,7 @@ def lmp(g, d, s, cap=None, net=None):
     res = _jt(g, d, net, _hold(g, T, u, cap), [0] * len(g))
     if res is None:
         raise ValueError("this demand is infeasible for the fixed commitment")
-    return Sol(res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u, res[2])
+    return Sol(res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u, res[2], res[3])
 
 
 def hl(g, d, cap=None, net=None):
@@ -723,7 +736,7 @@ def hl(g, d, cap=None, net=None):
             p[i] += res[1][o[i][j] : o[i][j] + T]
             u[i] += res[1][o[i][j] + T] * q
     p = np.where(np.abs(p) < 1e-9, 0.0, p)
-    return Sol(res[0], p, u, res[2][G:].reshape(d.shape))
+    return Sol(res[0], p, u, res[2][G:].reshape(d.shape), res[3])
 
 
 def _iv(x, T, s, e, cap=None):
@@ -832,7 +845,8 @@ def hc(g, d, cap=None, net=None):
             if A is not None:
                 p[i, s : e + 1] += res[1][o[i][j] : o[i][j] + e - s + 1]
                 u[i, s : e + 1] += res[1][o[i][j] + e - s + 1]
-    return Sol(res[0], np.where(np.abs(p) < 1e-9, 0.0, p), u, res[2][G * w :].reshape(d.shape))
+    return Sol(res[0], np.where(np.abs(p) < 1e-9, 0.0, p), u,
+               res[2][G * w :].reshape(d.shape), res[3])
 
 
 def _om(g, T, pi, net, cap=None):
@@ -941,6 +955,12 @@ def run(g, d, ep=1e-6, net=None):
     cap = pc(g, d, s, ep, L, net)
     return Mkt(s, L, hc(g, d, net=net), rx(g, d, net=net), hc(g, d, cap, net),
                rx(g, d, cap, net))
+
+
+def vr():
+    """The solver stack behind every result here. HiGHS ships inside SciPy."""
+    return {"python": sys.version.split()[0], "numpy": np.__version__,
+            "scipy": scipy.__version__}
 
 
 def mk_g(G, T, sd=7):
