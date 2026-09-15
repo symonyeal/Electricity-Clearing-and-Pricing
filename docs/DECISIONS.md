@@ -11,6 +11,8 @@ provenance.
 4. Test against published results and state every difference.
 5. Label synthetic data and test its intended property.
 6. Add a dependency only after measurement on the implemented model.
+7. Implement a published formulation and name it. Where an open implementation of that
+   formulation exists, cite it too, and state what this model restricts or omits.
 
 ## Ultimate pit
 
@@ -47,6 +49,12 @@ provenance.
 Proposition 3 of Chen, O'Neill, and Whitman applies only to restricted commitment blocks as
 epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blocks.
 
+Every price here is read off one clearing, solved to the solver's default optimality gap.
+Yang, Knueven, Watson and Ostrowski report that the choice among near-optimal commitments
+changes generator revenue across pricing schemes. That is a property of the primal, and it
+is not measured here; decision 19 concerns the dual face of a fixed clearing, which is a
+different thing.
+
 ## Shared decisions
 
 | ID | Decision |
@@ -60,9 +68,13 @@ epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blo
 1. Variable pit-wall angles by direction and rock type.
 2. Piecewise-linear and quadratic generation offers.
 3. Losses and contingency constraints in the network model.
-4. Stochastic or robust clearing over demand and wind scenarios, which is the exact route
+4. Clear one pglib-uc instance and reproduce its objective, as the pit model reproduces
+   MineLib Newman1. That needs item 2, plus off-time-dependent start-up cost and a
+   reserve requirement. Until then the clearing has no external benchmark, only the
+   published worked examples.
+5. Stochastic or robust clearing over demand and wind scenarios, which is the exact route
    to the day-ahead uncertainty that price forecasters address by fitting.
-5. Mine production scheduling with periods, discounting, and capacity limits.
+6. Mine production scheduling with periods, discounting, and capacity limits.
 
 ## Model sequence
 

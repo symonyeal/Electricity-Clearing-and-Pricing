@@ -28,6 +28,13 @@ $$
 `_rw`, `_eq`, and `_fx` define $X_g$: output bounds, ramps, start and stop limits,
 minimum up/down times, and the initial state.
 
+Those rows are the reference unit-commitment formulation of Knueven, Ostrowski and
+Watson, published as `MODEL.pdf` in [pglib-uc](https://github.com/power-grid-lib/pglib-uc)
+and implemented in [Egret](https://github.com/grid-parity-exchange/Egret). The minimum up
+and down rows are the Rajan-Takriti pair. This model restricts that formulation to one
+linear production cost, one start-up cost, and no reserve requirement, so it does not yet
+clear a pglib-uc instance.
+
 `_nw` and `_tr` replace the single balance by one balance per bus under direct current, or
 per zone under transport.
 
