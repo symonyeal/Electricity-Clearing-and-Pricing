@@ -15,6 +15,7 @@
 #   t,i,j     : period, unit and scratch indices q : a case, a saved function, or a scalar
 #   sd        : random seed                      h : a demand perturbation
 #   k         : the name of one price            a,b : a seeded generator, a best value
+#   f,n       : saved linear-program function and its call count
 #   AIC3,LMP3 : the talk's reported period-3 AIC and LMP prices
 
 import numpy as np
@@ -285,6 +286,38 @@ def test_no_fixed_cost_gives_marginal_cost():
     assert r.uc.z == pytest.approx(900.0)
     for k in ("lmp", "chp", "chp_r", "aic", "aic_r"):
         assert getattr(r, k).pi.ravel() == pytest.approx([20.0])
+
+
+def test_thin_price_face_skips_the_period_walk(monkeypatch):
+    """A measured sub-mill face costs one probe, not one solve per period."""
+    f, n = M.linprog, 0
+
+    def lp(*a, **k):
+        nonlocal n
+        n += 1
+        return f(*a, **k)
+
+    monkeypatch.setattr(M, "linprog", lp)
+    x = rx([U(0.0, 50.0, 10.0), U(0.0, 50.0, 20.0)], [70.0, 70.0, 70.0])
+    assert x.pi.ravel() == pytest.approx([20.0, 20.0, 20.0])
+    assert n == 3
+
+
+def test_wide_price_face_keeps_the_period_walk(monkeypatch):
+    """The measured wide capped face still takes every lexicographic stage."""
+    g, d = _rand(61)
+    s = uc(g, d)
+    cap = pc(g, d, s, 1e-6)
+    f, n = M.linprog, 0
+
+    def lp(*a, **k):
+        nonlocal n
+        n += 1
+        return f(*a, **k)
+
+    monkeypatch.setattr(M, "linprog", lp)
+    hc(g, d, cap)
+    assert n == len(d) + 3
 
 
 def test_bad():

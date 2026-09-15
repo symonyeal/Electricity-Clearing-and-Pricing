@@ -18,7 +18,7 @@
 #   _iv,_ar      : one on-interval's polytope, and every arc of a unit's interval graph
 #   _nw          : THE network, written once: angles, nodal flows, line limits
 #   _sy,_out     : assemble the algebraic system, and split a solved vector back up
-#   _ce,_px      : a stage ceiling, and a priced solve returning one canonical price
+#   _ce,_fp,_px  : a stage ceiling, an optimal-face probe, and one canonical price
 #   _jt          : dispatch one chosen schedule per unit against demand
 #   _hold        : the columns that hold a given commitment fixed
 #   _bk,_pf      : a unit's commitment blocks, and one block's profit
@@ -58,18 +58,21 @@
 #   i,j,t,q,a    : unit, column, period and scratch indices
 #   ri,ci,va     : sparse row, column and value lists   ei,ec,ev : the same for equalities
 #   o            : variable offsets                tol : feasibility tolerance
+#   ptol         : smallest price difference retained by the lexicographic walk
 #   LIM          : ceilings: enumerated periods, hull variables, joint commitments,
 #                  and balance rows the price refinement will walk one at a time
 
+import warnings
 from itertools import product
 from typing import NamedTuple
 
 import numpy as np
-from scipy.optimize import Bounds, LinearConstraint, linprog, milp
+from scipy.optimize import Bounds, LinearConstraint, OptimizeWarning, linprog, milp
 from scipy.sparse import csc_array, hstack, vstack
 
 LIM = (16, 100000, 20000, 24)
 tol = 1e-7
+ptol = 1e-3
 
 
 class U(NamedTuple):
@@ -441,6 +444,34 @@ def _ce(v):
     return v + 1e-9 * max(1.0, abs(v))
 
 
+def _fp(D, c, R, rhs, bd, m, e, nt, pi):
+    """Probe the payment-optimal price face from a tolerance-relaxed interior point.
+
+    A zero-objective interior-point solve stays inside the face instead of crossing over to
+    another arbitrary vertex. The face rows are relaxed by the solver's feasibility
+    tolerance so it does not call a numerically thin but feasible face infeasible. If even
+    that relaxed point and the payment-minimising vertex agree within ptol, the probe found
+    no settlement-sized distinction for the period walk to preserve.
+    """
+    q = np.asarray(rhs, dtype=float)
+    q = q + tol * np.maximum(1.0, np.abs(q))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", OptimizeWarning)
+        z = linprog(
+            np.zeros(m + e),
+            A_ub=csc_array(np.array(R)),
+            b_ub=q,
+            A_eq=D,
+            b_eq=c,
+            bounds=bd,
+            method="highs-ipm",
+            options={"run_crossover": "off"},
+        )
+    if not z.success:
+        return np.inf
+    return float(np.max(np.abs(np.asarray(z.x[m + e - nt :], dtype=float) - pi[-nt:])))
+
+
 def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
     """Solve a priced program, then pick one canonical vector from its optimal prices.
 
@@ -449,10 +480,11 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
     returns whichever corner its basis lands on. The last nt equality rows are the balance
     rows, so be[-nt:] is the demand. Among the optimal prices this first minimises what is
     paid for that demand, which is the lower slope: the marginal cost of what was served.
-    That face can itself be more than one point, so each period's price is then minimised in
-    turn and held. The result is one point, reached the same way by every route here. That
-    second part costs one more program per balance row, so LIM caps how many rows it walks;
-    past the cap only the payment is minimised, and the price is canonical only to that.
+    That face can itself be more than one point. One tolerance-relaxed interior-point
+    program probes it before each period's price is minimised in turn and held. If the probe
+    finds no difference as large as ptol, the walk is skipped; otherwise the full rule is
+    kept. LIM caps how many rows that rule will walk; past the cap only the payment is
+    minimised, and the price is canonical only to that.
 
     Each stage is held by an inequality a hair above its own optimum rather than by an
     equality. Exact equalities accumulate rounding until a later stage reports infeasible
@@ -488,16 +520,23 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
     R, rhs = [-np.r_[b, be]], [_ce(-float(res.fun))]
     y, pi = np.zeros(m + e), np.asarray(res.eqlin.marginals, dtype=float)
     y[m + e - nt :] = be[e - nt :]
-    for t in range(nt + 1 if nt <= LIM[3] else 1):
+    q = linprog(y, A_ub=csc_array(np.array(R)), b_ub=rhs, A_eq=D, b_eq=c, bounds=bd)
+    if not q.success:
+        return float(res.fun), res.x, pi
+    pi = np.asarray(q.x[m:], dtype=float)
+    R.append(y.copy())
+    rhs.append(_ce(float(q.fun)))
+    if nt > LIM[3] or _fp(D, c, R, rhs, bd, m, e, nt, pi) <= ptol:
+        return float(res.fun), res.x, pi
+    for t in range(nt):
+        y = np.zeros(m + e)
+        y[m + e - nt + t] = 1.0
         q = linprog(y, A_ub=csc_array(np.array(R)), b_ub=rhs, A_eq=D, b_eq=c, bounds=bd)
         if not q.success:
             return float(res.fun), res.x, pi
-        pi = q.x[m:]
+        pi = np.asarray(q.x[m:], dtype=float)
         R.append(y.copy())
         rhs.append(_ce(float(q.fun)))
-        y = np.zeros(m + e)
-        if t < nt:
-            y[m + e - nt + t] = 1.0
     return float(res.fun), res.x, np.asarray(pi, dtype=float)
 
 
