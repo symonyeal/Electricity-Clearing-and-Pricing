@@ -17,8 +17,8 @@
 #   _iv,_ar      : one on-interval's polytope, and every arc of a unit's interval graph
 #   _nw,_tr      : THE network, written once: angles, nodal flows, line limits; and the
 #                  transport form of the same lines, limits only
-#   fm           : the line model, "dc" or "ntc"
-#   fl,nf        : the transport flow limits, and how many flow columns they fill
+#   fm,zn        : the line model, "dc" or "ntc"; the zone keys
+#   xc,fl,nf     : one exchange capacity pair, all of them, and how many columns they fill
 #   _sy,_out     : assemble the algebraic system, and split a solved vector back up
 #   _ce,_fp,_px  : a stage ceiling, an optimal-face probe, and one canonical price
 #   _jt          : dispatch one chosen schedule per unit against demand
@@ -35,7 +35,7 @@
 #   pay,run      : profit and uplift, and one clearing followed by every price
 #   mk_g         : a labelled synthetic market for the bench
 #   ex1,ex2,ex3  : the three published cases this model is checked against
-#   ex4          : the textbook three-bus loop, for the network
+#   ex4,ex5      : the textbook three-bus loop, and the two-zone coupled market
 #   x            : one unit                        g : the units of a market
 #   lo,hi        : minimum and maximum output      c : energy cost per MWh
 #   nl,su        : no-load cost per period, start-up cost per start
@@ -97,20 +97,29 @@ class U(NamedTuple):
 
 
 class Net(NamedTuple):
-    """Unit-to-bus assignment and the lines between buses. Bus 0 is the angle reference.
+    """Where each unit sits, and the lines or exchanges between those locations.
 
-    A line is (from bus, to bus, reactance, MW limit). Given no network, ck supplies one bus
-    and no lines; a single-bus market is this container, empty.
+    fm selects the line model and with it the shape of a line. Bus 0 is the angle reference
+    under "dc"; under "ntc" there are no angles.
 
-    fm selects the line model. "dc" imposes f_ij = (theta_i - theta_j) / x_ij as well as the
-    limit. "ntc" imposes the limit alone, which is the transport model zonal day-ahead
-    coupling clears on; the reactance is then carried but unused.
+    Under "dc" a line is (bus, bus, reactance, MW limit) and carries
+    f_ij = (theta_i - theta_j) / x_ij as well as the limit.
+
+    Under "ntc" the buses are bidding zones and a line is an exchange,
+    (zone, zone, (min, max)), keyed by its two zones in ascending order and bounding the
+    signed flow from the first to the second. That is the electricity maps exchange record:
+    NO-NO1_NO-NO2 carries capacity [-3500, 2200], meaning up to 3500 MW into NO-NO1 and up
+    to 2200 MW out of it. There is no reactance, and the capacity is not symmetric.
+
+    zn names the zones, one key per zone, as NO-NO1 and NO-NO2 do. Given no network, ck
+    supplies one bus and no lines; a single-zone market is this container, empty.
     """
 
     bus: np.ndarray
     ln: tuple
     nb: int
     fm: str = "dc"
+    zn: tuple = ()
 
 
 class Sol(NamedTuple):
@@ -199,14 +208,28 @@ def ck(g, d, net=None):
         bus = np.asarray(net.bus, dtype=int)
         if bus.shape != (len(g),) or bus.min() < 0 or bus.max() >= int(net.nb):
             raise ValueError("every unit must sit at a bus of the network")
-        for a, q, x, lim in net.ln:
-            if not (0 <= a < net.nb and 0 <= q < net.nb) or a == q:
-                raise ValueError("every line must join two different buses")
-            if not np.isfinite([x, lim]).all() or x <= 0 or lim <= 0:
-                raise ValueError("every line needs a positive reactance and limit")
         if net.fm not in ("dc", "ntc"):
             raise ValueError("the line model must be dc or ntc")
-        net = Net(bus, tuple(net.ln), int(net.nb), net.fm)
+        for e in net.ln:
+            a, q = e[0], e[1]
+            if not (0 <= a < net.nb and 0 <= q < net.nb) or a == q:
+                raise ValueError("every line must join two different buses")
+            if net.fm == "ntc":
+                if len(e) != 3 or np.ndim(e[2]) != 1 or np.size(e[2]) != 2:
+                    raise ValueError("an exchange is (zone, zone, (min, max))")
+                if a > q:
+                    raise ValueError("an exchange must name its zones in ascending order")
+                if not np.isfinite(e[2]).all() or e[2][0] >= 0 or e[2][1] <= 0:
+                    raise ValueError("an exchange capacity must run from negative to positive")
+            else:
+                if len(e) != 4:
+                    raise ValueError("a line is (bus, bus, reactance, limit)")
+                if not np.isfinite(e[2:]).all() or e[2] <= 0 or e[3] <= 0:
+                    raise ValueError("every line needs a positive reactance and limit")
+        zn = tuple(net.zn)
+        if zn and (len(zn) != int(net.nb) or len(set(zn)) != len(zn)):
+            raise ValueError("zone keys must be one per zone and distinct")
+        net = Net(bus, tuple(net.ln), int(net.nb), net.fm, zn)
     if d.shape[0] != net.nb:
         raise ValueError("demand must have one row per bus and one column per period")
     if d.sum(0).max() > sum(x.hi for x in g):
@@ -332,23 +355,23 @@ def _cl(x, T, cap=None):
 
 
 def _tr(net, T, n, A, b, Ae, c, lb, ub, it):
-    """Append one flow per line and period, bounded by the line limit and nothing else.
+    """Append one exchange flow per line and period, bounded by its capacity and nothing else.
 
-    This is the transport model: an exchange is any vector the nodal balances admit, subject
-    to its transfer capacity. There is no loop-flow condition, so on a network with a cycle
-    it is a strict relaxation of _nw; on a tree the balances determine the flows and the two
-    coincide. Zonal day-ahead coupling clears on this model, which is why the prices it
-    returns are comparable with published zonal prices and the direct-current prices are not.
+    This is the transport model zonal day-ahead coupling clears on. A flow is any vector the
+    nodal balances admit inside the capacity pair, so there is no loop-flow condition: on a
+    network with a cycle this is a strict relaxation of _nw, and on a tree the balances
+    determine the flows and the two coincide. The capacity is the (min, max) bound on the
+    signed flow, not one symmetric limit, because published transfer capacity is directional.
     """
     ei, ec, ev, fl = [], [], [], []
     r0 = Ae.shape[0] - net.nb * T
-    for i, (a, q, x, lim) in enumerate(net.ln):
+    for i, (a, q, xc) in enumerate(net.ln):
         for t in range(T):
             e = i * T + t
             ei.extend([r0 + a * T + t, r0 + q * T + t])
             ec.extend([e, e])
             ev.extend([-1.0, 1.0])
-            fl.append(float(lim))
+            fl.append((float(xc[0]), float(xc[1])))
     nf, fl = len(net.ln) * T, np.array(fl)
     ub = np.full(n, np.inf) if ub is None else ub
     return (
@@ -357,8 +380,8 @@ def _tr(net, T, n, A, b, Ae, c, lb, ub, it):
         csc_array(hstack([csc_array(Ae),
                           csc_array((ev, (ei, ec)), shape=(Ae.shape[0], nf))])),
         np.r_[c, np.zeros(nf)],
-        np.r_[lb, -fl],
-        np.r_[ub, fl],
+        np.r_[lb, fl[:, 0]],
+        np.r_[ub, fl[:, 1]],
         None if it is None else np.r_[it, np.zeros(nf)],
     )
 
@@ -969,6 +992,21 @@ def ex4(lim=40.0):
         [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)],
         [[0.0], [0.0], [90.0]],
         Net([0, 2], ((0, 1, 1.0, 100.0), (1, 2, 1.0, 100.0), (0, 2, 1.0, lim)), 3),
+    )
+
+
+def ex5():
+    """Two Norwegian bidding zones coupled by one exchange, over two periods.
+
+    The capacity pair is the record electricity maps keeps for NO-NO1_NO-NO2, [-3500, 2200]:
+    up to 3500 MW into NO-NO1 and up to 2200 MW out of it. The offers and the demand are
+    labelled synthetic; no market publishes the offers behind a cleared price. Both bounds
+    bind, one in each period, and the zonal prices separate in both.
+    """
+    return (
+        [U(0.0, 5000.0, 40.0), U(0.0, 6000.0, 10.0), U(0.0, 3000.0, 90.0)],
+        [[4000.0, 0.0], [0.0, 9000.0]],
+        Net([0, 1, 1], ((0, 1, (-3500.0, 2200.0)),), 2, "ntc", ("NO-NO1", "NO-NO2")),
     )
 
 

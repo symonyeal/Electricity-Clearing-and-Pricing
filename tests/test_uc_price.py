@@ -25,8 +25,8 @@ import pytest
 from scipy.optimize import linprog
 
 import models.uc_price as M
-from models.uc_price import (U, Net, Sol, ck, en, ex1, ex2, ex3, ex4, hc, hl, lmp, pay, pc, qd,
-                             run, rx, uc)
+from models.uc_price import (U, Net, Sol, ck, en, ex1, ex2, ex3, ex4, ex5, hc, hl, lmp, pay, pc,
+                             qd, run, rx, uc)
 
 AIC3 = 4390.0 / 30.0
 LMP3 = 90.0
@@ -514,36 +514,64 @@ def test_ntc_matches_dc_on_a_tree():
     """A tree has no cycle, so the balances fix the flows and both line models agree."""
     g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 40.0)]
     d = [[0.0], [30.0], [50.0]]
-    ln = ((0, 1, 1.0, 100.0), (1, 2, 1.0, 100.0))
-    a = uc(g, d, net=Net([0, 2], ln, 3))
-    b = uc(g, d, net=Net([0, 2], ln, 3, "ntc"))
+    x = Net([0, 2], ((0, 1, 1.0, 100.0), (1, 2, 1.0, 100.0)), 3)
+    y = Net([0, 2], ((0, 1, (-100.0, 100.0)), (1, 2, (-100.0, 100.0))), 3, "ntc")
+    a, b = uc(g, d, net=x), uc(g, d, net=y)
     assert b.z == pytest.approx(a.z)
     assert b.p.ravel() == pytest.approx(a.p.ravel())
-    x = lmp(g, d, a, net=Net([0, 2], ln, 3)).pi.ravel()
-    y = lmp(g, d, b, net=Net([0, 2], ln, 3, "ntc")).pi.ravel()
-    assert y == pytest.approx(x)
+    assert lmp(g, d, b, net=y).pi.ravel() == pytest.approx(lmp(g, d, a, net=x).pi.ravel())
 
 
 def test_ntc_relaxes_the_loop():
     """Around a cycle the transport model drops the loop-flow condition, so it costs less."""
-    g, d, q = ex4(40.0)
-    a = uc(g, d, net=q)
-    b = uc(g, d, net=Net(q.bus, q.ln, q.nb, "ntc"))
+    g, d, x = ex4(40.0)
+    y = Net(x.bus, ((0, 1, (-100.0, 100.0)), (1, 2, (-100.0, 100.0)),
+                    (0, 2, (-40.0, 40.0))), 3, "ntc")
+    a, b = uc(g, d, net=x), uc(g, d, net=y)
     assert a.p.ravel() == pytest.approx([60.0, 30.0])
     assert a.z == pytest.approx(2100.0)
     assert b.p.ravel() == pytest.approx([90.0, 0.0])
     assert b.z == pytest.approx(900.0)
     assert b.z < a.z
-    assert lmp(g, d, b, net=Net(q.bus, q.ln, q.nb, "ntc")).pi.ravel() == pytest.approx(
-        [10.0, 10.0, 10.0])
+    assert lmp(g, d, b, net=y).pi.ravel() == pytest.approx([10.0, 10.0, 10.0])
 
 
-def test_ntc_binds_on_its_own_limit():
-    """With the transport limit below demand the cheap zone is capped and prices separate."""
-    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)]
-    d = [[0.0], [90.0]]
-    q = Net([0, 1], ((0, 1, 1.0, 70.0),), 2, "ntc")
+def test_ntc_capacity_is_directional():
+    """ex5 binds -3500 in one period and +2200 in the other, on one exchange record."""
+    g, d, q = ex5()
     a = uc(g, d, net=q)
-    assert a.p.ravel() == pytest.approx([70.0, 20.0])
-    assert a.z == pytest.approx(70.0 * 10.0 + 20.0 * 50.0)
-    assert lmp(g, d, a, net=q).pi.ravel() == pytest.approx([10.0, 50.0])
+    assert a.z == pytest.approx(275000.0)
+    assert a.p[0] == pytest.approx([500.0, 2200.0])
+    assert a.p[1] == pytest.approx([3500.0, 6000.0])
+    assert a.p[2] == pytest.approx([0.0, 800.0])
+    pi = lmp(g, d, a, net=q).pi
+    assert pi[0] == pytest.approx([40.0, 40.0], abs=CENT)
+    assert pi[1] == pytest.approx([10.0, 90.0], abs=CENT)
+
+
+def test_ntc_capacity_is_not_symmetric():
+    """Widening one direction of the pair alone changes only the period that direction binds."""
+    g, d, q = ex5()
+    a = uc(g, d, net=q)
+    b = uc(g, d, net=Net(q.bus, ((0, 1, (-4000.0, 2200.0)),), q.nb, "ntc", q.zn))
+    assert b.p[0, 0] == pytest.approx(0.0)
+    assert b.p[0, 1] == pytest.approx(a.p[0, 1])
+    assert b.z < a.z
+
+
+def test_ntc_exchange_record_is_checked():
+    """An exchange carries a capacity pair, in ascending zone order, straddling zero."""
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)]
+    d = [[0.0], [10.0]]
+    with pytest.raises(ValueError, match="an exchange is"):
+        uc(g, d, net=Net([0, 1], ((0, 1, 1.0, 5.0),), 2, "ntc"))
+    with pytest.raises(ValueError, match="ascending order"):
+        uc(g, d, net=Net([0, 1], ((1, 0, (-5.0, 5.0)),), 2, "ntc"))
+    with pytest.raises(ValueError, match="negative to positive"):
+        uc(g, d, net=Net([0, 1], ((0, 1, (5.0, 10.0)),), 2, "ntc"))
+    with pytest.raises(ValueError, match="one per zone and distinct"):
+        uc(g, d, net=Net([0, 1], ((0, 1, (-5.0, 5.0)),), 2, "ntc", ("NO-NO1",)))
+    with pytest.raises(ValueError, match="one per zone and distinct"):
+        uc(g, d, net=Net([0, 1], ((0, 1, (-5.0, 5.0)),), 2, "ntc", ("NO-NO1", "NO-NO1")))
+    with pytest.raises(ValueError, match="a line is"):
+        uc(g, d, net=Net([0, 1], ((0, 1, (-5.0, 5.0)),), 2))

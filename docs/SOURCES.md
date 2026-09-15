@@ -27,6 +27,7 @@ The small published inputs are defined in `models/uc_price.py`.
 | `ex2` | Hua and Baldick, Table 3 | Start-up and shut-down ramps are omitted. Setting them equal to the normal ramps yields the paper's period-2 commitment; a larger start-up ramp does not. |
 | `ex3` | The FERC talk, slide 13 | Nothing. Limits, costs and all three ramp rates are tabulated there. |
 | `ex4` | Synthetic | Symmetric three-bus loop. Equal reactances send two thirds of an injection over the direct line. |
+| `ex5` | [electricity maps `config/exchanges/NO-NO1_NO-NO2.yaml`](https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/exchanges/NO-NO1_NO-NO2.yaml), capacity `[-3500, 2200]`; zone keys from `config/zones/NO-NO1.yaml` and `NO-NO2.yaml` | The capacity pair and the two zone keys are that record. Offers and demand are synthetic and labelled so: no market publishes the offers behind a cleared price. |
 
 ## Ultimate pit model
 
@@ -115,7 +116,7 @@ These applications concern later model classes, not the synthetic mine data.
 | [guofei9987/scikit-opt](https://github.com/guofei9987/scikit-opt) | Checked its heuristic algorithms and `.run()` interface. |
 | [ebrahimpichka/awesome-optimization](https://github.com/ebrahimpichka/awesome-optimization) | Finding aid only. |
 | [Thinklab-SJTU/awesome-ml4co](https://github.com/Thinklab-SJTU/awesome-ml4co) | Finding aid for the two machine-learning papers above. |
-| [electricitymaps/electricitymaps-contrib](https://github.com/electricitymaps/electricitymaps-contrib) | Read the zone model: zones, production modes and exchanges between zones. An exchange is a capacity on a link, not a direct-current flow, which is the transport model added in `_tr`. Code AGPLv3; nothing is vendored. |
+| [electricitymaps/electricitymaps-contrib](https://github.com/electricitymaps/electricitymaps-contrib) | Read the zone and exchange records. A zone key is `COUNTRY-REGION`; an exchange is keyed by its two zone keys in ascending order and carries `capacity: [min, max]` on the signed flow from the first to the second. `Net` under `ntc` is that record, and `ex5` uses `NO-NO1_NO-NO2` directly. Code AGPLv3; nothing is vendored. |
 | [corneel27/day-ahead](https://github.com/corneel27/day-ahead) | Read. A price-taking mixed-integer program over batteries, boilers and EV charging, on python-mip. The same object as `_om`, on the demand side of the market this repository clears. |
 | [JaccoR/hass-entso-e](https://github.com/JaccoR/hass-entso-e) and [oysteinjakobsen/fetch-day-ahead-price](https://github.com/oysteinjakobsen/fetch-day-ahead-price) | Read as the reference for what a published day-ahead price is: one bidding zone, hourly, EUR before currency conversion and VAT. Both read zonal prices, which is why `ntc` exists. Not adopted; see Decisions. |
 | [corneel27/day-ahead-prediction](https://github.com/corneel27/day-ahead-prediction) and [piekarsky/Short-Term-Electricity-Price-Forecasting-at-the-Polish-Day-Ahead-Market](https://github.com/piekarsky/Short-Term-Electricity-Price-Forecasting-at-the-Polish-Day-Ahead-Market) | Read. Both fit the price rather than clear it: XGBoost on Dutch generation mix, $R^2$ 0.914; RNN, LSTM, GRU, MLP and Prophet on Polish data, best MAE 16.15 PLN/MWh. Reported for scale, not adopted; see Decisions. |

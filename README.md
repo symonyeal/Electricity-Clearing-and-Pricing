@@ -28,8 +28,8 @@ $$
 `_rw`, `_eq`, and `_fx` define $X_g$: output bounds, ramps, start and stop limits,
 minimum up/down times, and the initial state.
 
-`_nw` and `_tr` replace the single balance by one balance per bus, under the direct-current
-and transport line models respectively.
+`_nw` and `_tr` replace the single balance by one balance per bus under direct current, or
+per zone under transport.
 
 ### Price definitions
 
@@ -220,30 +220,40 @@ Proposition 3, which applies to restricted blocks as epsilon tends to zero.
 
 Nodal balances replace the single-system balance under both line models. Direct current
 (`dc`) imposes $f_{ij}=(\theta_i-\theta_j)/x_{ij}$ and
-$-\bar f_{ij}\le f_{ij}\le\bar f_{ij}$. Transport (`ntc`) imposes the limit alone, so a
-flow is any vector the nodal balances admit.
+$-\bar f_{ij}\le f_{ij}\le\bar f_{ij}$. This case is a meshed transmission network, so it
+is priced under `dc`.
 
-| Line model | Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | Price at 1 | Price at 2 | Congestion rent |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| dc | 100 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
-| dc | 60 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
-| dc | 40 MW | 60 | 30 | 2,100 | 10.00 | 30.00 | 50.00 | 2,400 |
-| dc | 20 MW | 30 | 60 | 3,300 | 10.00 | 30.00 | 50.00 | 1,200 |
-| ntc | 100 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
-| ntc | 60 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
-| ntc | 40 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
-| ntc | 20 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
+| Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | Price at 1 | Price at 2 | Congestion rent |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
+| 60 MW | 90 | 0 | 900 | 10.00 | 10.00 | 10.00 | 0 |
+| 40 MW | 60 | 30 | 2,100 | 10.00 | 30.00 | 50.00 | 2,400 |
+| 20 MW | 30 | 60 | 3,300 | 10.00 | 30.00 | 50.00 | 1,200 |
 
-With equal reactances, two thirds of bus-0 injection uses the direct line under `dc`. The
-40 MW limit therefore caps bus-0 output at 60 MW, and the nodal prices are $(10,30,50)$.
-Under `ntc` there is no loop-flow condition, so the cheap unit reaches 90 MW at every limit
-tested by routing the balance through bus 1; the network does not congest and one price
-clears every bus.
+With equal reactances, two thirds of bus-0 injection uses the direct line. The 40 MW limit
+therefore caps bus-0 output at 60 MW. The computed nodal prices are $(10,30,50)$.
+
+### Two coupled bidding zones
+
+A day-ahead market clears by zone, not by node. Transport (`ntc`) drops the reactance and
+gives each exchange a capacity pair: a line is $(z_1,z_2,(\underline c,\bar c))$, keyed by
+its two zones in ascending order and bounding the signed flow from the first to the second.
+Published transfer capacity is directional, so the pair is not symmetric.
+
+`ex5` couples two Norwegian zones by the exchange electricity maps records as
+`NO-NO1_NO-NO2`, capacity $[-3500, 2200]$. The capacity is that record. The offers and the
+demand are labelled synthetic, because no market publishes the offers behind a cleared
+price.
+
+| Period | NO-NO1 price | NO-NO2 price | Flow NO-NO1 to NO-NO2 | Congestion rent |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 40.00 | 10.00 | -3,500 | 105,000 |
+| 2 | 40.00 | 90.00 | 2,200 | 110,000 |
+
+Each bound binds in one period, and the zones price apart in both. Total cost is 275,000.
 
 Transport is a relaxation of direct current on any network carrying a cycle, and the two
-coincide on a tree, where the balances determine the flows. Zonal day-ahead coupling clears
-on the transport model, so `ntc` is the mode whose prices are comparable with published
-zonal prices.
+coincide on a tree, where the balances determine the flows. Tests hold both halves.
 
 ### Ultimate pit
 

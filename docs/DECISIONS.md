@@ -41,7 +41,8 @@ provenance.
 | 18 | After payment minimization, apply one no-crossover interior-point probe. Skip the lexicographic walk when its price distance is at most $0.001/MWh. Do not branch on output ceilings. | In 410 routes, 391 were skipped; the largest omitted change was $0.00000444/MWh. Materially wide faces retain the original walk. |
 | 19 | Preserve the capped seed-61 disagreement between `hc` and `hl`. | Both prices are dual-optimal and have equal demand payment; the optimal face is not numerically resolved to one point. |
 | 20 | Add network equations once in `_nw` and use them in every solve route. | A one-bus market is the same model with no lines. |
-| 24 | Offer two line models on the same `Net`: `dc` imposes $f_{ij}=(\theta_i-\theta_j)/x_{ij}$ with the limit, `ntc` imposes the limit alone. | Zonal day-ahead coupling clears on the transport model. Without it no price this repository computes is comparable with a published zonal price. |
+| 24 | Offer two line models on the same `Net`. `dc` keeps the reactance and imposes $f_{ij}=(\theta_i-\theta_j)/x_{ij}$ with a symmetric limit. `ntc` drops the reactance and gives each exchange a capacity pair keyed by its two zones in ascending order, bounding the signed flow from the first to the second. | A day-ahead market clears by zone. Without the zonal model no price this repository computes is comparable with a published one. |
+| 25 | Take the exchange record from electricity maps unchanged: ascending zone key, one $[\underline c,\bar c]$ pair, zone keys carried on the network. | Published transfer capacity is directional and asymmetric; `NO-NO1_NO-NO2` is $[-3500, 2200]$. A single symmetric limit cannot express it, and would have priced the wrong market in one direction. |
 
 Proposition 3 of Chen, O'Neill, and Whitman applies only to restricted commitment blocks as
 epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blocks.
