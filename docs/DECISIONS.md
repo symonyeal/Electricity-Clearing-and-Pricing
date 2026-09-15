@@ -41,6 +41,7 @@ provenance.
 | 18 | After payment minimization, apply one no-crossover interior-point probe. Skip the lexicographic walk when its price distance is at most $0.001/MWh. Do not branch on output ceilings. | In 410 routes, 391 were skipped; the largest omitted change was $0.00000444/MWh. Materially wide faces retain the original walk. |
 | 19 | Preserve the capped seed-61 disagreement between `hc` and `hl`. | Both prices are dual-optimal and have equal demand payment; the optimal face is not numerically resolved to one point. |
 | 20 | Add network equations once in `_nw` and use them in every solve route. | A one-bus market is the same model with no lines. |
+| 24 | Offer two line models on the same `Net`: `dc` imposes $f_{ij}=(\theta_i-\theta_j)/x_{ij}$ with the limit, `ntc` imposes the limit alone. | Zonal day-ahead coupling clears on the transport model. Without it no price this repository computes is comparable with a published zonal price. |
 
 Proposition 3 of Chen, O'Neill, and Whitman applies only to restricted commitment blocks as
 epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blocks.
@@ -58,7 +59,9 @@ epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blo
 1. Variable pit-wall angles by direction and rock type.
 2. Piecewise-linear and quadratic generation offers.
 3. Losses and contingency constraints in the network model.
-4. Mine production scheduling with periods, discounting, and capacity limits.
+4. Stochastic or robust clearing over demand and wind scenarios, which is the exact route
+   to the day-ahead uncertainty that price forecasters address by fitting.
+5. Mine production scheduling with periods, discounting, and capacity limits.
 
 ## Model sequence
 
@@ -81,6 +84,8 @@ epsilon tends to zero. It does not guarantee zero make-whole on unrestricted blo
 | Subgradient CHP search | Hua and Baldick report 0.88% suboptimality after 550 iterations; the LP is exact. |
 | Pit metaheuristic | It cannot improve an exact minimum-cut solution. |
 | Neural dependency | No implemented model requires it. |
+| Fitted day-ahead price forecasting | A fitted forecaster has no exact solve route and no second formulation, so neither model standard 1 nor 2 can be met. Uncertainty enters this repository as scenarios in the clearing, not as a regression on past prices. |
+| Live price and generation feeds | An API key and a network dependency, with no implemented model measuring better for either. Model standard 6. |
 | Warm-started price walk | The prototype erased the required seed-61 price difference without proving closure of the face. |
 | Unreviewed reading-list entries | A title is not evidence. |
 | Synthetic inputs without a tested property | A benchmark must state what it is designed to exhibit. |

@@ -15,7 +15,10 @@
 #   _vw          : the start and stop flags an on/off row implies
 #   _tj,_cl      : every on/off schedule, and the feasible ones with their polytopes
 #   _iv,_ar      : one on-interval's polytope, and every arc of a unit's interval graph
-#   _nw          : THE network, written once: angles, nodal flows, line limits
+#   _nw,_tr      : THE network, written once: angles, nodal flows, line limits; and the
+#                  transport form of the same lines, limits only
+#   fm           : the line model, "dc" or "ntc"
+#   fl,nf        : the transport flow limits, and how many flow columns they fill
 #   _sy,_out     : assemble the algebraic system, and split a solved vector back up
 #   _ce,_fp,_px  : a stage ceiling, an optimal-face probe, and one canonical price
 #   _jt          : dispatch one chosen schedule per unit against demand
@@ -98,11 +101,16 @@ class Net(NamedTuple):
 
     A line is (from bus, to bus, reactance, MW limit). Given no network, ck supplies one bus
     and no lines; a single-bus market is this container, empty.
+
+    fm selects the line model. "dc" imposes f_ij = (theta_i - theta_j) / x_ij as well as the
+    limit. "ntc" imposes the limit alone, which is the transport model zonal day-ahead
+    coupling clears on; the reactance is then carried but unused.
     """
 
     bus: np.ndarray
     ln: tuple
     nb: int
+    fm: str = "dc"
 
 
 class Sol(NamedTuple):
@@ -196,7 +204,9 @@ def ck(g, d, net=None):
                 raise ValueError("every line must join two different buses")
             if not np.isfinite([x, lim]).all() or x <= 0 or lim <= 0:
                 raise ValueError("every line needs a positive reactance and limit")
-        net = Net(bus, tuple(net.ln), int(net.nb))
+        if net.fm not in ("dc", "ntc"):
+            raise ValueError("the line model must be dc or ntc")
+        net = Net(bus, tuple(net.ln), int(net.nb), net.fm)
     if d.shape[0] != net.nb:
         raise ValueError("demand must have one row per bus and one column per period")
     if d.sum(0).max() > sum(x.hi for x in g):
@@ -321,6 +331,38 @@ def _cl(x, T, cap=None):
     return C
 
 
+def _tr(net, T, n, A, b, Ae, c, lb, ub, it):
+    """Append one flow per line and period, bounded by the line limit and nothing else.
+
+    This is the transport model: an exchange is any vector the nodal balances admit, subject
+    to its transfer capacity. There is no loop-flow condition, so on a network with a cycle
+    it is a strict relaxation of _nw; on a tree the balances determine the flows and the two
+    coincide. Zonal day-ahead coupling clears on this model, which is why the prices it
+    returns are comparable with published zonal prices and the direct-current prices are not.
+    """
+    ei, ec, ev, fl = [], [], [], []
+    r0 = Ae.shape[0] - net.nb * T
+    for i, (a, q, x, lim) in enumerate(net.ln):
+        for t in range(T):
+            e = i * T + t
+            ei.extend([r0 + a * T + t, r0 + q * T + t])
+            ec.extend([e, e])
+            ev.extend([-1.0, 1.0])
+            fl.append(float(lim))
+    nf, fl = len(net.ln) * T, np.array(fl)
+    ub = np.full(n, np.inf) if ub is None else ub
+    return (
+        csc_array(hstack([csc_array(A), csc_array((A.shape[0], nf))])),
+        b,
+        csc_array(hstack([csc_array(Ae),
+                          csc_array((ev, (ei, ec)), shape=(Ae.shape[0], nf))])),
+        np.r_[c, np.zeros(nf)],
+        np.r_[lb, -fl],
+        np.r_[ub, fl],
+        None if it is None else np.r_[it, np.zeros(nf)],
+    )
+
+
 def _nw(net, T, n, A, b, Ae, c, lb, ub, it):
     """Append one voltage angle per bus and period, then the line flows and the line limits.
 
@@ -332,6 +374,8 @@ def _nw(net, T, n, A, b, Ae, c, lb, ub, it):
     B = net.nb
     if not net.ln:
         return A, b, Ae, c, lb, np.full(n, np.inf) if ub is None else ub, it
+    if net.fm == "ntc":
+        return _tr(net, T, n, A, b, Ae, c, lb, ub, it)
     ri, ci, va, bb = [], [], [], []
     ei, ec, ev = [], [], []
     r0 = Ae.shape[0] - B * T

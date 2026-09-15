@@ -12,7 +12,9 @@
 #   g,d       : units and demand                 s,r : a clearing, a full market result
 #   P,pi      : payments and prices              cap : the AIC output ceilings
 #   x,y       : two results being compared       z,z1,z2 : objective values
-#   t,i,j     : period, unit and scratch indices q : a case, a saved function, or a scalar
+#   t,i,j     : period, unit and scratch indices q : a case, a saved function, a scalar
+#                                                    or a network
+#   ln        : the lines of a network           fm : the line model, "dc" or "ntc"
 #   sd        : random seed                      h : a demand perturbation
 #   k         : the name of one price            a,b : a seeded generator, a best value
 #   f,n       : saved linear-program function and its call count
@@ -504,3 +506,44 @@ def test_network_bad():
         uc(g, [[0.0], [10.0]], net=Net([0, 1], ((0, 1, 0.0, 5.0),), 2))
     with pytest.raises(ValueError, match="one row per bus"):
         uc(g, [10.0], net=Net([0, 1], ((0, 1, 1.0, 5.0),), 2))
+    with pytest.raises(ValueError, match="line model must be dc or ntc"):
+        uc(g, [[0.0], [10.0]], net=Net([0, 1], ((0, 1, 1.0, 5.0),), 2, "flow"))
+
+
+def test_ntc_matches_dc_on_a_tree():
+    """A tree has no cycle, so the balances fix the flows and both line models agree."""
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 40.0)]
+    d = [[0.0], [30.0], [50.0]]
+    ln = ((0, 1, 1.0, 100.0), (1, 2, 1.0, 100.0))
+    a = uc(g, d, net=Net([0, 2], ln, 3))
+    b = uc(g, d, net=Net([0, 2], ln, 3, "ntc"))
+    assert b.z == pytest.approx(a.z)
+    assert b.p.ravel() == pytest.approx(a.p.ravel())
+    x = lmp(g, d, a, net=Net([0, 2], ln, 3)).pi.ravel()
+    y = lmp(g, d, b, net=Net([0, 2], ln, 3, "ntc")).pi.ravel()
+    assert y == pytest.approx(x)
+
+
+def test_ntc_relaxes_the_loop():
+    """Around a cycle the transport model drops the loop-flow condition, so it costs less."""
+    g, d, q = ex4(40.0)
+    a = uc(g, d, net=q)
+    b = uc(g, d, net=Net(q.bus, q.ln, q.nb, "ntc"))
+    assert a.p.ravel() == pytest.approx([60.0, 30.0])
+    assert a.z == pytest.approx(2100.0)
+    assert b.p.ravel() == pytest.approx([90.0, 0.0])
+    assert b.z == pytest.approx(900.0)
+    assert b.z < a.z
+    assert lmp(g, d, b, net=Net(q.bus, q.ln, q.nb, "ntc")).pi.ravel() == pytest.approx(
+        [10.0, 10.0, 10.0])
+
+
+def test_ntc_binds_on_its_own_limit():
+    """With the transport limit below demand the cheap zone is capped and prices separate."""
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)]
+    d = [[0.0], [90.0]]
+    q = Net([0, 1], ((0, 1, 1.0, 70.0),), 2, "ntc")
+    a = uc(g, d, net=q)
+    assert a.p.ravel() == pytest.approx([70.0, 20.0])
+    assert a.z == pytest.approx(70.0 * 10.0 + 20.0 * 50.0)
+    assert lmp(g, d, a, net=q).pi.ravel() == pytest.approx([10.0, 50.0])

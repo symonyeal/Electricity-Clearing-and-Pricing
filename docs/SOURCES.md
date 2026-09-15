@@ -42,7 +42,7 @@ The small published inputs are defined in `models/uc_price.py`.
 | Source | Use in this repository |
 | --- | --- |
 | Ford, L. R. and Fulkerson, D. R. (1956). ["Maximal Flow Through a Network"](https://www.cambridge.org/core/journals/canadian-journal-of-mathematics/article/maximal-flow-through-anetwork/5D6E55D3B06C4F7B1043BC1D82D40764). *Canadian Journal of Mathematics* 8, 399-404. | Maximum-flow/minimum-cut theorem. |
-| Ahuja, R. K., Magnanti, T. L. and Orlin, J. B. (1993). [*Network Flows: Theory, Algorithms, and Applications*](https://www.pearson.com/en-us/subject-catalog/p/Ahuja-Network-Flows-Theory-Algorithms-and-Applications/P200000003456/9780136175490). Prentice Hall. | General network-flow formulations and algorithms. |
+| Ahuja, R. K., Magnanti, T. L. and Orlin, J. B. (1993). [*Network Flows: Theory, Algorithms, and Applications*](https://www.pearson.com/en-us/subject-catalog/p/Ahuja-Network-Flows-Theory-Algorithms-and-Applications/P200000003456/9780136175490). Prentice Hall. | General network-flow formulations and algorithms. The capacitated arc is the transport line model in `_tr`. |
 | Goldberg, A. V. and Tarjan, R. E. (1988). ["A New Approach to the Maximum-Flow Problem"](https://dl.acm.org/doi/10.1145/48014.61051). *Journal of the ACM* 35(4), 921-940. | Push-relabel maximum flow. NetworkX is asked explicitly to use its preflow-push implementation. |
 | Hoffman, A. J. and Kruskal, J. B. (1956). ["Integral Boundary Points of Convex Polyhedra"](https://www.cs.umd.edu/~gasarch/BLOGPAPERS/kruskalhoffman.pdf). In *Linear Inequalities and Related Systems*, Annals of Mathematics Studies 38, 223-246. | Total unimodularity behind the whole-valued closure relaxation. |
 | Schrijver, A. (1986). [*Theory of Linear and Integer Programming*](https://www.wiley.com/en-us/Theory+of+Linear+and+Integer+Programming-p-9780471982326). Wiley. | Network matrices and total unimodularity. |
@@ -115,6 +115,10 @@ These applications concern later model classes, not the synthetic mine data.
 | [guofei9987/scikit-opt](https://github.com/guofei9987/scikit-opt) | Checked its heuristic algorithms and `.run()` interface. |
 | [ebrahimpichka/awesome-optimization](https://github.com/ebrahimpichka/awesome-optimization) | Finding aid only. |
 | [Thinklab-SJTU/awesome-ml4co](https://github.com/Thinklab-SJTU/awesome-ml4co) | Finding aid for the two machine-learning papers above. |
+| [electricitymaps/electricitymaps-contrib](https://github.com/electricitymaps/electricitymaps-contrib) | Read the zone model: zones, production modes and exchanges between zones. An exchange is a capacity on a link, not a direct-current flow, which is the transport model added in `_tr`. Code AGPLv3; nothing is vendored. |
+| [corneel27/day-ahead](https://github.com/corneel27/day-ahead) | Read. A price-taking mixed-integer program over batteries, boilers and EV charging, on python-mip. The same object as `_om`, on the demand side of the market this repository clears. |
+| [JaccoR/hass-entso-e](https://github.com/JaccoR/hass-entso-e) and [oysteinjakobsen/fetch-day-ahead-price](https://github.com/oysteinjakobsen/fetch-day-ahead-price) | Read as the reference for what a published day-ahead price is: one bidding zone, hourly, EUR before currency conversion and VAT. Both read zonal prices, which is why `ntc` exists. Not adopted; see Decisions. |
+| [corneel27/day-ahead-prediction](https://github.com/corneel27/day-ahead-prediction) and [piekarsky/Short-Term-Electricity-Price-Forecasting-at-the-Polish-Day-Ahead-Market](https://github.com/piekarsky/Short-Term-Electricity-Price-Forecasting-at-the-Polish-Day-Ahead-Market) | Read. Both fit the price rather than clear it: XGBoost on Dutch generation mix, $R^2$ 0.914; RNN, LSTM, GRU, MLP and Prophet on Polish data, best MAE 16.15 PLN/MWh. Reported for scale, not adopted; see Decisions. |
 
 No commercial pit package or real deposit was used. Synthetic pits use a nine-block,
 uniform 45-degree precedence pattern.

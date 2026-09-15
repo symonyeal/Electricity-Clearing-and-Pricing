@@ -24,6 +24,7 @@
 #   ep    : the AIC output relaxation          cm,pm : cleared cost and price per MWh
 #   h     : capped spare MW                     tag : one market label
 #   net   : one row of the network table       lim : one line limit
+#   fm    : the line model, "dc" or "ntc"
 #   nw,pi : the three-bus network and its nodal prices
 #   rent  : congestion rent, demand payment less generator revenue
 #   e,K   : the schedule-wise column, and the schedule count
@@ -33,7 +34,8 @@ import time
 import numpy as np
 
 from models.lg_pit import lp, mc, mc_nx, mk_E, mk_v
-from models.uc_price import _ar, _cl, ck, ex3, ex4, hc, hl, lmp, mk_g, pay, pc, rx, uc
+from models.uc_price import (Net, _ar, _cl, ck, ex3, ex4, hc, hl, lmp, mk_g, pay, pc, rx,
+                             uc)
 
 DIMS = [(30, 30, 12), (60, 60, 20), (90, 90, 30)]
 MKT = [(12, 8), (24, 16), (48, 24), (96, 24)]
@@ -154,19 +156,20 @@ def aseed():
     )
 
 
-def net(lim):
-    """The three-bus loop at one line limit: dispatch, nodal prices and congestion rent."""
+def net(lim, fm="dc"):
+    """The three-bus loop at one limit and line model: dispatch, prices, congestion rent."""
     g, d, nw = ex4(lim)
+    nw = Net(nw.bus, nw.ln, nw.nb, fm)
     s = uc(g, d, net=nw)
     L = lmp(g, d, s, net=nw)
     pi, q = L.pi.ravel(), ck(g, d, nw)[2]
     rent = float((pi * np.atleast_2d(d).ravel()).sum()
                  - sum(pi[q.bus[i]] * s.p[i, 0] for i in range(len(g))))
     print(
-        f"| {lim:,.0f} MW | {s.p[0, 0]:,.0f} | {s.p[1, 0]:,.0f} | {s.z:,.0f} | "
+        f"| {fm} | {lim:,.0f} MW | {s.p[0, 0]:,.0f} | {s.p[1, 0]:,.0f} | {s.z:,.0f} | "
         f"{pi[0]:,.2f} | {pi[1]:,.2f} | {pi[2]:,.2f} | {rent:,.0f} |"
     )
-    assert abs(2.0 * s.p[0, 0] / 3.0 - min(lim, 60.0)) < 1e-6
+    assert abs(s.p[0, 0] - (1.5 * min(lim, 60.0) if fm == "dc" else 90.0)) < 1e-6
     assert rent > -1e-6
 
 
@@ -214,9 +217,10 @@ if __name__ == "__main__":
     aseed()
     print("\n## A congested network\n")
     print(
-        "| Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | Price at 1 | "
-        "Price at 2 | Congestion rent |"
+        "| Line model | Line 0-2 limit | Bus 0 output | Bus 2 output | Cost | Price at 0 | "
+        "Price at 1 | Price at 2 | Congestion rent |"
     )
-    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
-    for d in LIN:
-        net(d)
+    print("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    for f in ("dc", "ntc"):
+        for d in LIN:
+            net(d, f)
