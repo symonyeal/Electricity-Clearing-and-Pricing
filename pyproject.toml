@@ -2,6 +2,7 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+markers = ["slow: clears a full pglib-uc instance; minutes, not seconds"]
 
 [tool.ruff]
 line-length = 100

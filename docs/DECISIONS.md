@@ -62,16 +62,20 @@ different thing.
 | 21 | Keep `models/__init__.py`; do not rely on an implicit namespace package. |
 | 22 | Declare Ruff in `requirements.txt`. |
 | 23 | Record only checked sources. The source register was last checked on 2026-09-15. |
+| 24 | Build the pglib-uc formulation in its own module, from its own rows, rather than widening `U` and the hull routes to carry piecewise costs and start-up tiers. The two formulations differ in what the output variable means, and `hl` and `hc` would each need their convex hull re-derived for a piecewise cost before they could price one. An independent route is also the clean-room oracle the shared-row structure lacks. |
+| 25 | Gate the benchmark on the linear relaxation, not the integer objective. At the reference script's 1% gap the returned incumbent is not determined, so an equality there would assert the solver's search order. The relaxation is determined and every piecewise point, start-up category and row enters it. |
+| 26 | Refuse an instance field the model does not read. A loader that keeps the first piecewise point and the first start-up category still solves and still reports a number; that number is not the benchmark's. |
 
 ## Remaining work
 
 1. Variable pit-wall angles by direction and rock type.
 2. Piecewise-linear and quadratic generation offers.
 3. Losses and contingency constraints in the network model.
-4. Clear one pglib-uc instance and reproduce its objective, as the pit model reproduces
-   MineLib Newman1. That needs item 2, plus off-time-dependent start-up cost and a
-   reserve requirement. Until then the clearing has no external benchmark, only the
-   published worked examples.
+4. Carry piecewise cost, start-up tiers and reserve into `models/uc_price.py` itself, so
+   the priced model and the benchmark model are one. `models/pglib_uc.py` now clears the
+   benchmark and matches the reference relaxation, but it does not price: `hl` and `hc`
+   need their convex hulls re-derived for a piecewise production cost first. Until then
+   the priced clearing still has only the published worked examples.
 5. Stochastic or robust clearing over demand and wind scenarios, which is the exact route
    to the day-ahead uncertainty that price forecasters address by fitting.
 6. Mine production scheduling with periods, discounting, and capacity limits.

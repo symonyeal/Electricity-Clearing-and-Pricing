@@ -33,6 +33,36 @@ The small published inputs are defined in `models/uc_price.py`.
 | `ex4` | Synthetic | Symmetric three-bus loop. Equal reactances send two thirds of an injection over the direct line. |
 | `ex5` | [electricity maps `config/exchanges/NO-NO1_NO-NO2.yaml`](https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/exchanges/NO-NO1_NO-NO2.yaml), capacity `[-3500, 2200]`; zone keys from `config/zones/NO-NO1.yaml` and `NO-NO2.yaml` | The capacity pair and the two zone keys are that record. Offers and demand are synthetic and labelled so: no market publishes the offers behind a cleared price. |
 
+## pglib-uc benchmark
+
+The unit-commitment analogue of MineLib, curated by the IEEE PES Task Force on Benchmarks
+for Validation of Emerging Power System Algorithms. `models/pglib_uc.py` implements its
+published formulation, equations (1) to (24) of
+[`MODEL.pdf`](https://github.com/power-grid-lib/pglib-uc/blob/master/MODEL.pdf), from its
+own rows. That formulation is not the one `models/uc_price.py` prices: output is carried
+above the minimum, production cost is a convex piecewise curve in lambda form, start-up
+cost depends on how long the unit was off, and a reserve requirement sits beside the
+energy balance.
+
+| Source | Use in this repository |
+| --- | --- |
+| [pglib-uc](https://github.com/power-grid-lib/pglib-uc) | Read. Case files are CC-BY-4.0, the reference code MIT. One instance is committed below. |
+| Knueven, B., Ostrowski, J. and Watson, J.-P. (2018). ["On Mixed Integer Programming Formulations for the Unit Commitment Problem"](http://www.optimization-online.org/DB_FILE/2018/11/6930.pdf). | Read the formulation through `MODEL.pdf` and `uc_model.py`, which publish it. The source of equations (1) to (24). |
+| Barrows, C., Bloom, A., Ehlen, A., Ikaheimo, J., Jorgenson, J., Krishnamurthy, D., Lau, J. et al. (2019). ["The IEEE Reliability Test System: A Proposed 2019 Update"](https://ieeexplore.ieee.org/document/8753693). *IEEE Transactions on Power Systems*. | The RTS-GMLC system the committed instance is curated from. Cited as the library asks. |
+
+The committed instance is used unchanged, as the CC-BY-4.0 licence requires attribution
+and permits redistribution:
+
+| Local file | Official file | SHA-256 |
+| --- | --- | --- |
+| `data/pglib_uc/rts_gmlc_2020-03-05.json` | [rts_gmlc/2020-03-05.json](https://github.com/power-grid-lib/pglib-uc/blob/master/rts_gmlc/2020-03-05.json) | `0F89BF93327B5F90BB7381C1E7AE08614B60DEF2390E2E8940F40B9CF825045F` |
+
+The external check is the library's own `uc_model.py` under HiGHS with its integrality
+relaxed, run on 2026-09-15: `2480427.041110388`. This model gives `2480427.0411103913`
+from an independent row construction. The linear relaxation is used rather than the
+integer objective because it is determined: there is no incumbent to choose between and no
+gap to stop at, so two implementations of one formulation must agree on it.
+
 ## Ultimate pit model
 
 | Source | Use in this repository |
