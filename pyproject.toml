@@ -9,4 +9,6 @@ line-length = 100
 [tool.ruff.lint]
 # E741 rejects l, I and O as names. This project names variables after the
 # symbols in the cited papers, where single letters are the notation.
-ignore = ["E741"]
+# I001 orders and wraps imports. Ruff's only wrap mode puts one name per line,
+# which fights the compact register the rest of these files are written in.
+ignore = ["E741", "I001"]

@@ -110,13 +110,13 @@ if __name__ == "__main__":
     print("## Price-face screen\n")
     print("| Routes | Screen skipped | Screen walked | Probe not reached |")
     print("| ---: | ---: | ---: | ---: |")
-    print("| %d | %d | %d | %d |" % (len(R), len(sk), len(wk), len(R) - len(sk) - len(wk)))
-    print("\nLargest omitted change: $%.8f/MWh" % max((r[4] for r in sk), default=0.0))
-    print("Largest kept change: $%.8f/MWh" % max((r[4] for r in wk), default=0.0))
+    print(f"| {len(R)} | {len(sk)} | {len(wk)} | {len(R) - len(sk) - len(wk)} |")
+    print(f"\nLargest omitted change: ${max((r[4] for r in sk), default=0.0):.8f}/MWh")
+    print(f"Largest kept change: ${max((r[4] for r in wk), default=0.0):.8f}/MWh")
     print("\n## Large markets\n")
     print("| Case | Payment and probe | Forced walk | Price change | Decision |")
     print("| --- | ---: | ---: | ---: | --- |")
     for G, T in BIG:
         t1, t2, dv = bg(G, T)
-        print("| %d x %d | %.2fs | %.2fs | $%.8f/MWh | %s |"
-              % (G, T, t1, t2, dv, "Skip" if dv <= ptol else "Retain"))
+        print(f"| {G} x {T} | {t1:.2f}s | {t2:.2f}s | ${dv:.8f}/MWh | "
+              f"{'Skip' if dv <= ptol else 'Retain'} |")

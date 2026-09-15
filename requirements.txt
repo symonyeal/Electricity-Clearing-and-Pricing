@@ -3,4 +3,4 @@ scipy>=1.12.0
 networkx>=3.2
 ortools>=9.15.6755
 pytest>=8.0.0
-ruff>=0.15.13
+ruff==0.16.7
