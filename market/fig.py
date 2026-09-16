@@ -108,7 +108,7 @@ def lines(p, ser, ti="", xl="", yl="", fx=num, xt=None):
     gx, gy = sc(xs.min(), xs.max(), x0, x1), sc(yv[0], yv[-1], y1, y0)
     xv = tks(xs.min(), xs.max())[0] if xt is None else xt
     o = _frame(ti, xl, yl, [(v, gx(v)) for v in xv],
-               [(v, gy(v)) for v in yv], fx, num, y0, x1, y0, y1)
+               [(v, gy(v)) for v in yv], fx, num, x0, x1, y0, y1)
     for i, (n, x, y) in enumerate(ser):
         o.append(f'<polyline points="{pts(x, y, gx, gy)}" fill="none" '
                  f'stroke="{CL[i % 5]}" stroke-width="2.2" '
@@ -127,7 +127,7 @@ def bars(p, cats, ser, ti="", xl="", yl=""):
     wd = (x1 - x0) / max(n, 1)
     bw = wd * 0.8 / k
     o = _frame(ti, xl, yl, [(i, x0 + wd * (i + 0.5)) for i in range(n)],
-               [(v, gy(v)) for v in yv], lambda i: cats[int(i)], num, y0, x1, y0, y1)
+               [(v, gy(v)) for v in yv], lambda i: cats[int(i)], num, x0, x1, y0, y1)
     for i, (_, y) in enumerate(ser):
         for j, v in enumerate(y):
             xx = x0 + wd * (j + 0.1) + bw * i

@@ -339,7 +339,28 @@ def test_figures_are_well_formed(tmp_path, fr):
     for n in ("a.svg", "b.svg", "c.svg"):
         r = ET.parse(tmp_path / n).getroot()
         assert r.tag.endswith("svg") and len(r) > 5
+        # every tick label sits inside the left margin, not over the plot or off the page
+        for t in r.iter("{http://www.w3.org/2000/svg}text"):
+            if t.get("text-anchor") == "end":
+                assert 0 < float(t.get("x")) <= fig.M[0]
     assert "one" in (tmp_path / "a.svg").read_text()
+
+
+def test_cli_runs_and_reports(tmp_path):
+    """The commands a reader is told to run, end to end, on the committed fixtures."""
+    import run_market
+    a = ["--cfg", "config/ci.toml", "--period", "test", "--out", str(tmp_path), "--quiet"]
+    for pol in ("idle", "det", "cvar"):
+        run_market.main(["run", "--pol", pol, *a])
+    run_market.main(["report", "--cfg", "config/ci.toml", "--dir", str(tmp_path), "--quiet"])
+    t = (tmp_path / "tables.md").read_text()
+    assert "## Settlement" in t and "## Volume" in t and "no trading" in t
+    for n in ("cumulative.svg", "monthly.svg", "concentration.svg", "trace.svg"):
+        assert ET.parse(tmp_path / n).getroot().tag.endswith("svg")
+    m = json.loads((tmp_path / "cvar" / "metrics.json").read_text())
+    assert m["metrics"]["arb"] + m["metrics"]["spread"] == pytest.approx(
+        m["metrics"]["net"], abs=1e-9)
+    assert m["environment"]["numpy"] and "revision" in m["environment"]
 
 
 def test_local_time_of_export(tmp_path, fr):

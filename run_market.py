@@ -220,10 +220,17 @@ def _intervals(p, day):
 
 
 def _daily(p):
+    """One exported daily file. A column is a number where every row parses as one."""
     rows = [x.split(",") for x in Path(p).read_text().splitlines()]
     k = rows[0]
-    return [{a: (b if a in ("date", "why") else float(b)) for a, b in zip(k, r)}
-            for r in rows[1:]]
+    return [{a: _num(b) for a, b in zip(k, r)} for r in rows[1:]]
+
+
+def _num(x):
+    try:
+        return float(x)
+    except ValueError:
+        return x
 
 
 def main(argv=None):
