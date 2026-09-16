@@ -76,6 +76,13 @@ skipped 391; the largest omitted change was $0.00000444/MWh. `LIM[3]` bounds the
 of balance rows in the lexicographic walk. In the capped seed-61 case, `hc` and `hl`
 return different prices but the same objective and demand payment.
 
+## Decomposition
+
+`hl` is the Dantzig–Wolfe master of this clearing with every column present, and `hc`
+is a compact extended formulation of the same hull. Neither is generated a column at a
+time. [Decomposition](DW.md) records the sizes that decide between them, and the reason
+a column-generation master stopped early cannot supply a price here.
+
 ## Published cases
 
 | Case | Reproduced result |
