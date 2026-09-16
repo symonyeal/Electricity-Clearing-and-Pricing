@@ -14,6 +14,7 @@
 #   gap,lim      : requested relative MIP gap and solver seconds per solve
 #   rho          : fitted hourly persistence, zero until fit() supplies it
 #   cache        : keep parsed months as arrays beside the archive
+#   cap          : absolute dispatch deviation from the hourly position, MW; None unbounded
 
 import tomllib
 from pathlib import Path
@@ -49,6 +50,7 @@ class Cf(NamedTuple):
     lim: float = 20.0
     rho: float = 0.0
     cache: bool = True
+    cap: float | None = None
 
     def rep(self, **kw):
         return self._replace(**kw)

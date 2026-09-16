@@ -256,8 +256,11 @@ def main(argv=None):
     cf = read(a.cfg) if Path(a.cfg).exists() else Cf()
     for s in a.set:
         k, v = s.split("=", 1)
-        cf = cf.rep(**{k: type(getattr(cf, k))(v) if not isinstance(getattr(cf, k), tuple)
-                       else tuple(json.loads(v))})
+        if k == "cap":
+            cf = cf.rep(cap=None if v.lower() in ("none", "null") else float(v))
+        else:
+            cf = cf.rep(**{k: type(getattr(cf, k))(v) if not isinstance(getattr(cf, k), tuple)
+                           else tuple(json.loads(v))})
     def log(m):
         if not a.quiet:
             print(m, flush=True)

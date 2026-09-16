@@ -9,6 +9,7 @@
 #   h             : information node labels (S,T); equal labels share a decision
 #   a,w           : CVaR confidence and risk weight in [0,1]
 #   q             : fixed contractual MW position, or None to choose a deliverable offer
+#   cap           : maximum absolute real-time deviation in MW; None is unbounded
 #   ix,pa,o       : path-to-node indices, each node's parent, 1 when a nominal path exists
 #   c,d,e,u       : charge, discharge, stored energy, charge-mode binary
 #   R,r           : scenario profit rows, realized scenario profits
@@ -55,7 +56,7 @@ class Sol(NamedTuple):
     gap: float
 
 
-def _ck(b, da, rt, pr, h, a, w, q):
+def _ck(b, da, rt, pr, h, a, w, q, cap):
     da, rt, pr = (np.asarray(x, dtype=float) for x in (da, rt, pr))
     if rt.ndim != 2 or not rt.size or da.ndim not in (1, 2):
         raise ValueError("prices must have shapes (T) or (S,T), and (S,T), with T > 0")
@@ -73,6 +74,8 @@ def _ck(b, da, rt, pr, h, a, w, q):
         raise ValueError("energy endpoints must be within capacity; duration must be positive")
     if not (0 <= a < 1 and 0 <= w <= 1):
         raise ValueError("CVaR confidence must be in [0,1), risk weight in [0,1]")
+    if cap is not None and (not np.isfinite(cap) or cap < 0):
+        raise ValueError("deviation cap must be finite and nonnegative, or None")
     h = np.zeros((S, T), dtype=int) if h is None else np.asarray(h)
     if h.shape != rt.shape or h.dtype.kind not in "iu":
         raise ValueError("information nodes must be an integer array of shape (S,T)")
@@ -132,7 +135,7 @@ def _out(b, da, rt, pr, a, w, ix, c, d, e, ub, gap, q=None):
     return Sol(z, mu, cv, q, c, d, e, r, z if ub is None else ub, gap)
 
 
-def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None):
+def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None, cap=None):
     """Optimize one physically backed offer, or dispatch against a fixed position.
 
     No h means no scenario is revealed. Equal h[:,t] labels share all actions at t.
@@ -140,11 +143,12 @@ def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None):
     decision taken before the day-ahead market clears faces.
     With q=None the nominal path is a physical schedule, so a chosen offer is
     deliverable from the current energy. Passing q fixes an already contracted
-    position: it settles but imposes no physical schedule, and dispatch adapts.
+    position: it has no nominal physical path. cap bounds |d-c-q| at every
+    scenario information node, for both chosen and contracted positions.
     Prices are exogenous, in currency/MWh. Only a solve reaching the requested gap
     is returned; ub and gap are achieved values. lim bounds solver seconds.
     """
-    da, rt, pr, h, q = _ck(b, da, rt, pr, h, a, w, q)
+    da, rt, pr, h, q = _ck(b, da, rt, pr, h, a, w, q, cap)
     if not np.isfinite(gap) or gap < 0:
         raise ValueError("MIP gap must be finite and nonnegative")
     S, T = rt.shape
@@ -161,7 +165,8 @@ def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None):
     it[U:U + N] = 1
     # Local mode bounds tightened by usable energy, with no arbitrary big M.
     cm, dm = min(b.c, b.e / (b.dt * b.ec)), min(b.d, b.e * b.ed / b.dt)
-    A = lil_matrix((3 * N + len(np.unique(ix[:, -1])) + S, n))
+    nr = N - o * T if cap is not None else 0
+    A = lil_matrix((3 * N + len(np.unique(ix[:, -1])) + S + nr, n))
     lo, hi = [], []
 
     def row(cols, vals, l, u):
@@ -180,6 +185,13 @@ def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None):
         row(cols, vals, b.e0 if p < 0 else 0, b.e0 if p < 0 else 0)
     for j in np.unique(ix[:, -1]):
         row([E + j], [1], b.ef, b.ef)
+    if cap is not None:
+        for t in range(T):
+            for j in np.unique(ix[o:, t]):
+                if q is None:
+                    row([D + j, C + j, D + t, C + t], [1, -1, -1, 1], -cap, cap)
+                else:
+                    row([D + j, C + j], [1, -1], q[t] - cap, q[t] + cap)
     R = lil_matrix((S, n))
     k0 = np.zeros(S)
     for s in range(S):
@@ -211,13 +223,13 @@ def st(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, gap=0.0, lim=None):
                 off - float(res.mip_dual_bound), float(res.mip_gap), q)
 
 
-def en(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None):
+def en(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None, cap=None):
     """Enumerate signed-flow orthants; energy is cumulative, with no SOC variables.
 
     This route builds neither the MIP rows nor its charge/discharge columns. It is
     exponential in information nodes and refused above LIM. Zero belongs to either mode.
     """
-    da, rt, pr, h, q = _ck(b, da, rt, pr, h, a, w, q)
+    da, rt, pr, h, q = _ck(b, da, rt, pr, h, a, w, q, cap)
     S, T = rt.shape
     o = int(q is None)
     ix, pa = _tree(h, nom=q is None)
@@ -239,6 +251,16 @@ def en(b, da, rt, pr, h=None, a=0.95, w=0.0, q=None):
                 v.extend([b.e - b.e0, b.e0])
             Ae.append(row.copy())
             ve.append(b.ef - b.e0)
+        if cap is not None:
+            for t in range(T):
+                for j in np.unique(ix[o:, t]):
+                    row = np.zeros(N + 1 + S)
+                    row[j] = 1
+                    if q is None:
+                        row[t] = -1
+                    qt = 0 if q is None else q[t]
+                    A.extend([row, -row])
+                    v.extend([qt + cap, cap - qt])
         R = np.zeros((S, N + 1 + S))
         k0 = np.zeros(S)
         for s in range(S):

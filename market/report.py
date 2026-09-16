@@ -77,6 +77,9 @@ def metrics(rn, cf, seed=0, B=10000):
           "throughput": thr, "discharged": dis, "cycles": dis / cf.ed / cf.e,
           "da_mwh": float(np.abs(rn.iv["q"]).sum() * DTB),
           "imb_mwh": float(np.abs(g - rn.iv["q"]).sum() * DTB),
+          "max_deviation": float(np.abs(g - rn.iv["q"]).max()),
+          "max_cap_violation": (0.0 if cf.cap is None else
+                                float(np.maximum(np.abs(g - rn.iv["q"]) - cf.cap, 0).max())),
           "arb": float((g * np.nan_to_num(rn.iv["prt"])
                         - (cf.kd + cf.fee) * (rn.iv["c"] + rn.iv["d"])).sum() * DTB),
           "spread": float((rn.iv["q"] * (np.nan_to_num(rn.iv["pda"])
@@ -122,7 +125,9 @@ def toml(cf):
     """The configuration as it was used, in the format read back by market.cfg."""
     out = []
     for k, v in cf._asdict().items():
-        if isinstance(v, str):
+        if v is None:
+            out.append(f"# {k} omitted: unbounded")
+        elif isinstance(v, str):
             out.append(f'{k} = "{v}"')
         elif isinstance(v, tuple):
             out.append(f"{k} = [{', '.join(json.dumps(x) for x in v)}]")

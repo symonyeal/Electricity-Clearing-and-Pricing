@@ -82,7 +82,7 @@ def _solve(b, s, cf, q, w):
     t, msg = time.perf_counter(), ""
     for g, lim, why in ((cf.gap, cf.lim, "ok"), (max(cf.gap, 1e-2), 2 * cf.lim, "gap")):
         try:
-            r = st(b, s.da, s.rt, s.pr, s.h, cf.al, w, q, g, lim)
+            r = st(b, s.da, s.rt, s.pr, s.h, cf.al, w, q, g, lim, cap=cf.cap)
             return r, why, time.perf_counter() - t, msg
         except ValueError as err:
             msg = str(err)
@@ -133,6 +133,9 @@ def day(fr, i, cf, pol, e):
         tg = _tg(cf, e, ns - k, cf.sp * DTB)
         b = _bat(cf, min(max(e, 0.0), cf.e), tg, cf.sp * DTB)
         r, w, sec, msg = _solve(b, _sc_rt(fr, i, k, an, cf, pol), cf, qs[k:], _w(cf, pol))
+        if r is None and cf.cap is not None:
+            raise ValueError(f"{d.d} step {k}: capped dispatch failed; hold may violate "
+                             f"delivery: {msg}")
         row["fail"] = row["fail"] or _tag(msg)
         row["solves"] += 1
         row["sec"] += sec
@@ -166,6 +169,8 @@ def settle(iv, cf):
 
 def run(fr, cf, pol, lo, hi, log=None):
     """Replay a date range in order. Energy is never reset at a day boundary."""
+    if cf.cap is not None and (not np.isfinite(cf.cap) or cf.cap < 0):
+        raise ValueError("deviation cap must be finite and nonnegative, or None")
     if pol not in POL:
         raise ValueError(f"unknown policy {pol}")
     if pol == "cvar" and not cf.w:

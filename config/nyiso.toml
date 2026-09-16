@@ -20,6 +20,9 @@ ef = 2.0
 kd = 2.0
 fee = 0.5
 
+# Omit cap for unbounded deviations; cap = 0.0 requires full day-ahead delivery.
+# A finite cap is the maximum absolute difference between dispatch and position, MW.
+
 # Fifteen minute decisions, ten minute information lag, 05:00 day-ahead bid close.
 sp = 3
 lag = 2

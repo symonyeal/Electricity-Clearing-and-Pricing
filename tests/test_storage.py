@@ -31,7 +31,7 @@ def ck(b, da, rt, pr, h, r, a=0.95, w=0.0, fix=False):
     assert r.cv == pytest.approx(cvar(z, pr, a))
     assert r.z == pytest.approx((1 - w) * r.mu - w * r.cv)
     assert r.ub >= r.z - 1e-7 and r.gap >= 0
-    for t in range(len(da)):
+    for t in range(np.shape(rt)[1]):
         for i in range(len(pr)):
             for j in range(i):
                 if h is None or h[i, t] == h[j, t]:
@@ -176,6 +176,56 @@ def test_routes_fixed(seed):
     ck(b, da, rt, pr, h, v, a, w, fix=True)
 
 
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("fix", [False, True])
+def test_delivery_routes(seed, fix):
+    """A binding deviation rule agrees under independent physical formulations."""
+    rng = np.random.default_rng(100 + seed)
+    b = B(2, 1.5, 1, 0.8, 0.9, e0=0.5, ef=0.5, k=1, dt=0.5)
+    da, rt, pr = rng.uniform(-100, 150, (2, 3)), rng.uniform(-100, 150, (2, 3)), [0.3, 0.7]
+    h = np.array([[0, 1, 2], [0, 1, 3]]) if seed % 2 else None
+    a, w, cap = 0.6, (seed % 3) / 2, 0.1
+    q = [0, 0, 0] if fix else None
+    base = st(b, da, rt, pr, h, a, w, q)
+    r = st(b, da, rt, pr, h, a, w, q, cap=cap)
+    v = en(b, da, rt, pr, h, a, w, q, cap=cap)
+    assert r.z == pytest.approx(v.z, abs=1e-7)
+    assert r.z < base.z - 1e-5
+    for x in (r, v):
+        dev = np.abs(x.d[1:] - x.c[1:] - x.q)
+        assert dev.max() == pytest.approx(cap, abs=1e-7)
+        ck(b, da, rt, pr, h, x, a, w, fix=fix)
+
+
+@pytest.mark.parametrize("f", [st, en])
+def test_delivery_forced(f):
+    """Full delivery buys at DA 10 and sells at DA 40, despite the reversed RT spread."""
+    b, da, rt, pr = B(1, 1, 1, 1, 1), [10, 40], [[100, 0]], [1]
+    for q in (None, [-1, 1]):
+        r = f(b, da, rt, pr, q=q, cap=0)
+        assert r.q == pytest.approx([-1, 1])
+        assert r.d[1:] - r.c[1:] == pytest.approx(np.array([[-1, 1]]))
+        assert r.z == pytest.approx(30)
+        ck(b, da, rt, pr, None, r, fix=q is not None)
+    assert f(b, da, rt, pr, q=[-1, 1]).z == pytest.approx(130)
+    with pytest.raises(ValueError):
+        f(b, [100], [[10]], pr, q=[1], cap=0)
+
+
+@pytest.mark.parametrize("f", [st, en])
+@pytest.mark.parametrize("q,z", [(None, 66.71411505512067), ([0, 0, 0], 25.073223025946852)])
+def test_delivery_none_regression(f, q, z):
+    """Golden objectives recorded before adding the rule; None adds no rows or changes."""
+    rng = np.random.default_rng(4)
+    b = B(2, 1.5, 1, 0.8, 0.9, e0=0.5, ef=0.5, k=1, dt=0.5)
+    da, rt = rng.uniform(-100, 150, 3), rng.uniform(-100, 150, (2, 3))
+    r = f(b, da, rt, [0.3, 0.7], a=0.6, w=0.5, q=q)
+    v = f(b, da, rt, [0.3, 0.7], a=0.6, w=0.5, q=q, cap=None)
+    assert r.z == pytest.approx(z, rel=0, abs=1e-12)
+    for x, y in zip(r, v):
+        np.testing.assert_array_equal(x, y)
+
+
 @pytest.mark.parametrize("kw", [
     {"pr": [0, 1]}, {"pr": [0.4, 0.4]}, {"pr": [1]}, {"rt": [[1]]},
     {"da": [np.nan, 2]}, {"w": -1}, {"a": 1}, {"q": [np.inf, 0]},
@@ -183,6 +233,7 @@ def test_routes_fixed(seed):
     {"da": [[1, 2], [1, 2], [1, 2]]}, {"da": [[[1, 2], [1, 2]]]}, {"da": [1, 2, 3]},
     {"b": B(1, 1, 1, ec=0)}, {"b": B(1, 1, 1, dt=0)}, {"b": B(1, 1, 1, ef=2)},
     {"b": B(1, -1, 1)}, {"b": B(1, 1, 1, k=-1)}, {"b": B(1, 1, 1, ed=1.1)},
+    {"cap": -0.1}, {"cap": np.nan}, {"cap": np.inf},
 ])
 def test_inputs(kw):
     args = {"b": B(1, 1, 1), "da": [1, 2], "rt": [[1, 2], [1, 3]], "pr": [0.5, 0.5]}

@@ -73,7 +73,13 @@ python run_market.py tune --out results/tune     # validation search
 python run_market.py select --dir results/tune   # the stated selection rule
 python run_market.py run --period test --pol all --out results/test
 python run_market.py report --dir results/test   # tables and figures
+python run_delivery.py audit                     # the delivery-cap replays, checked
+python run_delivery.py tables                    # their tables
 ```
+
+The delivery-cap sensitivity re-solves the frozen policies under an absolute deviation
+limit. Its protocol, commands and checks are in
+[docs/results/delivery](docs/results/delivery/README.md).
 
 ```python
 from models.storage import B, st

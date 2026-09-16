@@ -16,6 +16,7 @@ by the code; regenerate it with the commands in that document.
 | `<policy>/config.toml` | the configuration that run used, readable back by `market.cfg` |
 | `coverage.json` | archive coverage and long real-time postings over the whole record |
 | `tune.md`, `selected.json` | the validation search and what the stated rule chose from it |
+| [`delivery/`](delivery/README.md) | frozen-policy replays under absolute deviation caps, including interval audits and source hashes |
 
 `intervals.csv.gz`, one row per five-minute settlement bin per policy, is about two
 megabytes a policy and is not kept here. The run writes it beside these files, and the

@@ -328,6 +328,43 @@ def test_configuration_refuses_unknown_keys(tmp_path):
         read(p)
 
 
+@pytest.mark.parametrize("cap", [None, 1.0, 0.25, 0.0])
+def test_delivery_replay(tmp_path, fr, cap):
+    """The rule survives export, hourly/quarter-hour alignment and the repeated hour."""
+    cf = CF.rep(cap=cap, sp=3)
+    rn = replay.run(fr, cf, "det", "2025-11-02", "2025-11-02")
+    m = report.export(rn, cf, None, tmp_path)
+    assert read(tmp_path / "config.toml") == cf
+    dev = np.abs(rn.iv["d"] - rn.iv["c"] - rn.iv["q"])
+    assert m["max_deviation"] == pytest.approx(dev.max())
+    if cap is not None:
+        assert dev.max() <= cap + 1e-7
+        assert m["max_cap_violation"] < 1e-7
+    assert rn.dg["holds"] == 0
+    assert rn.dy[-1]["e1"] == pytest.approx(cf.ef, abs=1e-7)
+
+
+def test_delivery_failure_refuses_hold(fr, monkeypatch):
+    """A failed dispatch cannot silently replace a contracted delivery with zero power."""
+    def bad(*a, **kw):
+        raise ValueError("storage did not solve to the requested gap: time limit")
+    monkeypatch.setattr(replay, "st", bad)
+    with pytest.raises(ValueError, match="hold may violate delivery"):
+        replay.run(fr, CF.rep(cap=0), "det", *CF.te)
+
+
+@pytest.mark.parametrize("cap", [1.0, 0.25, 0.0])
+def test_delivery_information(fr, cap):
+    """A capped offer and its early dispatch are unchanged by later realized prices."""
+    cf = CF.rep(cap=cap)
+    a = replay.run(fr, cf, "neutral", *cf.te)
+    alt = [d._replace(rt=np.r_[d.rt[:144], d.rt[144:] * 3 + 500])
+           if str(d.d) == "2025-11-02" else d for d in fr]
+    b = replay.run(alt, cf, "neutral", *cf.te)
+    for k in ("q", "c", "d", "e"):
+        assert a.iv[k][:24 * 12 + 144] == pytest.approx(b.iv[k][:24 * 12 + 144], abs=1e-9)
+
+
 def test_figures_are_well_formed(tmp_path, fr):
     x = np.arange(10)
     fig.lines(tmp_path / "a.svg", [("one", x, np.arange(10.0)),

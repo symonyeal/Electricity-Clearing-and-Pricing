@@ -1,6 +1,6 @@
 # Validation
 
-Local checks on 2026-09-15, Linux 6.17.0-42, AMD Ryzen 7 PRO 6850U (16 logical CPUs).
+Local checks on 2026-09-16, Linux 6.17.0-42, AMD Ryzen 7 PRO 6850U (16 logical CPUs).
 Python 3.13.12, NumPy 2.5.3, SciPy 1.18.1, NetworkX 3.6.1, OR-Tools 9.15.6755,
 pytest 9.1.1 and Ruff 0.16.7. All commands ran from the repository root.
 
@@ -12,19 +12,31 @@ pytest 9.1.1 and Ruff 0.16.7. All commands ran from the repository root.
 git diff --check
 ```
 
-Result: **341 passed in 38.00 seconds**; Ruff, dependency and diff checks passed.
+Result after the delivery-cap change: **370 passed in 47.20 seconds** on an idle machine,
+and 74.73 seconds with three annual replays running concurrently; Ruff, dependency and
+diff checks passed. The required offline smoke command also passed, as did the same smoke
+at `--set cap=0.25` and at `--set cap=0.0`.
 
 The full suite includes the pglib-uc MIP at a requested 1% gap, the reference LP objective,
 published pricing cases, network checks, MineLib, the independent pit routes and storage.
 CI partitions ordinary and slow tests so it does not solve the full MIP twice, and runs
 the study's smoke command against the committed price fixtures.
 
-Storage has 65 checks: two independent formulations over twenty-four seeded cases, half
-of them against a fixed position the battery cannot deliver, and analytical efficiency,
+The original storage suite has 65 checks: two formulations over twenty-four seeded cases,
+half of them against a fixed position the battery cannot deliver, and analytical efficiency,
 duration, terminal-state, settlement, offer-versus-obligation, scenario-day-ahead-price,
 information and risk cases; invalid-input, infeasibility, enumeration-limit and
 solver-failure checks. The historical study has 23 more, listed below. The pglib-uc
 checks now verify achieved gap and lower bound, including a renewable-only continuous case.
+
+The delivery rule adds 21 storage checks: twelve seeded cases with a binding cap, covering
+chosen and fixed positions, shared and branching nodes, unequal scenario probabilities
+and three risk weights; two analytical full-delivery and infeasibility checks; four
+unbounded regression checks against objectives recorded before the change; and three
+invalid-cap cases. Both formulations independently enforce and audit the cap. Eight new
+historical checks cover all four caps through export and a 25-hour day, refusal of a
+zero-power fallback under a cap, and future-price perturbations under each finite cap.
+The original `test_no_leakage` is unchanged and passes.
 
 ## Synthetic storage results
 
@@ -93,6 +105,19 @@ five runs, and stored energy recomputed from the dispatch matches the exported t
 to 2e-5 MWh over 105,120 intervals. [The study](MARKET.md) reports the search, the tails,
 the concentration and what the numbers do not establish; `docs/results/` holds the
 exported evidence.
+
+The delivery-cap sensitivity replayed twelve settings, three policies at four caps.
+Eleven completed; `neutral` at a 0.25 MW cap stopped on 2025-12-15 with an infeasible
+capped dispatch, which is the outcome decision 52 specifies and is reported rather than
+dropped. `run_delivery.py audit` reruns the checks: on the eleven completed runs
+settlement rebuilt from the interval export agrees with the reported total to $0.006,
+stored energy to 4.2e-5 MWh, and no dispatch exceeds its cap. The three unbounded replays
+reproduce the original study exactly, every metric differing by zero, which is the
+regression check that `cap=None` adds no rows. Thirteen days report a raw relative MIP gap
+above the requested 1e-4, the largest 0.226; those days were re-solved and on the twelve
+solves concerned the full score and its certified bound differ by at most 1.2e-14, the
+near-zero variable objective described in [trading](TRADING.md) rather than an unconverged
+solve. No solver setting was changed and no reported ratio was replaced.
 
 ## Optional DOVE comparison
 

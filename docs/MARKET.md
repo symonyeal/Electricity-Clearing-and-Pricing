@@ -76,16 +76,18 @@ $$
 \qquad g_i=d_i-c_i .
 $$
 
-Once a position is contracted it is financial: it settles whatever the battery does. The
-optimization holds it fixed and imposes no physical schedule for it, so a real-time
-deviation can never make an existing obligation infeasible. A position being *chosen*
-is different: the offer route requires the nominal schedule to be a feasible battery
-schedule from the energy assumed at the time of the offer.
+In the original, unbounded experiment a contracted position is financial: it settles
+whatever the battery does. The optimization holds it fixed and imposes no nominal
+physical schedule for it. A position being *chosen* has a nominal schedule that must be
+feasible from the energy assumed at the time of the offer. The delivery experiment below
+adds an absolute deviation cap to the actual scenario dispatch in both stages; a supplied
+position still builds no nominal path. A finite cap can make an obligation infeasible.
 
 Energy is carried across every day boundary and is never reset. Each trading day ends at
 a common target, 2 MWh, which every trading policy must meet. When the target is not
 reachable from the current energy within the day's remaining steps, the model uses the
-reachable value nearest to it, which keeps every solve feasible and is recorded.
+reachable value nearest to it. This ensures physical reachability in the unbounded model;
+under a finite cap the remaining contracted position must also be feasible.
 
 ## Information timeline
 
@@ -291,13 +293,14 @@ earned $33,131 and CVaR $31,983. The bootstrap intervals overlap almost complete
 this ordering is not a measured difference between the policies: a year is not enough data
 to separate them when ten days carry two thirds of the result.
 
-Between 69% and 82% of each traded policy's net is energy it actually delivered, and the
-rest is the day-ahead position's spread against real time. Perfect foresight is the other
-way round: $101,198 of its $190,720, 53%, is the spread. What foresight mostly buys, in
-this market and at this battery size, is knowledge of the difference between two
-prices rather than knowledge of when to move energy. That component is a convergence
-trade, and a physical resource in New York cannot take it freely; it is the function of a
-virtual bid, under rules this study does not model.
+The accounting split values physical energy at real time, less costs, and puts the
+contracted position's day-ahead minus real-time basis in the spread column. The first
+term is 69–82% of each implementable policy's net; the second is 18–31%. For perfect
+foresight the spread is $101,198 of $190,720, 53%. These percentages describe an
+accounting identity, not the causal contribution of non-delivery: the spread can remain
+nonzero even when actual dispatch equals the position everywhere. The unbounded model
+does permit convergence trading that a physical resource cannot freely take. The
+delivery-cap experiment below measures how much net changes when that freedom is removed.
 
 The year is a handful of days. For the deterministic policy the best day is 22% of the
 year, the best ten days are 68%, and the best fifty are 100.2%, so the remaining 315 days
@@ -328,6 +331,161 @@ ended the year at the 2 MWh target. `tests/test_market.py` rebuilds each run's s
 from its own interval rows by a path that shares nothing with the replay's arithmetic; on
 these five runs the two agree to the cent.
 
+## Requiring delivery of the day-ahead position
+
+This sensitivity changes one market rule, in MW:
+
+$$
+|(d_{st}-c_{st})-q_t|\le\delta,
+\qquad\delta\in\{\text{unbounded},1,0.25,0\}.
+$$
+
+There is one band per period and information node, both when the hourly position is
+chosen and when dispatch is re-solved. The position is still frozen at bid close. A
+1 MW cap permits deviation up to the battery's rated power; 0.25 MW permits a quarter of
+it; zero requires the position to be delivered in every five-minute settlement bin.
+`cap=None` adds no rows and retains the original behavior. All other physical limits,
+costs, timestamps, scenario rules, solver tolerances and the end-of-day target stay fixed.
+The MILP is checked against independently enumerated signed-flow LPs on seeded binding
+cases, plus an analytical case where zero cap forces the entire day-ahead cycle.
+
+The twelve settings pair `det`, `neutral` and `fore` with the four caps, using the frozen
+values in [`selected.json`](results/selected.json). Eleven replayed the year; the twelfth
+stopped on an infeasible capped dispatch and is reported as such below rather than
+dropped. Persistence is refitted through 2024-12-31 by the original schedule and is
+identical across caps for a given policy. There is no selection on the capped outcomes and
+no re-tuning. Runs execute concurrently as detached
+processes; completion is checked from each child's recorded exit status and its exported
+result files, never from a log tail or a process search. Commands, configuration, source
+hashes and independent interval audits are in
+[`results/delivery/`](results/delivery/README.md), and `run_delivery.py` rebuilds them.
+
+The reported delivered/spread columns keep the original identity:
+
+$$
+N=\underbrace{\sum_i[g_i\lambda_i^{RT}-k(c_i+d_i)]\Delta}_{A}
+ +\underbrace{\sum_i q_i(\lambda_i^{DA}-\lambda_i^{RT})\Delta}_{S}.
+$$
+
+Here $A$ is delivered energy valued at real time less costs, and $S$ is the day-ahead
+basis term. Even when $g_i=q_i$, $S$ need not vanish: it changes the valuation from real
+time to day ahead. At zero cap, imbalance revenue and imbalance volume vanish, and net
+is entirely the delivered day-ahead schedule less costs. The causal comparison for this
+specified replay is the net change under the rule, $N_{\rm None}-N_0$, not the original
+spread column. It includes the policy's response in both its offer and its dispatch.
+Zero cap also removes all intraday redispatch flexibility; the net difference is the
+effect of that specified delivery rule, not an estimate of virtual-bid revenue alone.
+
+| Policy | Cap MW | Net | Change | Change % | 2.5% | 97.5% | Worst day | Drawdown | Tail loss 5% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| deterministic forecast | unbounded | 41,178 | 0 | 0.0 | 17,571 | 73,907 | -917 | 1,362 | 299 |
+| deterministic forecast | 1 | 33,006 | -8,172 | -19.8 | 16,901 | 53,854 | -1,397 | 2,698 | 306 |
+| deterministic forecast | 0.25 | 27,396 | -13,782 | -33.5 | 18,930 | 37,875 | -1,333 | 1,732 | 136 |
+| deterministic forecast | 0 | 30,153 | -11,025 | -26.8 | 23,482 | 38,935 | -54 | 54 | 15 |
+| risk neutral | unbounded | 33,131 | 0 | 0.0 | 9,182 | 65,272 | -2,955 | 4,304 | 507 |
+| risk neutral | 1 | 26,727 | -6,403 | -19.3 | 7,072 | 47,523 | -4,401 | 6,046 | 519 |
+| risk neutral | 0.25 | infeasible 2025-12-15 | — | — | — | — | — | — | — |
+| risk neutral | 0 | 30,131 | -2,999 | -9.1 | 23,432 | 38,924 | -54 | 54 | 15 |
+| perfect foresight | unbounded | 190,720 | 0 | 0.0 | 138,858 | 256,192 | 0 | 0 | -75 |
+| perfect foresight | 1 | 134,831 | -55,889 | -29.3 | 101,627 | 175,875 | 0 | 0 | -67 |
+| perfect foresight | 0.25 | 63,161 | -127,559 | -66.9 | 49,534 | 79,494 | 0 | 0 | -34 |
+| perfect foresight | 0 | 36,536 | -154,184 | -80.8 | 29,241 | 45,393 | 0 | 0 | -11 |
+
+| Policy | Cap MW | Day-ahead MWh | Imbalance MWh | Max deviation MW | Grid MWh | Cycles | Delivered energy | Spread |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| deterministic forecast | unbounded | 7,203 | 8,014 | 2 | 2,905 | 361.9 | 28,357 | 12,821 |
+| deterministic forecast | 1 | 5,961 | 6,190 | 1 | 2,369 | 295.0 | 26,369 | 6,637 |
+| deterministic forecast | 0.25 | 3,815 | 1,862 | 0.25 | 2,918 | 363.4 | 34,171 | -6,775 |
+| deterministic forecast | 0 | 3,010 | 0 | 1.1e-16 | 3,010 | 374.9 | 41,777 | -11,624 |
+| risk neutral | unbounded | 7,210 | 8,032 | 2 | 2,991 | 372.6 | 26,573 | 6,558 |
+| risk neutral | 1 | 5,701 | 6,016 | 1 | 2,506 | 312.2 | 28,040 | -1,313 |
+| risk neutral | 0.25 | — | — | — | — | — | — | — |
+| risk neutral | 0 | 2,983 | 0 | 1.1e-16 | 2,983 | 371.5 | 42,554 | -12,423 |
+| perfect foresight | unbounded | 6,982 | 9,177 | 2 | 3,550 | 442.2 | 89,522 | 101,198 |
+| perfect foresight | 1 | 5,917 | 6,811 | 1 | 2,437 | 303.6 | 68,774 | 66,057 |
+| perfect foresight | 0.25 | 3,758 | 1,881 | 0.25 | 2,779 | 346.2 | 55,037 | 8,124 |
+| perfect foresight | 0 | 2,988 | 0 | 1.1e-16 | 2,988 | 372.2 | 50,301 | -13,765 |
+
+| Policy | Cap MW | Solves | Seconds | Max raw gap | Holds | Coarse | Max SOC error MWh | Max cap excess MW |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| deterministic forecast | unbounded | 35,308 | 1,068 | 0.0001 | 0 | 0 | 2.1e-15 | 0 |
+| deterministic forecast | 1 | 35,308 | 1,178 | 0.23 | 0 | 0 | 2.7e-15 | 1.4e-14 |
+| deterministic forecast | 0.25 | 35,308 | 1,208 | 0.0001 | 0 | 0 | 1.8e-15 | 2.2e-13 |
+| deterministic forecast | 0 | 35,308 | 665 | 1.4e-16 | 0 | 0 | 3.5e-15 | 1.1e-16 |
+| risk neutral | unbounded | 35,308 | 1,686 | 0.0001 | 0 | 0 | 1.2e-15 | 0 |
+| risk neutral | 1 | 35,308 | 2,060 | 0.22 | 0 | 0 | 1.8e-15 | 6.3e-14 |
+| risk neutral | 0.25 | — | — | — | — | — | — | — |
+| risk neutral | 0 | 35,308 | 1,617 | 2e-16 | 0 | 0 | 3.5e-15 | 1.1e-16 |
+| perfect foresight | unbounded | 35,308 | 1,051 | 9.9e-05 | 0 | 0 | 2.1e-15 | 0 |
+| perfect foresight | 1 | 35,308 | 1,156 | 0.091 | 0 | 0 | 3.6e-15 | 2.3e-14 |
+| perfect foresight | 0.25 | 35,308 | 1,192 | 0.05 | 0 | 0 | 2.5e-15 | 3.6e-13 |
+| perfect foresight | 0 | 35,308 | 653 | 4.9e-16 | 0 | 0 | 1.4e-14 | 1.1e-16 |
+
+Every implementable policy earns less when it must deliver, and the accounting spread is
+not the size of the loss in either direction. At full delivery the deterministic forecast
+falls from $41,178 to $30,153, 26.8%, against a spread of $12,821 that is 31.1% of its
+unbounded net. The risk-neutral policy falls from $33,131 to $30,131, 9.1%, against a
+spread of 19.8%. Perfect foresight falls from $190,720 to $36,536, 80.8%, against a spread
+of 53.1%. The spread overstates what the two implementable policies take from the
+deviation and understates foresight's by half. It is an accounting identity; the replay
+under the rule is the measurement.
+
+The effect is not monotone in the cap for either implementable policy. The deterministic
+forecast earns less at 0.25 MW, $27,396, than at either 1 MW or full delivery, and the
+risk-neutral policy earns less at 1 MW, $26,727, than at full delivery. A band is not a
+weaker obligation: it still leaves the policy free to act on its forecast in real time
+while removing part of the position it would have acted against. Full delivery removes
+that freedom outright, which for an ensemble optimistic by a factor of two and a half to
+four is worth more than the flexibility it costs. These are three points from one year and
+the bootstrap intervals overlap, so the ordering between adjacent caps is not a measured
+difference between them.
+
+What full delivery does measure cleanly is how much of the year came from deviating.
+Imbalance volume falls from about 8,000 MWh to zero and the largest absolute deviation to
+1e-16 MW, day-ahead volume falls from about 7,200 MWh to about 3,000, and cycles are
+unchanged: 362 against 375 for the deterministic policy. The battery moves the same
+energy. It commits it a day ahead instead of trading around it.
+
+Concentration falls with it. July is 52.7% of the deterministic year unbounded and 24.8%
+under full delivery, and its best ten days fall from 67.5% to 23.5%, the risk-neutral
+policy's from 83.3% to 23.6%. The dependence on a handful of scarcity days reported above
+is largely a property of unbounded real-time deviation rather than of delivered energy.
+Daily risk falls with it: the risk-neutral worst day is -$54 under full delivery against
+-$2,955 unbounded, and its drawdown $54 against $4,304. At the 1 MW band both are worse
+than unbounded, -$4,401 and $6,046. Under full delivery the three policies nearly
+converge, at $30,153, $30,131 and $36,536, and foresight's advantage over the
+deterministic forecast falls from 4.6 times to 1.2.
+
+One of the twelve settings has no result. The risk-neutral policy at a 0.25 MW cap stopped
+on 2025-12-15 at 12:00. It had sold 1 MW for the 17:00 and 18:00 hours, held 0.40 MWh at
+noon, and the band forces at least 0.75 MW of discharge through both of those hours, so
+the store reaches zero at 18:45 even when charging as hard as the band allows. The
+end-of-day target was not the binding constraint: 2.46 MWh was reachable against a 2 MWh
+target. The position itself was undeliverable, the coarse retry returned infeasible rather
+than slow, and decision 52 stops the replay instead of holding at zero power and breaching
+the obligation. An offer that is a feasible hourly schedule from the 2 MWh assumed at bid
+close is not necessarily deliverable at fifteen-minute resolution from the energy the
+battery actually holds. That is a property of this rule and this policy, reported rather
+than removed.
+
+The eleven completed replays each ran 35,308 solves with no held step, no coarse retry and
+no cold start, and no dispatch exceeds its cap by more than 4e-13 MW. Settlement rebuilt
+from each run's own interval rows agrees with its reported total to within $0.006 over the
+year, and stored energy recomputed from the dispatch to 4.2e-5 MWh over 105,120 intervals.
+The three unbounded replays reproduce the original study exactly: every metric differs from
+`results/<policy>/metrics.json` by zero. Thirteen days report a raw relative gap above the
+requested 1e-4, all at the 1 and 0.25 MW caps and the largest 0.226; on the twelve solves
+behind them the full score and its certified bound differ by at most 1.2e-14, which is the
+numerical case described above and not an unconverged solve.
+
+The cap is a hypothetical delivery requirement. It does not establish that the resulting
+schedules obey NYISO bid parameters or ISO dispatch. Under a finite cap the original
+zero-power fallback can violate an obligation, so after the usual coarse retry a failed
+dispatch stops the replay and produces no completed result; the unbounded fallback is
+unchanged. A target reachable under battery limits alone is not a guarantee that an
+arbitrary contracted position is feasible under the cap, and on one of these twelve
+settings it was not.
+
 ## Limits
 
 - The study is a price-taking simulation against published prices. It is not evidence
@@ -342,10 +500,11 @@ these five runs the two agree to the cent.
 - Results are dominated by a small number of scarcity days. The tail statistics, the
   monthly table and the bootstrap interval are reported for that reason, and the
   difference between the three implementable policies is inside those intervals.
-- Part of every policy's result is a day-ahead position settled back in real time rather
-  than delivered. The volume table and the delivered-versus-spread split state how much.
-  A physical resource in New York cannot take that position freely: it is what a virtual
-  bid does, under a different registration and different charges.
+- The unbounded model permits a day-ahead position to settle back in real time rather
+  than be delivered. Imbalance volume measures the deviation; the accounting spread alone
+  does not measure its profit contribution. The delivery-cap experiment measures the
+  change under a hypothetical obligation to deliver. It still does not implement NYISO
+  registration, ISO dispatch or the charges for a physical resource or a virtual bid.
 - Tuning a risk measure on one year did not reduce it in the next. CVaR was selected for
   the smaller validation tail and produced a larger held-out tail than the risk-neutral
   policy. One year of selection data is thin for a tail statistic.

@@ -55,6 +55,20 @@ false infeasibility for a position that in fact simply settles. `Sol.e[0]` is `n
 fixed position, because a contract has no physical trajectory, and `Sol.c[0]`, `Sol.d[0]`
 carry the position split into its buying and selling parts.
 
+An optional delivery rule bounds deviations on every scenario information node:
+
+$$
+-\delta \le (d_{st}-c_{st})-q_t \le \delta,\qquad \delta\ge0.
+$$
+
+`cap=delta` supplies this limit in MW; `cap=None` omits these rows and preserves the
+unbounded model. `cap=0` forces actual dispatch to deliver the hourly position. The rule
+applies both while choosing an offer and after contracting it. A supplied `q` still adds
+no nominal physical path: the band constrains the actual scenario paths instead. A fixed
+position can consequently be infeasible under a finite cap. The MIP adds one two-sided
+sparse row per period and information node; the independent enumeration adds the two
+halfspaces in signed flow, without using charge/discharge columns or SOC variables.
+
 For probabilities $p_s>0$ summing to one, confidence $0\le\alpha<1$, and weight
 $0\le w\le1$, maximize
 
@@ -99,6 +113,12 @@ path first. Only a solve reaching its requested tolerance is returned. Exact ref
 the finite MILP formulation and its certificate within solver tolerances, not exact
 arithmetic or an exact representation of uncertain future prices.
 
+`gap` retains the solver's raw relative ratio for its variable objective, which excludes
+the fixed position's profit constant. Near a zero variable objective that ratio can be
+large even when the full profit and its bound agree to rounding. Inspect `ub-z` as well;
+the delivery experiment records targeted replays of these numerical cases rather than
+replacing the reported ratios or claiming that every raw relative gap met the target.
+
 ## Use
 
 ```python
@@ -132,8 +152,9 @@ Prices are exogenous. `da` may be one curve or one per scenario; either way the 
 takes the clearing price as given and assumes the position is accepted in full, which
 omits bid acceptance. The model produces a
 quantity schedule, not a price-dependent bid curve or an exchange submission. It includes
-single-price real-time imbalance settlement and unrestricted deviations within battery
-limits. It omits reserve products, network constraints, nonlinear degradation, fees,
+single-price real-time imbalance settlement and an optional absolute deviation cap within
+battery limits. The cap is a hypothetical market rule, not a NYISO participation model.
+It omits reserve products, network constraints, nonlinear degradation, fees,
 collateral, market-specific qualification, imbalance penalties and market impact.
 
 Use this for formulation research, schedule valuation and scenario hedging. Real trading
