@@ -26,6 +26,26 @@
 | Retain the exact AIC value $422 for `ex3`. | Both exact hulls give $422; $146.33 follows only after removing a feasible schedule not excluded by the source. |
 | Keep DC and NTC networks distinct. | DC flow uses reactance; zonal transport uses directional exchange bounds. |
 
+## Joint and stochastic clearing
+
+| Decision | Reason |
+| --- | --- |
+| Clear storage in the balance rather than replay it against a price. | A resource large enough to matter moves the price it settles at. |
+| Import uc_price's unit, network and price-selection routines. | A market with no storage must clear exactly as it did. |
+| Carry the mode hull cut $c/C+d/D\le1$ as its own row. | It is what the mode rows leave when the binary is relaxed. |
+| Do not claim the cut is the hull of the whole resource. | The state-of-charge rows couple periods the cut treats separately. |
+| Make the commitment common and the dispatch per scenario. | That is the decision the day-ahead market takes. |
+| Divide the scenario probability out of the balance dual. | A weighted row has a weighted dual, which is not a price. |
+| Check the stochastic optimum against WS and EEV. | Both bounds are theorems, and both are computed by another module. |
+
+## Market interface
+
+| Decision | Reason |
+| --- | --- |
+| Default to full acceptance at no charge with every resource admitted. | It is the replay's own assumption, and the baseline must not move. |
+| Supply the curve, the charge and the screens as parameters. | Calibrating them needs a tariff, which is a different kind of work. |
+| Screen qualification before the first solve. | An ineligible resource has no result worth computing. |
+
 ## Storage
 
 | Decision | Reason |
@@ -53,10 +73,12 @@
 
 ## Open work
 
-1. Market-specific storage bids, ISO dispatch, tariffs, and qualification rules.
-2. Energy and reserve prices for the full pglib-uc formulation.
-3. Joint storage and unit-commitment clearing with network deliverability.
-4. Stochastic or robust system clearing. Storage price scenarios are exogenous.
+1. Calibrate `market/bid.py` to one market's published tariff and qualification manual.
+   The mechanism is implemented; the parameters are not anyone's.
+2. A convex hull price for the joint feasible set. Today the joint and stochastic clearings
+   pin the integers, so the nonconvexity is left as make-whole.
+3. A multi-stage scenario tree. The stochastic clearing branches once.
+4. Ramping and reserve carried between scenarios, and a reserve product in `uc_price`.
 
 Superseded decisions and the out-of-scope pit model are in the
 [dated archive](../_archive/20260916-focus-reset/README.md).

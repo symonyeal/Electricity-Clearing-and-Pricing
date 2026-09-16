@@ -15,6 +15,10 @@
 #   rho          : fitted hourly persistence, zero until fit() supplies it
 #   cache        : keep parsed months as arrays beside the archive
 #   cap          : absolute dispatch deviation from the hourly position, MW; None unbounded
+#   bk,bs        : steps in the day-ahead offer curve and its fractional spread;
+#                  bk = 0 takes the position in full, which is the replay's own assumption
+#   tar          : per-MWh charge on metered energy, either direction
+#   qmin,qdur    : minimum rated power MW and minimum duration h to qualify
 
 import tomllib
 from pathlib import Path
@@ -51,6 +55,11 @@ class Cf(NamedTuple):
     rho: float = 0.0
     cache: bool = True
     cap: float | None = None
+    bk: int = 0
+    bs: float = 0.0
+    tar: float = 0.0
+    qmin: float = 0.0
+    qdur: float = 0.0
 
     def rep(self, **kw):
         return self._replace(**kw)

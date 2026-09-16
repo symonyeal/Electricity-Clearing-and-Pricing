@@ -12,6 +12,7 @@
 #   dg,dy,iv   : run diagnostics, one row per day, one row per settlement bin
 #   why        : ok, gap, hold, skip, cold or fail; recorded, never silently dropped
 #   fail       : why a solve missed its tolerance: limit, infeasible, unbounded, other
+#   ref        : the ensemble price the position was chosen against, per hour
 #   z,ub       : the offer solve's risk score and its certified upper bound
 
 import time
@@ -19,6 +20,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from market.bid import accept, charge, qual
 from market.nyiso import BIN, full
 from market.scen import Sc, ag, analog, da_scen, rt_scen
 from models.storage import B, st
@@ -101,7 +103,13 @@ def _offer(fr, i, an, cf, pol):
     r, why, sec, _ = _solve(b, s, cf, None, _w(cf, pol))
     if r is None:
         return np.zeros(n), "fail", sec, 0.0, 0.0, 0.0
-    return r.q, why, sec, r.gap, r.z, r.ub
+    q = r.q
+    if cf.bk > 0:
+        da = np.atleast_2d(np.asarray(s.da, dtype=float))
+        w = np.asarray(s.pr, dtype=float)
+        ref = np.average(da, axis=0, weights=w) if da.shape[0] > 1 else da.ravel()
+        q = accept(q, ref, np.asarray(fr[i].da, dtype=float), cf.bk, cf.bs)
+    return q, why, sec, r.gap, r.z, r.ub
 
 
 def day(fr, i, cf, pol, e):
@@ -164,11 +172,14 @@ def settle(iv, cf):
     da, rt = np.nan_to_num(iv["pda"]), np.nan_to_num(iv["prt"])
     return {"rda": iv["q"] * da * DTB, "rrt": (g - iv["q"]) * rt * DTB,
             "deg": cf.kd * (iv["c"] + iv["d"]) * DTB,
-            "fee": cf.fee * (iv["c"] + iv["d"]) * DTB}
+            "fee": (cf.fee * (iv["c"] + iv["d"]) + charge(iv["c"], iv["d"], cf.tar)) * DTB}
 
 
 def run(fr, cf, pol, lo, hi, log=None):
     """Replay a date range in order. Energy is never reset at a day boundary."""
+    ok, msg = qual(max(cf.c, cf.d), cf.e, cf.qmin, cf.qdur)
+    if not ok:
+        raise ValueError(f"this resource does not qualify: {msg}")
     if cf.cap is not None and (not np.isfinite(cf.cap) or cf.cap < 0):
         raise ValueError("deviation cap must be finite and nonnegative, or None")
     if pol not in POL:

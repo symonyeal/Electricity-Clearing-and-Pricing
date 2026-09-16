@@ -34,6 +34,34 @@ piecewise points can instead remove feasible output and make the model infeasibl
 `ConvexHullPricing.jl` reads only `piecewise_production[1]["cost"]` and
 `startup[1]["cost"]`. The corresponding truncations are the second and third rows.
 
+## Energy and reserve prices
+
+`px(d, gap)` clears, pins every integer column, and reads the duals of (2) and (3) from the
+linear program that remains. (3) carries a surplus column so that it is an equality and its
+dual is nonnegative. The balance rows are moved last because `_px` reads them there; that
+price selection rule is shared with [Pricing](PRICING.md) deliberately, so that two priced
+programs cannot answer one degenerate face differently. No row builder is shared.
+
+Measured on 2026-09-16 on the committed instance at the reference script's 1% gap:
+
+| Quantity | Value |
+| --- | ---: |
+| Energy price | 0 to 55.5092/MWh, mean 17.4799 |
+| Reserve price | 0 to 27.7546/MWh, positive in 4 of 48 periods |
+| Demand payment | 3,111,148.57 |
+| Reserve payment | 3,455.80 |
+| Thermal revenue | 2,329,739.62 |
+| Renewable revenue | 784,864.75 |
+| Make-whole | 370,817.15 over 30 units |
+
+Payment equals revenue to the cent. Reserve carries no cost of its own in this formulation
+and competes only for capacity, so it prices only where capacity is scarce. The commitment
+is a 1% incumbent, so the prices follow that incumbent; what the tests assert is the
+accounting identity and the sign, not a value.
+
+There are 96 balance rows against `LIM[3]` of 24, so price selection stops at the payment
+stage and the tag is `pay`: these prices are canonical to the demand payment only.
+
 ## Result fields
 
 `cl(d, gap=0.0)` returns cost `z`, status `st`, achieved relative gap `gap`, and the

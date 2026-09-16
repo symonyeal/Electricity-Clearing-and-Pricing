@@ -83,9 +83,9 @@ observed daily series; it does not include model or market-rule uncertainty.
 
 364 of the 365 days in 2025 are complete. Each trading policy ran 35,308 solves. All
 reached the requested $10^{-4}$ gap; no step used the fallback. The largest energy-balance
-error in these runs is $2.1\times10^{-15}$ MWh. For the deterministic, risk-neutral, and perfect-foresight
-policies, settlement rebuilt from the exported intervals differs by at most $0.0013; CVaR
-was not reconciled from exports. The
+error in these runs is $2.1\times10^{-15}$ MWh. For the deterministic, risk-neutral, and
+perfect-foresight policies, settlement rebuilt from the exported intervals differs by at
+most $0.0013; CVaR was not reconciled from exports. The
 [audit record](results/delivery/nyc/2025/audit.json) carries those checks.
 
 | Policy | Net, $ | 95% block interval, $ | Worst day, $ | Cycles |
@@ -140,6 +140,21 @@ report a large raw relative gap, because the contract's constant profit leaves a
 variable objective; the audit re-solves those days and requires the full score to lie within
 $10^{-7}$ of its certified bound. Results and the audit record are in
 [`docs/results/delivery/`](results/delivery/README.md).
+
+## Market interface
+
+The replay above assumes the day-ahead position is accepted in full, at no charge, by a
+resource the market admits. `market/bid.py` replaces each of those with a rule:
+
+| Rule | Parameter | Default |
+| --- | --- | --- |
+| Offer the position as a curve and accept what the cleared price supports | `bk`, `bs` | `bk = 0`, full acceptance |
+| Charge metered energy in both directions | `tar` | 0 |
+| Admit only a resource above a rated power and a duration | `qmin`, `qdur` | 0, everything admitted |
+
+The defaults reproduce the study above exactly, which is asserted in the tests. The curve
+shape, the rate and the thresholds are parameters; they are not NYISO's, and fitting them
+to a published tariff and qualification manual is not done here.
 
 ## Reproduction
 

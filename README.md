@@ -9,6 +9,8 @@ Each model has an independent formulation or external benchmark.
 | [pglib-uc](docs/PGLIB.md) | Piecewise cost, start-up tiers, reserve, thermal and renewable units | Independent rows and the reference relaxation |
 | [Storage](docs/TRADING.md) | Day-ahead position, real-time recourse, information tree, CVaR | Signed-flow enumeration and analytical cases |
 | [NYISO replay](docs/MARKET.md) | Chronological storage valuation under published zonal prices | Leakage tests and independent settlement reconstruction |
+| [Joint clearing](docs/JOINT.md) | Generation and storage in one program, on a network | The same market without storage, cleared by the pricing model |
+| [Stochastic clearing](docs/JOINT.md) | One commitment against many demands, with a CVaR tail | The wait-and-see and mean-value bounds |
 
 SciPy/HiGHS solves all live optimization models. [Sources](docs/SOURCES.md) records the
 formulations and data. [Validation](docs/VALIDATION.md) records executed checks.
@@ -47,8 +49,13 @@ prices as inputs and assumes a price-taking participant. The NYISO replay values
 positions; it does not reproduce bid acceptance, ISO dispatch, tariffs, or market impact.
 
 The small pricing model omits piecewise offers, start-up tiers, and reserve. The separate
-pglib-uc model includes those features but does not compute settlement prices. Joint
-storage and unit-commitment clearing is not implemented.
+pglib-uc model includes those features and prices energy and reserve, but takes no hull.
+The joint and stochastic clearings price by pinning the integers, so a nonconvexity is
+left as make-whole rather than priced away.
+
+The market interface in `market/bid.py` supplies offer curves, a metered charge and
+qualification screens as parameters. It is not any market's rule set, and its defaults
+reproduce full acceptance at no charge.
 
 Unrelated models, completed reviews, and superseded documents are preserved in
 [`_archive/`](_archive/README.md).

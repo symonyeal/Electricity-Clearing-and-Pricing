@@ -30,13 +30,22 @@
 #   i,t,s,l,k    : unit, period, category, piece and scratch indices
 #   res,gap      : solver result and the relative gap it was asked for
 #   Run          : cost, status, achieved gap and certified lower bound of one clearing
+#   Px           : the two prices dual to one clearing, and what they leave unpaid
+#   _run,_hold   : clear and keep the system; the same system with the integers pinned
+#   _ix          : which row carries period t's demand equality and reserve inequality
+#   rs,jr        : reserve row by period, and the periods that require reserve
+#   pe,pr        : energy price and reserve price, per period
+#   rev,ct,mw    : revenue at those prices, as-cleared cost, and make-whole
+#   wr           : renewable revenue at the energy price
 
 import json
 from typing import NamedTuple
 
 import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, milp
-from scipy.sparse import csc_array
+from scipy.sparse import csc_array, csr_array, hstack, vstack
+
+from models.uc_price import _px
 
 TH = ("must_run", "power_output_minimum", "power_output_maximum", "ramp_up_limit",
       "ramp_down_limit", "ramp_startup_limit", "ramp_shutdown_limit", "time_up_minimum",
@@ -52,6 +61,19 @@ class Run(NamedTuple):
     st: str
     gap: float
     lb: float
+
+
+class Px(NamedTuple):
+    """Energy and reserve prices of one clearing, with revenue, cost and make-whole."""
+
+    z: float
+    pe: np.ndarray
+    pr: np.ndarray
+    rev: np.ndarray
+    ct: np.ndarray
+    mw: np.ndarray
+    wr: float
+    tag: str
 
 
 def ld(p):
@@ -246,11 +268,12 @@ def _sy(d):
     return c, A, np.asarray(b, dtype=float), Ae, np.asarray(be, dtype=float), lb, ub, it
 
 
-def cl(d, gap=0.0):
-    """Clear one instance. gap is the relative MIP gap; the reference script uses 0.01."""
+def _run(d, gap):
+    """Clear one instance and return the solver result beside the system it solved."""
     if not np.isfinite(gap) or gap < 0:
         raise ValueError("MIP gap must be finite and nonnegative")
-    c, A, b, Ae, be, lb, ub, it = _sy(d)
+    q = _sy(d)
+    c, A, b, Ae, be, lb, ub, it = q
     res = milp(
         c,
         integrality=it,
@@ -260,6 +283,111 @@ def cl(d, gap=0.0):
     )
     if not res.success:
         raise ValueError(f"this instance did not clear: {res.message}")
+    return res, q
+
+
+def cl(d, gap=0.0):
+    """Clear one instance. gap is the relative MIP gap; the reference script uses 0.01."""
+    res, q = _run(d, gap)
+    it = q[7]
     ag = float(res.mip_gap) if np.any(it) else 0.0
     lb = float(res.mip_dual_bound) if np.any(it) else float(res.fun)
     return Run(float(res.fun), "opt" if ag == 0 else "gap", ag, lb)
+
+
+def _ix(d):
+    """Row of period t's reserve inequality, or -1 where that period requires none.
+
+    Demand and reserve are written in one pass over the periods in _sy and nowhere else, so
+    the demand equalities are the first T equality rows in period order, and the reserve
+    inequalities are the first inequality rows in period order.
+    """
+    T = d["T"]
+    r, k = np.full(T, -1, dtype=int), 0
+    for t in range(T):
+        if float(d["reserves"][t]) > 0.0:
+            r[t] = k
+            k += 1
+    return r
+
+
+def _hold(q, x):
+    """The same system with every integer column pinned to its cleared value."""
+    c, A, b, Ae, be, lb, ub, it = q
+    k = np.asarray(it, dtype=float) > 0
+    lb, ub = np.array(lb, dtype=float), np.array(ub, dtype=float)
+    lb[k] = ub[k] = np.round(np.asarray(x, dtype=float)[k])
+    return c, A, b, Ae, be, lb, ub
+
+
+def px(d, gap=0.0):
+    """Clear, hold the cleared commitment, and read the energy and reserve prices.
+
+    The prices are the duals of (2) and (3) in the linear program that remains once every
+    integer column is pinned. No hull is taken, so these are the locational marginal prices
+    of this formulation: a unit whose start-up and no-load costs exceed its margin is left
+    short, and mw records by how much.
+
+    (3) is an inequality in the clearing program. Here it carries a surplus column and
+    becomes an equality, so its dual is read exactly as the demand dual is and is
+    nonnegative. The balance rows move last because _px reads them there. That price
+    selection rule is shared with models/uc_price.py deliberately, so that two priced
+    programs in this repository cannot answer the same degenerate face differently. No row
+    builder is shared, which is what this module's independence means.
+    """
+    res, q = _run(d, gap)
+    c, A, b, Ae, be, lb, ub = _hold(q, res.x)
+    T, th, re = d["T"], d["th"], d["re"]
+    G, W = len(th), len(re)
+    rs = _ix(d)
+    jr = np.flatnonzero(rs >= 0)
+    nr, n = len(jr), len(c)
+
+    A, Ae = csr_array(A), csr_array(Ae)
+    b, be = np.asarray(b, dtype=float), np.asarray(be, dtype=float)
+    rw = rs[jr]
+    kp = np.setdiff1d(np.arange(A.shape[0]), rw)
+    Ar, br = -A[rw, :], -b[rw]
+    A, b = A[kp, :], b[kp]
+    if nr:
+        s = csc_array((-np.ones(nr), (np.arange(nr), np.arange(nr))), shape=(nr, nr))
+        Ar = hstack([Ar, s])
+        A = hstack([A, csc_array((A.shape[0], nr))])
+        Ae = csr_array(hstack([Ae, csc_array((Ae.shape[0], nr))]))
+        Ae = vstack([Ae[T:, :], Ae[:T, :], Ar])
+        c = np.r_[c, np.zeros(nr)]
+        lb, ub = np.r_[lb, np.zeros(nr)], np.r_[ub, np.full(nr, np.inf)]
+    else:
+        Ae = vstack([Ae[T:, :], Ae[:T, :]])
+    be = np.r_[be[T:], be[:T], br]
+
+    out = _px(c, A, b, Ae, be, lb, ub, T + nr)
+    if out is None:
+        raise ValueError("the cleared commitment has no feasible re-dispatch")
+    pi = np.asarray(out[2], dtype=float)
+    k = len(pi) - nr
+    pe, pr = pi[k - T : k], np.zeros(T)
+    if nr:
+        pr[jr] = pi[k:]
+
+    x = np.asarray(out[1], dtype=float)[:n]
+    o = {y: i * G * T for i, y in enumerate(("cg", "pg", "rg", "ug", "vg", "wg"))}
+    od, k = [], 6 * G * T
+    for i in range(G):
+        od.append(k)
+        k += len(th[i]["startup"]) * T
+    rev, ct = np.zeros(G), np.zeros(G)
+    for i, y in enumerate(th):
+        pmin = float(y["power_output_minimum"])
+        ug = x[o["ug"] + i * T : o["ug"] + (i + 1) * T]
+        pg = x[o["pg"] + i * T : o["pg"] + (i + 1) * T]
+        rg = x[o["rg"] + i * T : o["rg"] + (i + 1) * T]
+        cg = x[o["cg"] + i * T : o["cg"] + (i + 1) * T]
+        rev[i] = float(pe @ (pg + pmin * ug) + pr @ rg)
+        ct[i] = float(cg.sum()) + float(y["piecewise_production"][0]["cost"]) * float(ug.sum())
+        for s, z in enumerate(y["startup"]):
+            ct[i] += float(z["cost"]) * float(x[od[i] + s * T : od[i] + (s + 1) * T].sum())
+    nb = k + sum(len(y["piecewise_production"]) for y in th) * T
+    pw = x[nb : nb + W * T].reshape(W, T) if W else np.zeros((0, T))
+    return Px(float(res.fun), pe, pr, rev, ct, np.maximum(ct - rev, 0.0),
+              float(pe @ pw.sum(0)), out[3])
