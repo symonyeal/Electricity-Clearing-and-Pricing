@@ -1,7 +1,7 @@
 # Decisions and remaining work
 
-[README](../README.md) contains results. [Sources](SOURCES.md) contains references and data
-provenance.
+[Validation](VALIDATION.md) contains current checks. [Sources](SOURCES.md) contains
+references and data provenance. [INL assessment](INL.md) records the local project review.
 
 ## Model standards
 
@@ -13,6 +13,9 @@ provenance.
 6. Add a dependency only after measurement on the implemented model.
 7. Implement a published formulation and name it. Where an open implementation of that
    formulation exists, cite it too, and state what this model restricts or omits.
+8. Keep the existing Python register: mathematical names with a legend, small functions,
+   direct sparse formulations, and no framework layer without a measured need.
+9. Separate formulation exactness, the achieved solver gap and uncertainty in the inputs.
 
 ## Ultimate pit
 
@@ -62,36 +65,35 @@ different thing.
 | 21 | Keep `models/__init__.py`; do not rely on an implicit namespace package. |
 | 22 | Declare Ruff in `requirements.txt`. |
 | 23 | Record only checked sources. The source register was last checked on 2026-09-15. |
-| 24 | Build the pglib-uc formulation in its own module, from its own rows, rather than widening `U` and the hull routes to carry piecewise costs and start-up tiers. The two formulations differ in what the output variable means, and `hl` and `hc` would each need their convex hull re-derived for a piecewise cost before they could price one. An independent route is also the clean-room oracle the shared-row structure lacks. |
-| 25 | Gate the benchmark on the linear relaxation, not the integer objective. At the reference script's 1% gap the returned incumbent is not determined, so an equality there would assert the solver's search order. The relaxation is determined and every piecewise point, start-up category and row enters it. |
-| 26 | Refuse an instance field the model does not read. A loader that keeps the first piecewise point and the first start-up category still solves and still reports a number; that number is not the benchmark's. |
+| 26 | Build the pglib-uc formulation in its own module, from its own rows, rather than widening `U` and the hull routes to carry piecewise costs and start-up tiers. The two formulations differ in what the output variable means, and `hl` and `hc` would each need their convex hull re-derived for a piecewise cost before they could price one. An independent route is also the clean-room oracle the shared-row structure lacks. |
+| 27 | Gate the benchmark on the linear relaxation, not the integer objective. At the reference script's 1% gap the returned incumbent is not determined, so an equality there would assert the solver's search order. The relaxation is determined and every piecewise point, start-up category and row enters it. |
+| 28 | Refuse an instance field the model does not read. A loader that keeps the first piecewise point and the first start-up category still solves and still reports a number; that number is not the benchmark's. |
+| 29 | Report pglib-uc's achieved MIP gap and lower bound. Use status `gap` when the achieved gap is positive, `opt` when it is zero. The stopping tolerance is not a result. |
+
+## Storage trading
+
+| ID | Decision | Reason |
+| ---: | --- | --- |
+| 30 | Use the HydroBoost storage balance and exclusive binary modes, restricted to energy trading. | Negative prices can reward simultaneous cycling in a continuous relaxation. |
+| 31 | Use one physically feasible forward schedule and scenario-dependent real-time deviations. | Settlement must count forward energy once and prevent unsupported forward positions. |
+| 32 | Share columns by information node, with no revelation by default. | This enforces nonanticipativity and reduces duplicate variables. |
+| 33 | Use Rockafellar-Uryasev CVaR of loss and independently compute the weighted tail. | Handles unequal probabilities and probability atoms; risk reporting remains valid at zero risk weight. |
+| 34 | Check the MIP with enumerated signed-flow LPs and cumulative energy bounds. | Independent physical formulation, bounded to 12 nodes for tractability. |
+| 35 | Keep the INL tools as formulation references and optional checks. | No measured benefit justifies adding their frameworks to runtime requirements. |
 
 ## Remaining work
 
-1. Variable pit-wall angles by direction and rock type.
-2. Piecewise-linear and quadratic generation offers.
-3. Losses and contingency constraints in the network model.
-4. Carry piecewise cost, start-up tiers and reserve into `models/uc_price.py` itself, so
-   the priced model and the benchmark model are one. `models/pglib_uc.py` now clears the
-   benchmark and matches the reference relaxation, but it does not price: `hl` and `hc`
-   need their convex hulls re-derived for a piecewise production cost first. Until then
-   the priced clearing still has only the published worked examples.
-5. Stochastic or robust clearing over demand and wind scenarios, which is the exact route
-   to the day-ahead uncertainty that price forecasters address by fitting.
-6. Mine production scheduling with periods, discounting, and capacity limits.
+1. Market-specific storage participation and timestamped out-of-sample evaluation.
+2. Energy and reserve pricing for the full pglib-uc formulation, then exact hull pricing
+   with piecewise costs and start-up tiers. Fixed-commitment pricing alone does not require
+   a hull re-derivation. The current benchmark still clears without pricing.
+3. Reserve deliverability and joint storage/UC clearing; losses and network contingencies.
+4. Stochastic or robust clearing over demand and wind scenarios. The implemented storage
+   scenarios are exogenous price scenarios, not stochastic system clearing.
 
-## Model sequence
-
-| Stage | Model | Class |
-| --- | --- | --- |
-| Built | Ultimate pit limit | Maximum closure |
-| Built | Unit commitment and pricing | Mixed-integer model with dual prices |
-| Built | pglib-uc reference commitment | Mixed-integer model, benchmarked, not priced |
-| Exact flow | Shortest path, maximum flow, transportation, transshipment, assignment | Network flow |
-| Branch point | Integer minimum-cost flow with one budget row | Integer optimization may be NP-hard |
-| Integer network | Production scheduling, multicommodity flow, fixed-charge flow | Mixed-integer optimization |
-| Integer selection | Facility location and set covering | Mixed-integer optimization |
-| Bilevel network | Network interdiction | Bilevel optimization, often reformulated by duality |
+The broader optimization sequence and former Windows tables are in the
+[archive](../_archive/20260915-inl-review/README.md). Independent pit formulations remain
+active checks; model differences and numerical pricing limitations remain documented.
 
 ## Rejected alternatives
 
@@ -102,7 +104,7 @@ different thing.
 | Subgradient CHP search | Hua and Baldick report 0.88% suboptimality after 550 iterations; the LP is exact. |
 | Pit metaheuristic | It cannot improve an exact minimum-cut solution. |
 | Neural dependency | No implemented model requires it. |
-| Fitted day-ahead price forecasting | A fitted forecaster has no exact solve route and no second formulation, so neither model standard 1 nor 2 can be met. Uncertainty enters this repository as scenarios in the clearing, not as a regression on past prices. |
+| Fitted day-ahead price forecasting in the solver | Forecast fitting is a separate statistical task. External scenarios may be supplied, but their predictive quality requires out-of-sample checks; an exact optimizer does not establish it. |
 | Live price and generation feeds | An API key and a network dependency, with no implemented model measuring better for either. Model standard 6. |
 | Warm-started price walk | The prototype erased the required seed-61 price difference without proving closure of the face. |
 | Unreviewed reading-list entries | A title is not evidence. |

@@ -1,4 +1,4 @@
-# Forced-walk scan of the price face. Source of the screen tables in README.md.
+# Forced-walk scan of the price face. Source of the screen tables in docs/PRICING.md.
 #
 # LEGEND
 #   SEED,BIG : the seeded market family and the two large timing markets

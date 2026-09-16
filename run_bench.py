@@ -1,4 +1,4 @@
-# Scale bench for both models. Source of the measured tables in README.md.
+# Scale bench for market pricing and ultimate pit. Historical tables are under _archive/.
 #
 # LEGEND
 #   DIMS,MKT,HUL : the measured pit sizes, market sizes and convex-hull sizes

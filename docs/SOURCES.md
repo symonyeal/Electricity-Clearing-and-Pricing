@@ -2,6 +2,27 @@
 
 Checked on 2026-09-15. Each note states the source's role and review status.
 
+## Storage trading and local INL references
+
+The checked local revisions and exact implementation files are in [INL assessment](INL.md).
+The new model is an energy-only, single-battery adaptation of the physical rows in
+HydroBoost `HydroBoost_Model_C.jl`, with a scenario tree and the risk formulation below.
+It does not reproduce HydroBoost's complete hydro/reserve application. DOVE supplies a
+separate executable hourly comparison, including a known negative-price disagreement.
+
+| Source | Use in this repository |
+| --- | --- |
+| Rockafellar, R. T. and Uryasev, S. (2000). ["Optimization of Conditional Value-at-Risk"](https://sites.math.washington.edu/~rtr/papers/rtr179-CVaR1.pdf). *Journal of Risk* 2(3), 21-41. | Read the scenario epigraph, equation (17) and its auxiliary-variable linearization. Implemented for loss equal to negative trading profit. |
+| Rockafellar, R. T. and Uryasev, S. (2002). ["Conditional Value-at-Risk for General Loss Distributions"](https://sites.math.washington.edu/~rtr/papers/rtr187-CVaR2.pdf). *Journal of Banking & Finance* 26(7), 1443-1471. | Read the discrete-distribution definition and probability-atom discussion. `cvar` splits mass at the quantile; unequal probabilities are checked analytically. |
+| [PJM, Energy Markets](https://learn.pjm.com/three-priorities/buying-and-selling-energy/energy-markets.aspx) | Read. Describes day-ahead and real-time settlement. The model uses the general forward-plus-deviation accounting convention; it is not a full implementation of PJM participation or settlement rules. |
+| [SciPy `milp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.milp.html) | Read the meanings of `mip_gap`, `mip_dual_bound` and stopping options. Storage reports the maximization upper bound by negating the minimization bound. pglib-uc reports its cost lower bound and achieved gap. |
+
+Storage examples and performance inputs are labelled synthetic in `run_storage.py` and
+`tests/test_storage.py`. Their intended properties are efficiency and duration accounting,
+negative-price exclusivity, two-settlement accounting, nonanticipativity, a risk-reducing
+forward hedge and compression of identical information nodes. No market-price dataset or
+claim of observed trading returns is attached to these cases.
+
 ## Unit commitment and electricity prices
 
 | Source | Use in this repository |

@@ -29,7 +29,7 @@
 #   m,e,n        : inequality, equality and column counters
 #   i,t,s,l,k    : unit, period, category, piece and scratch indices
 #   res,gap      : solver result and the relative gap it was asked for
-#   Run          : cost, status and gap of one clearing
+#   Run          : cost, status, achieved gap and certified lower bound of one clearing
 
 import json
 from typing import NamedTuple
@@ -46,11 +46,12 @@ RE = ("power_output_minimum", "power_output_maximum", "name")
 
 
 class Run(NamedTuple):
-    """Cost, solver status and the relative gap the clearing was asked to reach."""
+    """Cost, solver status, achieved relative gap and lower bound on optimal cost."""
 
     z: float
     st: str
     gap: float
+    lb: float
 
 
 def ld(p):
@@ -247,6 +248,8 @@ def _sy(d):
 
 def cl(d, gap=0.0):
     """Clear one instance. gap is the relative MIP gap; the reference script uses 0.01."""
+    if not np.isfinite(gap) or gap < 0:
+        raise ValueError("MIP gap must be finite and nonnegative")
     c, A, b, Ae, be, lb, ub, it = _sy(d)
     res = milp(
         c,
@@ -257,4 +260,6 @@ def cl(d, gap=0.0):
     )
     if not res.success:
         raise ValueError(f"this instance did not clear: {res.message}")
-    return Run(float(res.fun), "opt", gap)
+    ag = float(res.mip_gap) if np.any(it) else 0.0
+    lb = float(res.mip_dual_bound) if np.any(it) else float(res.fun)
+    return Run(float(res.fun), "opt" if ag == 0 else "gap", ag, lb)

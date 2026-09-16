@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 
 import pytest
+import numpy as np
 from scipy.optimize import linprog
 
 from models.pglib_uc import _sy, cl, ld
@@ -102,9 +103,39 @@ def test_clear():
     is asserted is that the incumbent is no cheaper than the relaxation and no dearer than
     the gap allows. A model missing a cost or a restriction fails the lower bound.
     """
-    z = cl(ld(F), 0.01).z
+    r = cl(ld(F), 0.01)
+    z = r.z
     assert z >= LP
     assert z <= MIP1 * 1.01
+    assert LP - 1e-6 <= r.lb <= z + 1e-6
+    assert 0 <= r.gap <= 0.01
+    assert r.gap == pytest.approx((z - r.lb) / abs(z), abs=1e-9)
+    assert r.st == ("opt" if r.gap == 0 else "gap")
+
+
+def test_certificate(monkeypatch):
+    """Report the solver's bound and gap, never echo the requested stopping tolerance."""
+    from types import SimpleNamespace
+    monkeypatch.setattr("models.pglib_uc._sy", lambda d:
+                        (np.ones(1), np.zeros((0, 1)), [], np.zeros((0, 1)), [],
+                         np.zeros(1), np.ones(1), np.ones(1)))
+    monkeypatch.setattr("models.pglib_uc.milp", lambda *a, **k:
+                        SimpleNamespace(success=True, fun=100, mip_gap=0.005, mip_dual_bound=99.5))
+    r = cl({}, 0.01)
+    assert (r.z, r.gap, r.lb, r.st) == (100, 0.005, 99.5, "gap")
+
+
+@pytest.mark.parametrize("gap", [-1, np.inf, np.nan])
+def test_gap(gap):
+    with pytest.raises(ValueError, match="gap"):
+        cl({}, gap)
+
+
+def test_renewable_only():
+    """A continuous instance has an LP certificate; SciPy leaves its MIP fields None."""
+    r = cl({"T": 1, "th": [], "re": [{"power_output_minimum": [0],
+            "power_output_maximum": [2]}], "demand": [1], "reserves": [0]})
+    assert (r.z, r.lb, r.gap, r.st) == (0, 0, 0, "opt")
 
 
 def test_lossy():
@@ -115,8 +146,8 @@ def test_lossy():
     leaves (21) forcing pg to zero, so the instance cannot meet demand at all; truncating
     the start-up categories to the first leaves a cheaper program, 2474234.88 against
     2480427.04 on 2026-09-15. Directions are asserted rather than the values, which move
-    with the solver; a lossy read is always the cheaper one, which is why test_clear can
-    assert a lower bound.
+    with the solver. Dropping a start-up tier can lower cost; dropping piecewise points
+    can remove feasible output instead, which is why both failure directions are checked.
     """
     d = ld(F)
     for x in d["th"]:
