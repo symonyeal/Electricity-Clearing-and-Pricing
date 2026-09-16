@@ -37,6 +37,7 @@ python run_market.py tune --out results/tune
 python run_market.py select --dir results/tune
 python run_market.py run --period test --pol all --out results/test
 python run_market.py report --dir results/test
+python run_delivery.py audit
 ```
 
 ## Scope
@@ -49,5 +50,5 @@ The small pricing model omits piecewise offers, start-up tiers, and reserve. The
 pglib-uc model includes those features but does not compute settlement prices. Joint
 storage and unit-commitment clearing is not implemented.
 
-Unrelated models, completed reviews, and superseded study material are preserved in
+Unrelated models, completed reviews, and superseded documents are preserved in
 [`_archive/`](_archive/README.md).

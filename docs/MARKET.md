@@ -1,8 +1,8 @@
 # Historical storage replay
 
 One 1 MW, 4 MWh battery is replayed chronologically against published N.Y.C. zonal prices.
-The experiment values the model in [Storage trading](TRADING.md). It does not reproduce
-NYISO bid acceptance, dispatch, or settlement rules.
+The battery follows the model of [Storage trading](TRADING.md). The replay does not
+reproduce NYISO bid acceptance, dispatch, or settlement rules.
 
 ## Data and assumptions
 
@@ -34,14 +34,19 @@ metering adjustments, and fixed asset costs.
 
 ## Settlement and information
 
-For five-minute interval $i$ in hour $h$,
+Let $q_h$ be the hourly day-ahead position, $\lambda_h^{DA}$ and $\lambda_i^{RT}$ the
+day-ahead and real-time prices, $c_i$ and $d_i$ grid-side charge and discharge, and
+$k_{\rm deg}$ and $k_{\rm fee}$ the degradation and transaction costs. Settlement in
+five-minute interval $i$ of hour $h$ is
 
 $$
-q_h\lambda_h^{DA}\Delta
+R_i=q_h\lambda_h^{DA}\Delta
 +(g_i-q_h)\lambda_i^{RT}\Delta
 -(k_{\rm deg}+k_{\rm fee})(c_i+d_i)\Delta,
 \qquad g_i=d_i-c_i,\quad \Delta=1/12.
 $$
+
+This is the two-settlement form of [Storage trading](TRADING.md), per interval.
 
 The hourly position is chosen at the configured 05:00 decision time on the preceding day.
 It uses complete days through $D-2$. Dispatch is recomputed every fifteen minutes and uses
@@ -76,12 +81,12 @@ observed daily series; it does not include model or market-rule uncertainty.
 
 ## Results
 
-The archive supplied 364 complete days in 2025. Each trading policy ran 35,308 solves. All
+364 of the 365 days in 2025 are complete. Each trading policy ran 35,308 solves. All
 reached the requested $10^{-4}$ gap; no step used the fallback. The largest energy-balance
-error is $2.1\times10^{-15}$ MWh. For the deterministic, risk-neutral, and perfect-foresight
+error in these runs is $2.1\times10^{-15}$ MWh. For the deterministic, risk-neutral, and perfect-foresight
 policies, settlement rebuilt from the exported intervals differs by at most $0.0013; CVaR
-was not reconciled from exports. That check is recorded in the
-[archived audit](../_archive/20260916-focus-reset/delivery/results/nyc/2025/audit.json).
+was not reconciled from exports. The
+[audit record](results/delivery/nyc/2025/audit.json) carries those checks.
 
 | Policy | Net, $ | 95% block interval, $ | Worst day, $ | Cycles |
 | --- | ---: | ---: | ---: | ---: |
@@ -104,21 +109,37 @@ produce a smaller tail in the next.
 Full tables, monthly values, run configurations, and figures are in
 [`docs/results/`](results/README.md).
 
-## Post-hoc delivery sensitivity
+## Delivery sensitivity
 
-A later experiment reused 2025 with the deviation constraint
+The settlement above assumes the day-ahead position is accepted in full and that the
+participant self-dispatches around it. Relaxing that assumption imposes the band
 
 $$
-|(d_{st}-c_{st})-q_t|\le\delta,
-\qquad\delta\in\{\infty,1,0.25,0\}\ \text{MW}.
+-\delta\le(d_{st}-c_{st})-q_t\le\delta,
+\qquad \delta\in\{\infty,1,0.25,0\}\ \text{MW},
 $$
 
-It covered the deterministic, risk-neutral, and perfect-foresight policies; CVaR was not
-run. It is a post-hoc sensitivity, not an independent held-out result. At $\delta=0$, net
-settlement was 30,153 USD, 30,131 USD, and 36,536 USD, respectively. The risk-neutral run at
-$\delta=0.25$ stopped on 2025-12-15 because its fixed position was infeasible. Eleven
-completed runs passed independent settlement, energy, and cap checks. The program and
-evidence are [archived](../_archive/20260916-focus-reset/delivery/results/README.md).
+on the same year. At $\delta=0$ the position is delivered exactly; $\delta=\infty$ is the
+unbounded replay. Net settlement, in dollars:
+
+| Policy | $\delta=\infty$ | $\delta=1$ | $\delta=0.25$ | $\delta=0$ |
+| --- | ---: | ---: | ---: | ---: |
+| Deterministic | 41,178 | 33,006 | 27,396 | 30,153 |
+| Risk neutral | 33,131 | 26,727 | infeasible | 30,131 |
+| Perfect foresight | 190,720 | 134,831 | 63,161 | 36,536 |
+
+Delivery is the binding assumption: enforcing it removes 27% of the deterministic result and
+81% of the perfect-foresight reference. The response is not monotone in $\delta$, because the
+band also changes the position chosen against it. The risk-neutral run at $\delta=0.25$
+stopped on 2025-12-15 with an infeasible capped dispatch, the specified outcome for a fixed
+position under a finite band. CVaR was not run.
+
+The band reuses the evaluation year, so it is a sensitivity and not a second held-out result.
+Eleven completed runs passed independent settlement, energy, and band checks. A capped run can
+report a large raw relative gap, because the contract's constant profit leaves a near-zero
+variable objective; the audit re-solves those days and requires the full score to lie within
+$10^{-7}$ of its certified bound. Results and the audit record are in
+[`docs/results/delivery/`](results/delivery/README.md).
 
 ## Reproduction
 
@@ -130,9 +151,11 @@ python run_market.py tune --out results/tune
 python run_market.py select --dir results/tune
 python run_market.py run --period test --pol all --out results/test
 python run_market.py report --dir results/test
+python run_delivery.py audit
 ```
 
-Only `fetch` uses the network. Tests use committed fixtures.
+`run_delivery.py` replays the delivery band and rebuilds its audit record. Only `fetch`
+uses the network. Tests use committed fixtures.
 
 ## Limits
 

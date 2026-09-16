@@ -17,5 +17,5 @@ Outputs from the [NYISO replay](../MARKET.md).
 | `tune.md`, `selected.json` | Validation grid and selected settings |
 
 The five-minute `intervals.csv.gz` exports are omitted because each is about 2 MB. The
-executed revision is recorded in each `metrics.json`. A later delivery-band sensitivity is
-preserved in the [scope archive](../../_archive/20260916-focus-reset/delivery/results/README.md).
+executed revision is recorded in each `metrics.json`. The delivery-band sensitivity on the
+same year is in [`delivery/`](delivery/README.md).

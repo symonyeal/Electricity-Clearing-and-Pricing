@@ -61,5 +61,9 @@ remain under [`docs/results/`](results/README.md). Interval exports and source a
 not committed; a fresh checkout must reacquire the NYISO files to repeat the full annual
 reconciliation.
 
-The former benchmark tables, local-code review, and post-hoc delivery experiment are
-preserved in the [dated archive](../_archive/20260916-focus-reset/README.md).
+The delivery band is replayed over the same year by `run_delivery.py`; its runs are checked
+against their own interval exports and recorded in
+[`docs/results/delivery/`](results/delivery/README.md).
+
+The former benchmark tables and the completed local-code review are preserved in the
+[dated archive](../_archive/20260916-focus-reset/README.md).

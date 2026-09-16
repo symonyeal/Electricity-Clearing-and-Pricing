@@ -32,7 +32,7 @@ piecewise points can instead remove feasible output and make the model infeasibl
 | Minimum run and down times dropped | 2,452,664.23 |
 
 `ConvexHullPricing.jl` reads only `piecewise_production[1]["cost"]` and
-`startup[1]["cost"]`. The corresponding truncations are shown above.
+`startup[1]["cost"]`. The corresponding truncations are the second and third rows.
 
 ## Result fields
 

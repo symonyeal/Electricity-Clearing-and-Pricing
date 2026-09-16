@@ -49,7 +49,7 @@
 | Fit on training data, select on 2024, and evaluate the frozen policies on 2025. | This separates estimation, selection, and evaluation. |
 | Reconstruct settlement from exported interval rows. | The audit does not share the replay arithmetic. |
 | Permit a zero-power fallback only when `cap=None`. | Zero power can violate a finite delivery band. |
-| Treat the delivery-cap runs as post-hoc sensitivity. | They reuse 2025 and are not a second held-out evaluation. |
+| Report the delivery band as a sensitivity, not a second evaluation. | It reuses 2025; only the assumption changes. |
 
 ## Open work
 
@@ -58,5 +58,5 @@
 3. Joint storage and unit-commitment clearing with network deliverability.
 4. Stochastic or robust system clearing. Storage price scenarios are exogenous.
 
-Superseded decisions and out-of-scope studies are in the
+Superseded decisions and the out-of-scope pit model are in the
 [dated archive](../_archive/20260916-focus-reset/README.md).

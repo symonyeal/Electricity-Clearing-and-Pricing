@@ -107,9 +107,9 @@ with an infeasible capped dispatch, so there is no `cap-0.25/neutral/` directory
 place of that run's metrics, and the log and launch record remain under
 `results/delivery/` locally.
 
-The existing split is `arb = sum(g * RT - costs)` and `spread = sum(q * (DA - RT))`, with
+The split is `arb = sum(g * RT - costs)` and `spread = sum(q * (DA - RT))`, with
 interval durations included; the two sum to net by identity. The spread is an accounting
 basis term, not a measure of undelivered energy: it may be nonzero even when `g=q`
 everywhere. Dependence on the delivery assumption is measured by the change in net between
 the unbounded and the capped replay of the same policy. The annual tables also carry
-imbalance MWh and the largest absolute deviation, which say what was actually delivered.
+imbalance MWh and the largest absolute deviation, which measure delivery directly.
