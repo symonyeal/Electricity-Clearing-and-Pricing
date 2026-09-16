@@ -114,6 +114,7 @@ def cmd_tune(cf, a, log):
 def cmd_select(cf, a, log):
     """Apply the selection rule in docs/MARKET.md to the validation runs."""
     rows = [json.loads(f.read_text()) for f in sorted(Path(a.dir).glob("*.json"))]
+    rows = [r for r in rows if "policy" in r]        # the rule's own output lives here too
     if not rows:
         raise ValueError(f"no validation runs under {a.dir}")
     best = {}
@@ -129,6 +130,8 @@ def cmd_select(cf, a, log):
         best["cvar"]["rule"] = "net among smaller tail" if ok else "smallest tail, rule not binding"
     out = {p: {k: b[k] for k in ("tag", "L", "S", "w", "al", "net", "cvar", "drawdown")}
            for p, b in best.items()}
+    if "cvar" in best:
+        out["cvar"]["rule"] = best["cvar"]["rule"]
     log(json.dumps(out, indent=1))
     if a.out:
         Path(a.out).write_text(json.dumps(out, indent=1) + "\n")

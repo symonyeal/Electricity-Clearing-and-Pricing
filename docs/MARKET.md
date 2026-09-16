@@ -196,9 +196,135 @@ python run_market.py report --dir results/test
 committed fixtures in `tests/fixtures/nyiso`, which `tests/fixtures/build.py` rebuilds
 from the archive. Each run writes `intervals.csv.gz`, `daily.csv`, `monthly.csv`,
 `metrics.json` with its diagnostics, fit record and environment, and the `config.toml`
-that produced it. `report` writes `tables.md` and four standalone SVG figures: the cumulative net
+that produced it. The exported evidence for the run reported below is kept in
+[`docs/results/`](results/README.md). `report` writes `tables.md` and four standalone SVG figures: the cumulative net
 settlement of every policy, net settlement by month, the share of the year earned on its
 best days, and one day's prices, stored energy and grid power.
+
+## The validation search
+
+Fifteen configurations were replayed over 2024. Only the two policies without
+hyperparameters, no trading and perfect foresight, had been replayed on the held-out year
+when this search ran, and neither has a lookback, a scenario count or a risk parameter to
+choose, so nothing about a tuned policy's held-out performance entered it.
+
+| Policy | Lookback | Scenarios | Risk weight | Confidence | Net | Tail loss 5% | Drawdown | Worst day | Cycles |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| deterministic forecast | 30 | 16 | 0.0 | 0.95 | 13,569 | 188 | 806 | -663 | 328 |
+| deterministic forecast | 15 | 16 | 0.0 | 0.95 | 12,898 | 176 | 921 | -544 | 335 |
+| deterministic forecast | 60 | 16 | 0.0 | 0.95 | 8,772 | 226 | 1,015 | -743 | 320 |
+| deterministic forecast | 120 | 16 | 0.0 | 0.95 | 6,470 | 230 | 1,323 | -704 | 319 |
+| risk neutral | 30 | 8 | 0.0 | 0.95 | 14,180 | 223 | 987 | -615 | 338 |
+| risk neutral | 30 | 16 | 0.0 | 0.95 | 13,079 | 195 | 958 | -606 | 329 |
+| risk neutral | 15 | 8 | 0.0 | 0.95 | 12,558 | 177 | 977 | -596 | 340 |
+| risk neutral | 15 | 16 | 0.0 | 0.95 | 11,930 | 162 | 917 | -397 | 336 |
+| risk neutral | 60 | 16 | 0.0 | 0.95 | 7,753 | 235 | 1,017 | -740 | 323 |
+| risk neutral | 60 | 8 | 0.0 | 0.95 | 6,370 | 266 | 1,656 | -858 | 347 |
+| risk neutral | 120 | 16 | 0.0 | 0.95 | 5,912 | 233 | 1,384 | -695 | 322 |
+| risk neutral | 120 | 8 | 0.0 | 0.95 | 258 | 289 | 2,619 | -685 | 341 |
+| CVaR | 30 | 8 | 0.25 | 0.95 | 12,737 | 199 | 1,041 | -478 | 326 |
+| CVaR | 30 | 8 | 0.5 | 0.9 | 10,586 | 161 | 687 | -413 | 321 |
+| CVaR | 30 | 8 | 0.5 | 0.95 | 10,586 | 161 | 687 | -413 | 321 |
+
+The lookback window dominates everything else in the grid. Both policies earn about twice
+as much at thirty days as at sixty, and the risk-neutral policy at a hundred and twenty
+days with eight scenarios earns almost nothing at all. The scenario count matters far
+less: at thirty days the two counts differ by 8% for the risk-neutral policy, while
+lengthening the window from thirty to a hundred and twenty days costs it 98%. The grid
+first ran 30, 60 and 120 days and its best value was its own boundary, so it was extended
+to fifteen days before any tuned policy was replayed on the held-out year. Fifteen came in
+below thirty for both policies, which leaves the chosen window inside the searched range
+rather than at its edge.
+
+A shorter window is not simply worse. The fifteen-day configurations carry the smallest
+tail losses in the grid, and the risk-neutral policy at fifteen days with sixteen
+scenarios has both the smallest tail loss, 162, and the smallest worst day, -397. The
+rule selects on net settlement, so it did not choose them.
+
+The two CVaR confidences are one configuration, not two. With eight equally likely
+scenarios any confidence above 0.875 puts the whole tail weight on the single worst
+scenario, so 0.90 and 0.95 are the same objective and returned the same year to the cent.
+All three risk configurations met the rule's condition of a smaller validation tail loss
+than the risk-neutral policy's 223, and the rule took the largest net among them.
+
+Frozen: a thirty-day lookback with sixteen scenarios for the deterministic forecast,
+thirty days with eight scenarios for the risk-neutral policy, and the same with a risk
+weight of 0.25 at 0.95 confidence for CVaR. The persistence coefficient was refitted on
+everything before the held-out year, 819 days and 18,838 hourly pairs, and held: 0.731 to
+0.739 depending on the ensemble each policy uses.
+
+## Measured results
+
+The held-out year is 2025, replayed once per policy from 2 MWh, carrying energy across
+every day boundary and ending each day at the same 2 MWh target. The archive supplied 364
+of its 365 days in full; 2025-05-27 is recorded as skipped and the battery holds its
+energy through it. Nothing was re-tuned, and no day was dropped.
+
+| Policy | Day ahead | Imbalance | Gross | Costs | Net | 2.5% | 97.5% | Worst day | Drawdown | Tail loss 5% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no trading | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| deterministic forecast | -36,419 | 84,861 | 48,441 | 7,263 | 41,178 | 17,571 | 73,907 | -917 | 1,362 | 299 |
+| risk neutral | -34,823 | 75,431 | 40,608 | 7,477 | 33,131 | 9,182 | 65,272 | -2,955 | 4,304 | 507 |
+| CVaR | -28,584 | 67,827 | 39,243 | 7,259 | 31,983 | 6,365 | 64,947 | -4,274 | 5,981 | 585 |
+| perfect foresight | -22,830 | 222,424 | 199,595 | 8,875 | 190,720 | 138,858 | 256,192 | 0 | 0 | -75 |
+
+| Policy | Day-ahead MWh | Imbalance MWh | Grid MWh | Discharged MWh | Cycles | Delivered energy | Spread |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no trading | 0 | 0 | 0 | 0 | 0.0 | 0 | 0 |
+| deterministic forecast | 7,203 | 8,014 | 2,905 | 1,332 | 361.9 | 28,357 | 12,821 |
+| risk neutral | 7,210 | 8,032 | 2,991 | 1,371 | 372.6 | 26,573 | 6,558 |
+| CVaR | 7,045 | 7,651 | 2,904 | 1,331 | 361.7 | 26,180 | 5,803 |
+| perfect foresight | 6,982 | 9,177 | 3,550 | 1,627 | 442.2 | 89,522 | 101,198 |
+
+| Policy | Solves | Seconds | ms per solve | Max gap | Holds | Skipped | Cold | Max SOC error MWh |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no trading | 364 | 0 | 0.0 | 0 | 0 | 1 | 0 | 0 |
+| deterministic forecast | 35,308 | 725 | 20.5 | 0.0001 | 0 | 1 | 0 | 2.1e-15 |
+| risk neutral | 35,308 | 1,919 | 54.4 | 0.0001 | 0 | 1 | 0 | 1.2e-15 |
+| CVaR | 35,308 | 1,686 | 47.7 | 0.0001 | 0 | 1 | 0 | 3.1e-16 |
+| perfect foresight | 35,308 | 475 | 13.5 | 9.9e-05 | 0 | 1 | 0 | 2.1e-15 |
+
+The deterministic forecast earned the most of the three implementable policies, $41,178,
+which is 21.6% of what perfect foresight earned on the same days. The risk-neutral policy
+earned $33,131 and CVaR $31,983. The bootstrap intervals overlap almost completely, so
+this ordering is not a measured difference between the policies: a year is not enough data
+to separate them when ten days carry two thirds of the result.
+
+Two thirds to four fifths of each traded policy's net is energy it actually delivered,
+and the rest is the day-ahead position's spread against real time. Perfect foresight is
+the other way round: $101,198 of its $190,720, 53%, is the spread. What foresight mostly
+buys, in this market and at this battery size, is knowledge of the difference between two
+prices rather than knowledge of when to move energy. That component is a convergence
+trade, and a physical resource in New York cannot take it freely; it is the function of a
+virtual bid, under rules this study does not model.
+
+The year is a handful of days. For the deterministic policy the best day is 22% of the
+year, the best ten days are 68%, and the best fifty are 100.2%, so the remaining 315 days
+lose money in aggregate. July alone is 53% of its year, 65% of the risk-neutral policy's
+and 67% of CVaR's, almost all of it on 2025-07-01, when the real-time price in this zone
+reached $3,808/MWh for over two hours. Perfect foresight is far less concentrated, 30% in
+its best ten days, because it collects the ordinary spread every day as well.
+
+The scenario ensemble is not a forecast. The day-ahead solve's expected score averaged
+$285 a day for the deterministic policy against $113 realized, and $380 against $91 for
+the risk-neutral one; the correlation between what a day was expected to earn and what it
+earned is 0.16 and 0.19. The optimizer is exact given its scenarios, and the scenarios are
+optimistic by a factor of two and a half to four.
+
+CVaR did not deliver the tail it was selected for. On the validation year its tail loss
+was 199 against the risk-neutral policy's 223, which is why the rule chose it; on the
+held-out year its tail loss is 585 against 507, its worst day is -$4,274 against -$2,955,
+and its drawdown is $5,981 against $4,304. Tuning a risk measure on one year did not
+reduce it in the next. The reported ordering follows the pre-registered rule, and this is
+what it produced.
+
+Every solve reached its tolerance. Each trading policy ran 35,308 solves, between 475 and
+1,919 seconds in total and 13 to 54 milliseconds each, at an achieved gap no larger than
+the requested 1e-4, with no held step, no coarse retry and no cold start. The largest
+energy-bound violation across 105,120 settlement intervals is 3e-15 MWh, and every policy
+ended the year at the 2 MWh target. `tests/test_market.py` rebuilds each run's settlement
+from its own interval rows by a path that shares nothing with the replay's arithmetic; on
+these five runs the two agree to the cent.
 
 ## Limits
 
@@ -212,7 +338,15 @@ best days, and one day's prices, stored energy and grid power.
 - The day-ahead decision uses hourly averages of real-time prices; within-hour real-time
   shape enters only through the real-time stage.
 - Results are dominated by a small number of scarcity days. The tail statistics, the
-  monthly table and the bootstrap interval are reported for that reason.
+  monthly table and the bootstrap interval are reported for that reason, and the
+  difference between the three implementable policies is inside those intervals.
+- Part of every policy's result is a day-ahead position settled back in real time rather
+  than delivered. The volume table and the delivered-versus-spread split state how much.
+  A physical resource in New York cannot take that position freely: it is what a virtual
+  bid does, under a different registration and different charges.
+- Tuning a risk measure on one year did not reduce it in the next. CVaR was selected for
+  the smaller validation tail and produced a larger held-out tail than the risk-neutral
+  policy. One year of selection data is thin for a tail statistic.
 - One zone, one battery size, one year held out. Nothing here is a general statement
   about storage profitability.
 - The archive restates corrected prices. The study reads it as it stood on 2026-09-15, so

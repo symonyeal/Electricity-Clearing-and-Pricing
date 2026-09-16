@@ -12,15 +12,18 @@ pytest 9.1.1 and Ruff 0.16.7. All commands ran from the repository root.
 git diff --check
 ```
 
-Result: **297 passed in 29.38 seconds**; Ruff, dependency and diff checks passed.
+Result: **341 passed in 38.00 seconds**; Ruff, dependency and diff checks passed.
 
 The full suite includes the pglib-uc MIP at a requested 1% gap, the reference LP objective,
 published pricing cases, network checks, MineLib, the independent pit routes and storage.
-CI now partitions ordinary and slow tests so it does not solve the full MIP twice.
+CI partitions ordinary and slow tests so it does not solve the full MIP twice, and runs
+the study's smoke command against the committed price fixtures.
 
-Storage has 44 checks: two independent formulations over twelve seeded cases and
-analytical efficiency, duration, terminal-state, settlement, information and risk cases;
-invalid-input, infeasibility, enumeration-limit and solver-failure checks. The pglib-uc
+Storage has 65 checks: two independent formulations over twenty-four seeded cases, half
+of them against a fixed position the battery cannot deliver, and analytical efficiency,
+duration, terminal-state, settlement, offer-versus-obligation, scenario-day-ahead-price,
+information and risk cases; invalid-input, infeasibility, enumeration-limit and
+solver-failure checks. The historical study has 23 more, listed below. The pglib-uc
 checks now verify achieved gap and lower bound, including a renewable-only continuous case.
 
 ## Synthetic storage results
@@ -37,7 +40,7 @@ CVaR confidence is 0.8. Both exact routes give:
 | 1 | 30 | -30 | 30 | 30 | 0 |
 
 The 24-hour, eight-scenario example reveals the remaining price path at hour 13. It has
-132 binary nodes and solved in 0.056 seconds: mean 344.761101, loss CVaR -316.803404,
+132 binary nodes and solved in 0.061 seconds: mean 344.761101, loss CVaR -316.803404,
 score and upper bound 337.771677, achieved gap zero. This is an assumed information
 experiment, not an out-of-sample profit measurement.
 
@@ -47,12 +50,49 @@ times over three warm runs, from `/tmp/emm-storage-bench.log`:
 
 | Paths x periods | Shared binaries | Separate binaries | Shared seconds | Separate seconds | Objective difference |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 8 x 24 | 48 | 216 | 0.0215 | 0.0512 | 0 |
-| 32 x 24 | 48 | 792 | 0.0304 | 0.1561 | 2.84e-14 |
+| 8 x 24 | 48 | 216 | 0.0222 | 0.0530 | 0 |
+| 32 x 24 | 48 | 792 | 0.0324 | 0.1600 | 2.84e-14 |
 
 This demonstrates removal of duplicated decisions. It is not a general speed comparison
 with DOVE, HydroBoost or an industrial trading system. Times depend on the machine and
 solver version; `run_storage.py` regenerates the cases and assertions.
+
+## Historical study
+
+The NYISO archive was downloaded on 2026-09-15 and parsed for the N.Y.C. zone from
+2022-10-01 to 2025-12-31: 28,513 day-ahead hours, all present, and 342,156 five-minute
+real-time bins, of which 342,123 are present. The 33 missing bins all fall on 2025-05-27,
+the one day of 1,188 the archive did not supply in full; the replay records it as skipped
+and the battery holds its energy through it. Day lengths of 23, 24 and 25 hours and 276,
+288 and 300 bins all occur, and prices run from -153.35 to 5,527.35 $/MWh. Eleven days
+carry a real-time posting that ran more than a minute past five, 4.8 hours in total and
+fifteen minutes at the longest; `run_market.py validate` lists them.
+
+One coefficient is fitted. On 2022-10-01 to 2023-12-31, 453 days and 10,420 hourly pairs,
+the hourly persistence of the residual against the analog ensemble is 0.76; refitted
+through 2024-12-31, 819 days and 18,838 pairs, it is 0.73. Nineteen hours of decay leaves
+0.004 of it, which is why the day-ahead decision applies no level shift.
+
+Fifteen configurations were replayed over the validation year and the held-out year was
+then replayed once per policy. Each trading policy ran 35,308 solves, every one reaching
+the requested 1e-4 gap, with no held step, no coarse retry and no cold start; the largest
+energy-bound violation over 105,120 settlement intervals is 3e-15 MWh and every policy
+ended the year at its 2 MWh target.
+
+| Policy | Net | 2.5% | 97.5% | Delivered energy | Spread | Worst day | Cycles | Solver seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| No trading | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Deterministic forecast | 41,178 | 17,571 | 73,907 | 28,357 | 12,821 | -917 | 362 | 725 |
+| Risk neutral | 33,131 | 9,182 | 65,272 | 26,573 | 6,558 | -2,955 | 373 | 1,919 |
+| CVaR | 31,983 | 6,365 | 64,947 | 26,180 | 5,803 | -4,274 | 362 | 1,686 |
+| Perfect foresight | 190,720 | 138,858 | 256,192 | 89,522 | 101,198 | 0 | 442 | 475 |
+
+Settlement was rebuilt from each run's own interval rows, by a path that shares nothing
+with the replay's arithmetic: metrics, daily rows and intervals agree to the cent on all
+five runs, and stored energy recomputed from the dispatch matches the exported trajectory
+to 2e-5 MWh over 105,120 intervals. [The study](MARKET.md) reports the search, the tails,
+the concentration and what the numbers do not establish; `docs/results/` holds the
+exported evidence.
 
 ## Optional DOVE comparison
 

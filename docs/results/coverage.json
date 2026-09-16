@@ -1,0 +1,116 @@
+{
+ "zone": "N.Y.C.",
+ "reports": [
+  {
+   "report": "damlbmp",
+   "intervals": 28513,
+   "present": 28513,
+   "missing": 0,
+   "partial": 0,
+   "seconds": 102646800.0,
+   "min": 12.3,
+   "max": 425.0,
+   "first": 1664596800,
+   "last": 1767240000
+  },
+  {
+   "report": "realtime",
+   "intervals": 342156,
+   "present": 342123,
+   "missing": 33,
+   "partial": 0,
+   "seconds": 102636900.0,
+   "min": -153.35,
+   "max": 5527.35,
+   "first": 1664596800,
+   "last": 1767243300
+  }
+ ],
+ "gaps": {
+  "tolerance": 60,
+  "days": 11,
+  "seconds": 17154.0,
+  "worst": [
+   {
+    "date": "2022-11-05",
+    "postings": 1,
+    "longest": 600,
+    "seconds": 300.0
+   },
+   {
+    "date": "2022-12-13",
+    "postings": 1,
+    "longest": 420,
+    "seconds": 120.0
+   },
+   {
+    "date": "2023-08-23",
+    "postings": 1,
+    "longest": 600,
+    "seconds": 300.0
+   },
+   {
+    "date": "2023-10-02",
+    "postings": 1,
+    "longest": 565,
+    "seconds": 265.0
+   },
+   {
+    "date": "2023-10-09",
+    "postings": 4,
+    "longest": 900,
+    "seconds": 2100.0
+   },
+   {
+    "date": "2023-11-16",
+    "postings": 12,
+    "longest": 900,
+    "seconds": 6900.0
+   },
+   {
+    "date": "2023-12-07",
+    "postings": 2,
+    "longest": 600,
+    "seconds": 600.0
+   },
+   {
+    "date": "2024-02-27",
+    "postings": 1,
+    "longest": 869,
+    "seconds": 569.0
+   },
+   {
+    "date": "2024-08-20",
+    "postings": 1,
+    "longest": 600,
+    "seconds": 300.0
+   },
+   {
+    "date": "2025-05-27",
+    "postings": 9,
+    "longest": 900,
+    "seconds": 5400.0
+   },
+   {
+    "date": "2025-11-12",
+    "postings": 1,
+    "longest": 600,
+    "seconds": 300.0
+   }
+  ]
+ },
+ "days": 1188,
+ "incomplete": [
+  "2025-05-27"
+ ],
+ "hours_per_day": [
+  23,
+  24,
+  25
+ ],
+ "bins_per_day": [
+  276,
+  288,
+  300
+ ]
+}

@@ -41,7 +41,8 @@ model and one settlement: no trading, a deterministic forecast, risk-neutral sto
 optimization, CVaR, and perfect foresight as an explicitly optimistic benchmark.
 
 [The study](docs/MARKET.md) states the data provenance, the information timeline, the
-protocol, the measured results and what remains unvalidated. It is a price-taking
+protocol, the measured results and what remains unvalidated, and
+[docs/results](docs/results/README.md) holds what the held-out year actually wrote. It is a price-taking
 simulation against published prices, not evidence that these positions could have been
 submitted, accepted or settled.
 
