@@ -197,9 +197,9 @@ committed fixtures in `tests/fixtures/nyiso`, which `tests/fixtures/build.py` re
 from the archive. Each run writes `intervals.csv.gz`, `daily.csv`, `monthly.csv`,
 `metrics.json` with its diagnostics, fit record and environment, and the `config.toml`
 that produced it. The exported evidence for the run reported below is kept in
-[`docs/results/`](results/README.md). `report` writes `tables.md` and four standalone SVG figures: the cumulative net
-settlement of every policy, net settlement by month, the share of the year earned on its
-best days, and one day's prices, stored energy and grid power.
+[`docs/results/`](results/README.md). `report` writes `tables.md` and four standalone SVG
+figures: the cumulative net settlement of every policy, net settlement by month, the share
+of the year earned on its best days, and one day's prices, stored energy and grid power.
 
 ## The validation search
 
@@ -226,10 +226,11 @@ choose, so nothing about a tuned policy's held-out performance entered it.
 | CVaR | 30 | 8 | 0.5 | 0.9 | 10,586 | 161 | 687 | -413 | 321 |
 | CVaR | 30 | 8 | 0.5 | 0.95 | 10,586 | 161 | 687 | -413 | 321 |
 
-The lookback window dominates everything else in the grid. Both policies earn about twice
-as much at thirty days as at sixty, and the risk-neutral policy at a hundred and twenty
-days with eight scenarios earns almost nothing at all. The scenario count matters far
-less: at thirty days the two counts differ by 8% for the risk-neutral policy, while
+The lookback window dominates everything else in the grid. Both policies earn between one
+and a half and two and a quarter times as much at thirty days as at sixty, and the
+risk-neutral policy at a hundred and twenty days with eight scenarios earns almost nothing
+at all. The scenario count matters far less: at thirty days the two counts differ by 8%
+for the risk-neutral policy, while
 lengthening the window from thirty to a hundred and twenty days costs it 98%. The grid
 first ran 30, 60 and 120 days and its best value was its own boundary, so it was extended
 to fifteen days before any tuned policy was replayed on the held-out year. Fifteen came in
@@ -290,10 +291,10 @@ earned $33,131 and CVaR $31,983. The bootstrap intervals overlap almost complete
 this ordering is not a measured difference between the policies: a year is not enough data
 to separate them when ten days carry two thirds of the result.
 
-Two thirds to four fifths of each traded policy's net is energy it actually delivered,
-and the rest is the day-ahead position's spread against real time. Perfect foresight is
-the other way round: $101,198 of its $190,720, 53%, is the spread. What foresight mostly
-buys, in this market and at this battery size, is knowledge of the difference between two
+Between 69% and 82% of each traded policy's net is energy it actually delivered, and the
+rest is the day-ahead position's spread against real time. Perfect foresight is the other
+way round: $101,198 of its $190,720, 53%, is the spread. What foresight mostly buys, in
+this market and at this battery size, is knowledge of the difference between two
 prices rather than knowledge of when to move energy. That component is a convergence
 trade, and a physical resource in New York cannot take it freely; it is the function of a
 virtual bid, under rules this study does not model.
@@ -301,9 +302,10 @@ virtual bid, under rules this study does not model.
 The year is a handful of days. For the deterministic policy the best day is 22% of the
 year, the best ten days are 68%, and the best fifty are 100.2%, so the remaining 315 days
 lose money in aggregate. July alone is 53% of its year, 65% of the risk-neutral policy's
-and 67% of CVaR's, almost all of it on 2025-07-01, when the real-time price in this zone
-reached $3,808/MWh for over two hours. Perfect foresight is far less concentrated, 30% in
-its best ten days, because it collects the ordinary spread every day as well.
+and 67% of CVaR's, almost all of it on 2025-07-01, when the zone's real-time price stayed
+above $1,000/MWh for two and a quarter hours and peaked at $3,807.52. Perfect foresight is
+far less concentrated, 30% in its best ten days, because it collects the ordinary spread
+every day as well.
 
 The scenario ensemble is not a forecast. The day-ahead solve's expected score averaged
 $285 a day for the deterministic policy against $113 realized, and $380 against $91 for
