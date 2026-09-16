@@ -13,7 +13,7 @@
 #   _rw,_eq,_fx  : THE feasible set, written once: rows, equalities, bounds
 #   _pl          : those same rows with the binaries fixed -> one dispatch polytope
 #   _vw          : the start and stop flags an on/off row implies
-#   _tj,_cl      : every on/off schedule, and the feasible ones with their polytopes
+#   _tj,_cl      : every on/off trajectory, and the feasible ones with their polytopes
 #   _iv,_ar      : one on-interval's polytope, and every arc of a unit's interval graph
 #   _nw,_tr      : THE network, written once: angles, nodal flows, line limits; and the
 #                  transport form of the same lines, limits only
@@ -21,13 +21,13 @@
 #   xc,fl,nf     : one exchange capacity pair, all of them, and how many columns they fill
 #   _sy,_out     : assemble the algebraic system, and split a solved vector back up
 #   _ce,_fp,_px  : a stage ceiling, an optimal-face probe, and one canonical price
-#   _jt          : dispatch one chosen schedule per unit against demand
+#   _jt          : dispatch one chosen trajectory per unit against demand
 #   _hold        : the columns that hold a given commitment fixed
 #   _bk,_pf      : a unit's commitment blocks, and one block's profit
 #   _om          : best profit each unit could earn by self-scheduling
 #   uc,rx        : integer clearing, and the same system relaxed
-#   en           : joint schedule enumeration, the independent optimum
-#   hc,hl        : the convex hull from intervals, and the same hull from whole schedules;
+#   en           : joint trajectory enumeration, the independent optimum
+#   hc,hl        : the convex hull from intervals, and the same hull from whole trajectories;
 #                  the balance dual of either is the CHP or, with pc's ceilings, the AIC
 #   lmp          : prices with the cleared commitment held fixed
 #   qd           : the Lagrangian dual value at a price
@@ -354,7 +354,7 @@ def _tj(x, T):
 
 
 def _cl(x, T, cap=None):
-    """One unit's feasible trajectories as columns: pattern, polytope and fixed cost."""
+    """One unit's feasible trajectories as disjuncts: pattern, polytope and fixed cost."""
     C = []
     for u, v, w in _tj(x, T):
         r = _pl(x, T, u, v, w, cap)
@@ -618,7 +618,7 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
 
 
 def _jt(g, d, net, C, j):
-    """Dispatch one chosen column per unit against demand; return cost, output and duals."""
+    """Dispatch one chosen trajectory per unit against demand; return cost, output and duals."""
     G, T = len(g), d.shape[1]
     n = G * T
     A, b, c = [], [], np.zeros(n)
@@ -761,9 +761,9 @@ def _iv(x, T, s, e, cap=None):
 def _ar(x, T, cap=None):
     """Every arc of one unit's on/off graph: a node it leaves, a node it enters, an interval.
 
-    A schedule is one source-to-T path, so the flow polytope of this graph, carrying one
+    A commitment trajectory is one source-to-T path, so this graph's flow polytope, carrying one
     dispatch polytope on each run arc, is the exact convex hull of the unit. The graph has
-    O(T^2) arcs where _cl enumerates 2^T schedules. Node t means the unit is off and free to
+    O(T^2) arcs where _cl examines 2^T binary trajectories. Node t means the unit is off and free to
     start in period t; a run arc over s..e enters node e+1+md, which enforces the minimum
     down time between consecutive intervals.
     """
@@ -789,7 +789,7 @@ def _ar(x, T, cap=None):
 
 
 def hc(g, d, cap=None, net=None):
-    """The same convex hull as hl, built from O(T^2) intervals instead of 2^T schedules.
+    """The same convex hull as hl, using O(T^2) arcs instead of up to 2^T trajectories.
 
     Yu, Guan and Chen prove this per-unit form exact with ramping and minimum run times
     present, by a dynamic-programming argument. `hl` is retained as the independent check on

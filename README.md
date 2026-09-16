@@ -14,8 +14,8 @@ Each model has an independent formulation or external benchmark.
 
 SciPy/HiGHS solves all live optimization models. [Sources](docs/SOURCES.md) records the
 formulations and data. [Validation](docs/VALIDATION.md) records executed checks.
-[Decomposition](docs/DW.md) records why the convex hull is solved directly rather than
-by column generation, and when that choice would reverse.
+[Decomposition](docs/DW.md) compares the direct hull formulations with an extreme-point
+master and states when column generation becomes a candidate.
 
 ## Run
 

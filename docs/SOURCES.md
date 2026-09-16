@@ -70,10 +70,11 @@ explicit study assumptions; they are not attributed to NYISO manuals.
 
 ## Decomposition
 
-[Decomposition](DW.md) compares the explicit hull against column generation and cites
-Andrianesis et al. (2020), Wolsey (2021) chapters 10 and 11, and Dantzig and Wolfe
-(1960). No decomposition is implemented, so those sources are listed there rather than
-here.
+[Decomposition](DW.md) relates the two direct hull formulations to the Dantzig–Wolfe
+extreme-point master and states the requirements for column generation. It cites
+Andrianesis et al. (2020) §§II–III, Wolsey (2021) chapters 10–11 with page pinpoints, and
+Dantzig and Wolfe (1960), DOI 10.1287/opre.8.1.101. No column-generation implementation or
+benchmark is reported, so those sources are listed there rather than here.
 
 ## Solver contracts
 

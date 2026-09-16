@@ -5,7 +5,8 @@ is not treated as an independent check.
 
 | Component | Primary check | Independent check |
 | --- | --- | --- |
-| Unit commitment and prices | Published cases `ex1`–`ex3`; synthetic network cases | Joint commitment enumeration; schedule and interval hulls |
+| Unit commitment and prices | Published cases `ex1`–`ex3`; synthetic network cases | Joint commitment enumeration; trajectory and interval hulls |
+| Hull formulation sizes | Deterministic `run_bench.py sizes` report | Variable-count and enumeration-ceiling tests |
 | pglib-uc | Equations (1)–(24), assembled independently | Official RTS-GMLC relaxation objective |
 | Storage | Sparse MIP | Signed-flow enumeration and analytical cases |
 | NYISO replay | Chronological fixture runs | Settlement and energy reconstructed from exports |
@@ -21,6 +22,7 @@ Run from the repository root:
 python -m pytest -q
 python -m ruff check .
 python -m pip check
+python run_bench.py sizes
 python run_storage.py
 git diff --check
 ```
@@ -35,6 +37,12 @@ program and joint enumeration agree on ten seeded markets. The compact interval 
 the schedule hull agree on every feasible instance among seeds 0 through 140: relative
 objective tolerance $10^{-9}$ and price tolerance $10^{-4}$/MWh. A capped case also checks
 hull value and demand payment when the price coordinates are not uniquely determined.
+
+`python run_bench.py sizes` reproduces the decomposition-size table from the seed-7
+synthetic markets. It reports graph arcs and actual LP variables separately for `hc`, and
+feasible commitment trajectories and actual LP variables for `hl`. Tests pin the counting
+rule, the 100,000-variable `hl` boundary, and the loss of full-hull dual feasibility when a
+restricted trajectory set happens to retain the same primal objective.
 
 DC and directional-NTC cases check uncongested reduction, congestion, loop flow, exchange
 direction, and malformed networks. The full pglib-uc formulation reproduces the official

@@ -1,155 +1,196 @@
 # Dantzig–Wolfe decomposition
 
-This repository computes exact convex hull prices without Dantzig–Wolfe decomposition.
-That is a choice, not an oversight, and this note records the reasoning and the measurements
-behind it.
+This repository uses direct extended formulations for the convex hull of its small unit
+class. Dantzig–Wolfe decomposition is an alternative when the extreme-point master is too
+large to write and no practical direct formulation is available.
 
-## The reformulation
+## Reformulation
 
-Let $X_g$ be unit $g$'s feasible set and $N_g$ its feasible schedules. Writing
-$z_g^{n}\ge0$ for the weight on schedule $n$ and $\hat x_{g,t}^{n}$ for its output,
+Let $X_g$ be the bounded mixed-integer feasible set of unit $g$, including output and
+commitment variables, and let $V_g$ index the extreme points of
+$\operatorname{conv}(X_g)$. For $k\in V_g$, let $\hat p_{g,t}^{k}$ and $\hat c_g^{k}$ be
+the output and cost of the extreme point. The one-bus master is
 
 $$
 \begin{aligned}
-\min\ &\sum_{g}\sum_{n\in N_g}\hat c_g^{n}z_g^{n}\\
-\text{s.t.}\ &\sum_{g}\sum_{n\in N_g}\hat x_{g,t}^{n}z_g^{n}=D_t,\qquad t\in T,\\
-&\sum_{n\in N_g}z_g^{n}=1,\qquad g.
+\min\quad &\sum_g\sum_{k\in V_g}\hat c_g^{k}z_g^{k}\\
+\text{s.t.}\quad
+&\sum_g\sum_{k\in V_g}\hat p_{g,t}^{k}z_g^{k}=D_t,
+&&t=1,\ldots,T,\\
+&\sum_{k\in V_g}z_g^{k}=1,
+&&g=1,\ldots,G,\\
+&z_g^{k}\ge0.
 \end{aligned}
 $$
 
-The first rows couple the units; the second are the convexity rows, one per unit. This is
-the Dantzig–Wolfe reformulation of the clearing problem, and its linear relaxation solves
-the Lagrangian dual, so its balance duals are exact convex hull prices. Andrianesis,
-Bertsimas, Caramanis and Hogan set that out for unit commitment; Wolsey gives the general
-construction.
+The first rows couple the units; the second are the convexity rows. This LP is the
+Dantzig–Wolfe reformulation of the clearing problem. It has the value of the Lagrangian
+dual obtained by dualizing balance, and an optimal balance dual is a convex hull price.
+Andrianesis et al. give the unit-commitment construction and interpretation in §III,
+pp. 4–5; Wolsey gives the general construction in §11.2, p. 215.
 
-Column generation solves it without writing $N_g$ down. A restricted master holds a subset
-of schedules and returns duals $\lambda$ on the balance rows and $\pi_g$ on the convexity
-rows. Schedule $n$ has reduced cost
+Let $\lambda_t$ and $\pi_g$ be the restricted master's balance and convexity duals. The
+reduced cost of extreme point $k$ is
 
 $$
-\hat c_g^{n}-\sum_t\lambda_t\hat x_{g,t}^{n}-\pi_g,
+\rho_g^k=\hat c_g^k-\sum_t\lambda_t\hat p_{g,t}^k-\pi_g.
 $$
 
-so the column to add is the one minimising it, which is unit $g$'s most profitable
-self-schedule at prices $\lambda$. A negative reduced cost means the unit would rather
-self-schedule than follow the master; no negative reduced cost anywhere means lost
-opportunity is minimised and the prices are the convex hull prices. Termination is finite
-because each $X_g$ is a bounded polyhedron with finitely many extreme points.
+Pricing unit $g$ therefore solves
 
-## When the structure fits
+$$
+\min_{x_g\in X_g}\left\{c_g(x_g)-\sum_t\lambda_t p_{g,t}\right\},
+$$
 
-Dantzig–Wolfe is the right tool when all four hold.
+equivalently its maximum-profit self-schedule at prices $\lambda$. The restricted-master
+dual is feasible for the full master if every unit's minimum reduced cost is nonnegative.
+At an exact optimum that minimum is zero for each unit because its convexity row has a
+positive master variable. In computation, termination requires a stated reduced-cost
+tolerance for every exactly solved pricing problem; a small master objective gap is not a
+substitute.
 
-| Condition | In unit commitment |
+Finite termination follows because $\operatorname{conv}(X_g)$ is a polytope with finitely
+many extreme points. It does not follow from $X_g$ itself being a polyhedron: $X_g$ contains
+integrality restrictions.
+
+## Structure and sparsity
+
+Column generation is applicable when the following structure is present.
+
+| Condition | Unit-commitment interpretation |
 | --- | --- |
-| The matrix is block-angular: few coupling rows, many independent blocks | The balance rows couple; each unit's ramps, run times and bounds are its own block |
-| The block subproblem is easy | One unit's cheapest schedule at a price is a shortest path over its interval graph |
-| The blocks have far more extreme points than the master can hold | A unit over $T$ periods has up to $2^T$ schedules |
-| The linear relaxation, not an integer solution, is what is wanted | The convex hull price is the relaxation's dual |
+| Few coupling rows and independent blocks | Balance and other system requirements couple otherwise independent units |
+| A tractable pricing problem | Each unit can optimize its own schedule at a given price |
+| An impractical number of block extreme points | Binary commitment trajectories alone number up to $2^T$, and each trajectory's dispatch polytope can have several extreme points |
+| The master relaxation is the required object | Convex hull prices are duals of that relaxation |
 
-The third condition is the one that makes the method pay, and the reason is a basic fact
-about linear programs rather than anything about electricity. The master has one balance
-row per period, or one per bus and period on a network, and one convexity row per unit,
-so a basic optimum has at most $|T|+G$ nonzero columns. At 96 units over 24 periods
-that is at most 120 schedules out of the $96\times2^{24}=1{,}610{,}612{,}736$ the
-units admit between them. Column generation finds those columns without enumerating the
-rest.
+For the displayed one-bus master, a basic solution has at most $T+G$ positive
+extreme-point columns. Thus a 96-unit, 24-period basic solution uses at most 120 positive
+columns. This is a support bound, not a bound on generated columns: degeneracy and
+tailing-off can cause column generation to add many columns that are zero in the final
+solution. On a network, the corresponding bound depends on the rank of all coupling rows
+and on any explicit network variables retained in the master.
 
-## Why this repository does not use it
+The $96\times2^{24}=1{,}610{,}612{,}736$ figure is only an upper bound on binary
+commitment trajectories across 96 unconstrained units. It is not the number of
+Dantzig–Wolfe columns, because a column fixes continuous dispatch as well as commitment.
 
-Because a compact exact alternative exists for this unit class. `hc` implements the
-interval formulation of Yu, Guan and Chen: an extended formulation whose projection is the
-same convex hull, of size $O(T^2)$ per unit rather than $O(2^T)$. It is solved once, by one
-linear program, with no iteration and no convergence criterion.
+## Direct formulations in this repository
 
-The two routes are measured side by side. Arcs are `hc`'s columns; schedules are `hl`'s,
-the explicit union-of-polyhedra form that is the master with every column present.
+`hl` and `hc` are two direct extended formulations of the same unit hull.
 
-| Units × periods | `hc` arcs | `hl` schedules | `hl` columns | Enumeration |
-| --- | ---: | ---: | ---: | ---: |
-| 6 × 4 | 79 | 70 | 350 | 0.02 s |
-| 8 × 6 | 200 | 332 | 2,324 | 0.10 s |
-| 10 × 8 | 409 | 1,528 | 13,752 | 0.66 s |
-| 12 × 10 | 730 | 6,924 | 76,164 | 4.42 s |
-| 8 × 14 | 896 | 68,774 | 1,031,610 | 41.09 s |
-| 10 × 16 | 1,441 | 338,611 | 5,756,387 | 177.32 s |
-| 24 × 16 | 3,478 | beyond reach | n/a | n/a |
-| 48 × 24 | 15,026 | beyond reach | n/a | n/a |
-| 96 × 24 | 30,074 | beyond reach | n/a | n/a |
+`hl` enumerates feasible binary commitment trajectories. For each trajectory it retains a
+continuous dispatch polytope and applies Balas' union-of-polyhedra construction. It is not
+the extreme-point master above: one `hl` trajectory contributes $T$ dispatch variables and
+one weight, whereas one master column is a fixed extreme point.
 
-`hl` passes `LIM[1]`, its 100,000-variable ceiling, between 12 × 10 and 8 × 14 and is
-refused past it. `hc` grows quadratically in the horizon and is still 30,074 columns at
-96 × 24, which one solve handles. Enumeration is what fails at scale; the hull is not.
+`hc` uses the interval formulation of Yu, Guan and Chen. It has $O(T^2)$ interval-graph
+arcs. An on-interval of length $l$ also owns $l$ dispatch variables, so this implementation
+has $O(T^3)$ LP variables in the worst case. It remains a polynomial-size exact extended
+formulation assembled in full rather than generated iteratively.
 
-The two agree where both run: equal objective to relative $10^{-9}$ and equal price to
-$10^{-4}$/MWh on every feasible instance among seeds 0 through 140. That agreement is the
-evidence that the compact route returns what the master would have returned.
+The following counts use `mk_g` with its default seed 7. The `hc` variable count includes
+the arc weights and their interval dispatch variables. The `hl` trajectory count is
+obtained by path counting on the interval graph without enumerating the paths; its variable
+count is the number of trajectories times $T+1$. Run `python run_bench.py sizes` to
+reproduce the table.
 
-So the rule is narrower than "decompose large problems". **Dantzig–Wolfe earns its place
-when the block has no compact exact extended formulation.** Where one is known and small,
-solving it directly is shorter, exact in one step, and leaves no stopping rule to justify.
+| Units × periods | `hc` arcs | `hc` LP variables | `hl` trajectories | `hl` LP variables | `hl` guard |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 6 × 4 | 79 | 186 | 70 | 350 | within limits |
+| 8 × 6 | 200 | 620 | 332 | 2,324 | within limits |
+| 10 × 8 | 409 | 1,562 | 1,528 | 13,752 | within limits |
+| 12 × 10 | 730 | 3,300 | 6,924 | 76,164 | within limits |
+| 8 × 14 | 896 | 5,300 | 68,774 | 1,031,610 | over 100,000-variable limit |
+| 10 × 16 | 1,441 | 9,498 | 338,611 | 5,756,387 | over 100,000-variable limit |
+| 24 × 16 | 3,478 | 22,854 | 815,451 | 13,862,667 | over 100,000-variable limit |
+| 48 × 24 | 15,026 | 139,230 | 405,457,887 | 10,136,447,175 | over 16-period limit |
+| 96 × 24 | 30,074 | 278,526 | 811,024,503 | 20,275,612,575 | over 16-period limit |
 
-## Where it would earn its place here
+`hl` exceeds `LIM[1]`, its 100,000-variable ceiling, between 12 × 10 and 8 × 14; it also
+refuses horizons beyond `LIM[0]=16`. The last three `hl` sizes are exact path counts, not
+constructed LPs. At 96 × 24, `hc` has 30,074 arcs and 278,526 LP variables and is solved
+as a full formulation by `run_face_scan.py`; no restricted-master iteration is used.
 
-Two places, both concrete.
+The formulations have equal objectives to relative tolerance $10^{-9}$ and equal selected
+prices to $10^{-4}$/MWh on the published cases and all 104 feasible markets among seeds 0
+through 140. This is an implementation check on sampled instances. Exactness follows from
+the two formulations, not from the sample. The table compares the direct formulations; it
+does not report a column-generation benchmark.
 
-**The pglib-uc unit class.** [pglib-uc](PGLIB.md) carries convex piecewise production costs,
-off-time-dependent start-up tiers and a reserve requirement. The interval hull `hc` is
-proved exact for the smaller class in [Pricing](PRICING.md), not for this one, and no
-compact hull for the richer class is implemented here. Its prices are therefore locational
-marginal prices with the integers pinned, and they leave 370,817.15 of make-whole over 30
-units. A convex hull price for that formulation is open work, and column generation is the
-route that does not require finding a compact hull first: the subproblem stays one unit's
-own problem however rich its rows become.
+A practical compact exact formulation removes the present need for decomposition. Its
+absence is a reason to evaluate Dantzig–Wolfe when the pricing problems remain tractable
+and the coupling set remains small. It is neither a necessary nor a sufficient condition;
+the generated-master size and measured solution time still decide between methods.
 
-**The joint feasible set.** [Joint clearing](JOINT.md) adds storage to the balance. The
-per-period cut $c/C+d/D\le1$ is the hull of the mode restriction alone, not of the resource
-coupled to its state of charge. A resource block is a natural Dantzig–Wolfe block, and its
-subproblem is a small dynamic program over stored energy.
+## Candidate extensions
 
-## What it would cost
+Two model classes lack a complete direct hull in this repository.
 
-Wolsey's computational issues are the ones to weigh, and one of them is load-bearing here.
+**The pglib-uc unit class.** [pglib-uc](PGLIB.md) includes convex piecewise production
+costs, off-time-dependent start-up tiers, and reserve. No compact exact formulation for
+that complete class is implemented here. On the documented 1%-gap incumbent, its current
+prices fix the integer decisions and leave $370{,}817.15$ of make-whole over 30 units.
+Dantzig–Wolfe is a candidate because a column can include one unit's energy and reserve
+schedule and the pricing problem remains separable by unit. No column-generation runtime
+has been measured.
 
-| Cost | Consequence |
+**The storage resource set.** [Joint clearing](JOINT.md) uses the per-period inequality
+$c/C+d/D\le1$, which is the hull of the charge/discharge mode restriction for that period.
+It is not the hull of the full resource set because state of charge couples periods. A
+resource can form one Dantzig–Wolfe block if its self-scheduling MILP or dynamic
+optimization is a practical pricing oracle. No such master or benchmark is implemented.
+
+These are candidate applications, not evidence that column generation is faster than a
+direct formulation not yet constructed.
+
+## Computational requirements
+
+Wolsey's implementation issues are directly relevant (p. 217 and p. 226).
+
+| Requirement | Consequence |
 | --- | --- |
-| Slow start: many early iterations before the duals mean anything | Initial columns must be seeded, usually from a heuristic schedule |
-| Tailing-off: the last iterations move the objective very little | The stopping rule decides the last digits of the price |
-| Degenerate and unstable duals | Stabilisation by dual bounds or penalty functions, which is another parameter to justify |
-| Master infeasibility before enough columns exist | Slack columns with a penalty, whose penalty is a parameter |
+| Restricted-master feasibility | Seed feasible unit schedules or use explicit artificial/slack columns with a documented penalty |
+| Slow initial progress | Supply useful starting columns, commonly from a feasible clearing or a heuristic |
+| Tailing-off | Expect more generated columns than the final basic support |
+| Dual instability | If stabilization is used, document its bounds or penalties |
+| Heuristic pricing | It may be used during early iterations, but every unit's final pricing problem must be solved exactly |
 
-Tailing-off is the one that matters most in this repository, because what is wanted is the
-dual and not the objective. [Pricing](PRICING.md) selects one price from the optimal dual
-face by minimising demand payment and then walking each balance price, and `_px` imposes
-dual feasibility as an **equality**: an inequality admits vectors that are not duals
-whenever a variable is free of a bound row. A column-generation master stopped early
-returns duals of a restricted hull, not of the hull. The prices would be feasible for a
-smaller set and wrong for the real one, and the failure is quiet: the number looks like a
-price. Any Dantzig–Wolfe route added here has to reach zero reduced cost on every unit
-before its duals may be read, not merely reach a small optimality gap.
+This repository requires the price, not only the master objective. `_px` first minimizes
+demand payment on the optimal dual face, probes that face, and then applies a
+lexicographic price rule. Its stationarity equation is an equality because finite primal
+bounds are represented as rows and the remaining primal variables are free. Replacing the
+equality by an inequality admits vectors that are not LP duals when a variable has no bound
+row.
 
-## What already exists
+Column generation adds another condition. A dual returned by a converged restricted
+master is certified only after pricing that particular vector. The restricted master has
+fewer dual constraints than the full master, so `_px` can select a different vector on its
+larger optimal dual face that violates an omitted column. The selected vector must itself
+be priced against every unit. If any reduced cost is below tolerance, the column must be
+added and the master, face selection, and pricing checks repeated. Prices may be reported
+only after the selected vector passes this test.
 
-Adding column generation here would be adding the loop, not the parts.
+## Existing and missing components
 
-| Piece | Where it already is |
-| --- | --- |
-| The master with every column present | `hl`, the union-of-polyhedra form |
-| The subproblem, a unit's best self-schedule at a price | `_om` in `models/uc_price.py` |
-| The reduced-cost test, profit against the convexity dual | `pay`, which reports lost opportunity per unit |
-| A price-selection rule for a degenerate optimal face | `_px` |
+| Component | Present support | Required work |
+| --- | --- | --- |
+| Unit pricing objective | `_om` solves maximum-profit self-scheduling | Return the optimizing schedule and its cost, not only profit |
+| Explicit exact comparator | `hl` represents the same hull by Balas' formulation | Do not treat its trajectory variables as extreme-point master columns |
+| Price-face rule | `_px` selects a dual from a complete LP | Apply it inside a generate–select–reprice loop |
+| Payment diagnostic | `pay` reports realized profit, make-whole, lost opportunity, and uplift | It is not a reduced-cost test because it has no convexity dual $\pi_g$ |
 
-`_om` is the Dantzig–Wolfe subproblem under another name: it solves one integer program per
-unit over that unit's own rows and returns the best profit the unit could earn by
-self-scheduling. What is missing is the restricted master and the loop between them.
+A column-generation implementation therefore still needs a restricted master, initial
+columns or artificials, a column representation, convexity-dual extraction, a
+schedule-returning pricing oracle, the generation loop, selected-dual repricing, and
+documented numerical tolerances.
 
 ## Sources
 
 | Source | Use |
 | --- | --- |
-| Andrianesis, P., Bertsimas, D., Caramanis, M. C. and Hogan, W. W. (2020), [“Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition”](https://arxiv.org/abs/2012.13331) | The reformulation, the reduced cost, and the self-scheduling reading of the subproblem |
-| Wolsey, L. A. (2021), *Integer Programming*, 2nd ed., Wiley, ch. 10–11 | Lagrangian duality; the Dantzig–Wolfe reformulation, column generation, branch-and-price, and the computational issues above |
-| Dantzig, G. B. and Wolfe, P. (1960), “Decomposition Principle for Linear Programs”, *Operations Research* 8(1), 101–111 | The original decomposition |
+| Andrianesis, P., Bertsimas, D., Caramanis, M. C. and Hogan, W. W. (2020), [“Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition”](https://arxiv.org/abs/2012.13331), §II–III, pp. 3–5 | Lagrangian-dual price, extreme-point master, reduced cost, self-scheduling oracle, and finite convergence |
+| Wolsey, L. A. (2021), *Integer Programming*, 2nd ed., Wiley, ch. 10, pp. 195–209; §§11.2–11.3, pp. 215–217; p. 226 | Lagrangian duality, Dantzig–Wolfe reformulation, column generation, initialization, stopping, and computational issues |
+| Dantzig, G. B. and Wolfe, P. (1960), [“Decomposition Principle for Linear Programs”](https://doi.org/10.1287/opre.8.1.101), *Operations Research* 8(1), 101–111 | Original decomposition |
 
-The formulations this note compares against are in [Sources](SOURCES.md).
+The direct hull formulations are cited in [Sources](SOURCES.md).

@@ -1,20 +1,23 @@
 # Benchmarks for unit commitment, prices and networks.
 #
 # LEGEND
-#   MKT,HUL     : market and convex-hull dimensions
+#   MKT,HUL,SIZ : market, priced-hull and size-report dimensions
+#   SD          : fixed synthetic-market seed for the size report
 #   LIN         : three-bus line limits
 #   EPS,EPS10   : AIC output relaxations
 #   tm,time     : timer and clock module
-#   mkt,hul     : one market or convex-hull row
+#   mkt,hul,sz  : one market, priced-hull or deterministic size row
+#   sizes,_kp   : size table and path count through one unit's interval graph
 #   aic,aseed   : AIC sweep and seeded check
 #   net,zon     : nodal and zonal network rows
 #   f,a,y,t     : timed function, arguments, result and seconds
 #   G,T         : unit and period counts
 #   g,d         : units and demand
 #   s,R         : integer clearing and relaxation
-#   L,H,A,E     : LMP, CHP, AIC and schedule-wise solutions
+#   L,H,A,E     : LMP, CHP, AIC and trajectory-wise hull solutions
 #   P           : payments at one price
-#   q,K         : hull columns and schedule count
+#   q,K         : hull columns and commitment-trajectory count
+#   C,V,N       : interval arcs, actual hc variables and actual hl variables
 #   cap,ep      : AIC output ceilings and relaxation
 #   cm,pm       : cleared cost and weighted price per MWh
 #   h           : spare MW in the peak-price period
@@ -22,19 +25,22 @@
 #   pi          : price vector
 #   nw          : three-bus network
 #   lim         : line limit
-#   e           : schedule-wise comparison or exchange flow
+#   e           : hl comparison or exchange flow
 #   rent        : demand payment less generator revenue
 #   tag         : market label
 
+import argparse
 import time
 
 import numpy as np
 
-from models.uc_price import (_ar, _cl, ck, ex3, ex4, ex5, hc, hl, lmp, mk_g, pay, pc, rx,
-                             uc)
+from models.uc_price import (LIM, _ar, _cl, ck, ex3, ex4, ex5, hc, hl, lmp, mk_g, pay, pc,
+                             rx, uc)
 
 MKT = [(12, 8), (24, 16), (48, 24), (96, 24)]
 HUL = [(6, 4), (8, 6), (10, 8), (12, 10), (8, 14)]
+SIZ = HUL[:-1] + [(8, 14), (10, 16), (24, 16), (48, 24), (96, 24)]
+SD = 7
 LIN = [100.0, 60.0, 40.0, 20.0]
 EPS = (1e-6, 1e-4, 1e-3, 0.1, 1.0, 10.0)
 EPS10 = (1e-6, 1e-5, 1e-4, 1e-3, 0.0025, 0.00275, 0.005, 0.1, 1.0, 10.0)
@@ -45,6 +51,47 @@ def tm(f, *a):
     t = time.perf_counter()
     y = f(*a)
     return y, time.perf_counter() - t
+
+
+def _kp(C, T):
+    """Count commitment trajectories as source-to-sink paths in one unit's interval graph."""
+    E = [[] for _ in range(T + 2)]
+    for a in C:
+        E[a[0]].append(a[1])
+    p = [0] * (T + 2)
+    p[T + 1] = 1
+    for t in [T + 1, *range(T)]:
+        for j in E[t]:
+            p[j] += p[t]
+    return p[T]
+
+
+def sz(G, T):
+    """Return hc arcs/variables and hl trajectories/variables without enumeration."""
+    g, d = mk_g(G, T, SD)
+    C = [_ar(x, T) for x in ck(g, d)[0]]
+    a = sum(len(x) for x in C)
+    V = sum(sum((q[3] - q[2] + 1 if q[4] is not None else 0) + 1 for q in x) for x in C)
+    K = sum(_kp(x, T) for x in C)
+    return a, V, K, K * (T + 1)
+
+
+def sizes():
+    """Print the deterministic formulation sizes used by the decomposition note."""
+    print("## Convex-hull formulation sizes\n")
+    print(f"Synthetic `mk_g` markets, seed {SD}. Trajectories are counted as graph paths.\n")
+    print("| Units x periods | hc arcs | hc variables | hl trajectories | "
+          "hl variables | hl guard |")
+    print("| --- | ---: | ---: | ---: | ---: | --- |")
+    for G, T in SIZ:
+        a, V, K, N = sz(G, T)
+        if T > LIM[0]:
+            q = f"over {LIM[0]}-period limit"
+        elif N > LIM[1]:
+            q = f"over {LIM[1]:,}-variable limit"
+        else:
+            q = "within limits"
+        print(f"| {G} x {T} | {a:,} | {V:,} | {K:,} | {N:,} | {q} |")
 
 
 def mkt(G, T):
@@ -163,6 +210,12 @@ def zon():
 
 
 if __name__ == "__main__":
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("table", nargs="?", choices=("sizes",), help="print one reproducible table")
+    args = p.parse_args()
+    if args.table == "sizes":
+        sizes()
+        raise SystemExit
     print("## Market clearing and locational prices\n")
     print(
         "| Units x periods | Variables | Cleared cost | uc | rx | pay | Relaxation gap | "
@@ -173,7 +226,7 @@ if __name__ == "__main__":
         mkt(*d)
     print("\n## Exact convex hull prices\n")
     print(
-        "| Units x periods | Arcs | Schedules | CHP | AIC | Schedule-wise | Price gap | "
+        "| Units x periods | Arcs | Trajectories | CHP | AIC | hl solve | Price gap | "
         "LMP uplift | CHP uplift | AIC uplift | AIC make-whole |"
     )
     print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")

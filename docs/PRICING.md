@@ -48,11 +48,12 @@ opportunity.
 | `lmp` | Cleared commitment fixed | LMP |
 | `qd` | One best self-schedule problem per unit | Lagrangian dual and lost opportunity |
 
-`hl` applies Balas' union-of-polyhedra construction to complete schedules. `hc` represents
-each on-interval by an arc in an acyclic graph. It requires $O(T^2)$ arcs instead of
-$2^T$ schedules. The two formulations agree on every published case and all 104 feasible
-markets among seeds 0 through 140: relative objective tolerance $10^{-9}$, price tolerance
-$0.0001/MWh.
+`hl` applies Balas' union-of-polyhedra construction to feasible commitment trajectories and
+their dispatch polyhedra. `hc` represents each on-interval by an arc in an acyclic graph.
+It requires $O(T^2)$ arcs instead of up to $2^T$ commitment trajectories; its interval
+dispatch variables make the implemented LP $O(T^3)$ in the worst case. The two formulations
+agree on every published case and all 104 feasible markets among seeds 0 through 140:
+relative objective tolerance $10^{-9}$, price tolerance $0.0001/MWh.
 
 ## Price selection
 
@@ -78,10 +79,11 @@ return different prices but the same objective and demand payment.
 
 ## Decomposition
 
-`hl` is the Dantzig–Wolfe master of this clearing with every column present, and `hc`
-is a compact extended formulation of the same hull. Neither is generated a column at a
-time. [Decomposition](DW.md) records the sizes that decide between them, and the reason
-a column-generation master stopped early cannot supply a price here.
+`hl` is a trajectory-wise Balas formulation of the same hull as the Dantzig–Wolfe
+extreme-point master; it is not that master written in full. `hc` is a direct interval
+extended formulation. Neither generates extreme-point columns. [Decomposition](DW.md)
+compares their sizes with the master representation and states the pricing and termination
+checks required by a column-generation implementation.
 
 ## Published cases
 

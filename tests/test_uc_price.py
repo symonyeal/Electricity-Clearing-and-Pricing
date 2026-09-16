@@ -18,6 +18,7 @@
 #   sd        : random seed                      h : a demand perturbation
 #   k         : the name of one price            a,b : a seeded generator, a best value
 #   f,n       : saved linear-program function and its call count
+#   sz,_kp    : deterministic hull-size report helper, and its path count
 #   AIC3,LMP3 : the talk's reported period-3 AIC and LMP prices
 
 import numpy as np
@@ -25,8 +26,9 @@ import pytest
 from scipy.optimize import linprog
 
 import models.uc_price as M
-from models.uc_price import (U, Net, Sol, ck, en, ex1, ex2, ex3, ex4, ex5, hc, hl, lmp, pay, pc,
-                             qd, run, rx, uc)
+from models.uc_price import (LIM, U, Net, Sol, ck, en, ex1, ex2, ex3, ex4, ex5, hc, hl, lmp, pay,
+                             pc, qd, run, rx, uc)
+from run_bench import _kp, sz
 
 AIC3 = 4390.0 / 30.0
 LMP3 = 90.0
@@ -131,9 +133,14 @@ def test_ex3_exact_aic_is_not_the_talks_price():
         M._cl = lambda x, T, c=None: [
             y for y in q(x, T, c) if x.su < 1.0 or tuple(y[0]) in {(0, 0, 0), (1, 1, 1)}
         ]
-        assert hl(g, d, cap).pi.ravel() == pytest.approx([10.0, 10.0, AIC3], abs=1e-3)
+        r = hl(g, d, cap)
     finally:
         M._cl = q
+    assert r.pi.ravel() == pytest.approx([10.0, 10.0, AIC3], abs=1e-3)
+    assert r.z == pytest.approx(7340.0, abs=1e-4)
+    z = qd(g, d, r.pi, cap)
+    assert z == pytest.approx(6202.5, abs=1e-4)
+    assert r.z - z == pytest.approx(1137.5, abs=1e-4)
 
 
 @pytest.mark.parametrize("q", [ex1, ex2, ex3])
@@ -383,9 +390,18 @@ def _rand(sd, lo=0.15, hi=0.6):
     return g, a.uniform(lo, hi, T) * sum(x.hi for x in g)
 
 
+def _hull(f, g, d):
+    """Return one hull result, accepting only the model's explicit infeasibility result."""
+    try:
+        return f(g, d)
+    except ValueError as e:
+        assert str(e) == "this demand is infeasible for the convex hull program"
+        return None
+
+
 @pytest.mark.parametrize("q", [ex1, ex2, ex3])
 def test_compact_hull_equals_enumerated_hull(q):
-    """The O(T^2) interval program and the 2^T schedule program are the same convex hull."""
+    """The O(T^2)-arc interval and trajectory-wise disjunctive formulations give one hull."""
     g, d = q()
     a, b = hl(g, d), hc(g, d)
     assert a.z == pytest.approx(b.z, rel=1e-9)
@@ -402,19 +418,67 @@ def test_compact_hull_equals_enumerated_hull_at_random(sd):
     through 140 cover 104 feasible markets; infeasible samples are ignored by both routes.
     """
     g, d = _rand(sd)
-    try:
-        a = hl(g, d)
-    except ValueError:
-        a = None
-    try:
-        b = hc(g, d)
-    except ValueError:
-        b = None
+    a, b = _hull(hl, g, d), _hull(hc, g, d)
     assert (a is None) == (b is None)
     if a is None:
         return
     assert a.z == pytest.approx(b.z, rel=1e-9)
     assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)
+
+
+def test_random_family_has_104_feasible_markets():
+    """The documented seed range contains 104 feasible and 37 infeasible clearings."""
+    n = 0
+    for sd in range(141):
+        g, d = _rand(sd)
+        try:
+            uc(g, d)
+        except ValueError as e:
+            assert str(e) == "this demand has no feasible unit commitment"
+        else:
+            n += 1
+    assert n == 104
+
+
+def test_hull_size_report_counts_actual_variables():
+    """An interval arc carries its own weight and, when on, one dispatch variable per period."""
+    a = sz(6, 4)
+    g, d = M.mk_g(6, 4, 7)
+    assert a == (79, 186, 70, 350)
+    assert a[2] == sum(len(M._cl(x, 4)) for x in ck(g, d)[0])
+
+
+@pytest.mark.parametrize("G,T", [(6, 4), (8, 6), (10, 8), (12, 10), (4, 12)])
+def test_path_count_equals_enumeration(G, T):
+    """Trajectories are counted as graph paths; enumeration confirms the rule.
+
+    The 48 x 24 and 96 x 24 rows of the decomposition table are path counts of sets far too
+    large to enumerate, so the counting rule itself is pinned on every horizon that can be
+    enumerated, per unit and in total. A rule that over-counted would inflate the figure the
+    note uses to argue that enumeration is out of reach.
+    """
+    g, d = M.mk_g(G, T, 7)
+    q = ck(g, d)[0]
+    assert sz(G, T)[2] == sum(len(M._cl(x, T)) for x in q)
+    for x in q:
+        assert _kp(M._ar(x, T), T) == len(M._cl(x, T))
+
+
+def test_trajectory_hull_crosses_the_variable_ceiling():
+    """The documented cases immediately around LIM[1] lie on opposite sides of the guard."""
+    a, b = sz(12, 10), sz(8, 14)
+    assert a[3] == 76_164 <= LIM[1]
+    assert b[3] == 1_031_610 > LIM[1]
+    assert 10 <= LIM[0] and 14 <= LIM[0]
+
+
+def test_trajectory_hull_enforces_the_variable_ceiling(monkeypatch):
+    """hl applies LIM[1] after constructing the unit trajectory lists."""
+    T = 14
+    K = LIM[1] // (T + 1) + 1
+    monkeypatch.setattr(M, "_cl", lambda *a: [None] * K)
+    with pytest.raises(ValueError, match="limited to 100000 variables"):
+        hl([U(0.0, 10.0, 1.0)], np.zeros(T))
 
 
 def test_capped_hull_agrees_on_what_the_data_determines():
