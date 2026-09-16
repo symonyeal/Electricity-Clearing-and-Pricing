@@ -9,6 +9,7 @@
 #   grid       : the validation search, run one configuration at a time
 
 import argparse
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -17,7 +18,7 @@ import numpy as np
 
 from market import fig, replay, report
 from market.cfg import Cf, read
-from market.nyiso import cov, fetch, frame, full, load, months
+from market.nyiso import cov, fetch, frame, full, gaps, load, months
 from market.scen import fit
 
 NAME = {"idle": "no trading", "det": "deterministic forecast", "neutral": "risk neutral",
@@ -30,14 +31,12 @@ def per(cf, p):
 
 def span(cf, p):
     """The frame a replay needs: the evaluated range plus the longest lookback."""
-    import datetime as dt
     a = dt.date.fromisoformat(per(cf, p)[0]) - dt.timedelta(days=int(cf.L) + 7)
     return max(str(a), cf.tr[0]), per(cf, p)[1]
 
 
 def _fit(cf, p, log):
     """Refit before the evaluated period, on data that ends before it starts."""
-    import datetime as dt
     hi = str(dt.date.fromisoformat(per(cf, p)[0]) - dt.timedelta(days=1))
     fr = frame(cf.zone, cf.tr[0], hi, cf.root, cf.cache)
     ft = fit(fr, cf.tr[0], hi, cf)
@@ -59,7 +58,7 @@ def cmd_validate(cf, a, log):
         out["reports"].append(cov(load(k, cf.zone, lo, hi, cf.root, cf.cache), k))
     fr = frame(cf.zone, lo, hi, cf.root, cf.cache)
     bad = [str(d.d) for d in fr if not full(d)]
-    out |= {"days": len(fr), "incomplete": bad,
+    out |= {"gaps": gaps(cf.zone, lo, hi, cf.root), "days": len(fr), "incomplete": bad,
             "hours_per_day": sorted({len(d.da) for d in fr}),
             "bins_per_day": sorted({len(d.rt) for d in fr})}
     log(json.dumps(out, indent=1))
@@ -153,6 +152,12 @@ def cmd_report(cf, a, log):
                        "97.5%", "Worst day", "Drawdown", "Tail loss 5%", "Cycles"],
                       ["policy", "rda", "rrt", "costs", "net", "net_lo", "net_hi",
                        "worst_day", "drawdown", "cvar", "cycles"], {"cycles": 1}),
+           "", "## Volume", "",
+           report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
+                      ["Policy", "Day-ahead MWh", "Imbalance MWh", "Grid MWh",
+                       "Discharged MWh", "Cycles", "Delivered energy", "Spread"],
+                      ["policy", "da_mwh", "imb_mwh", "throughput", "discharged",
+                       "cycles", "arb", "spread"], {"cycles": 1}),
            "", "## Solver and data", "",
            report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
                       ["Policy", "Solves", "Seconds", "ms per solve", "Max gap",
@@ -168,11 +173,15 @@ def cmd_report(cf, a, log):
                         for m in mo], ["Month"] + [NAME[p] for p in runs],
                        ["month"] + list(runs))]
     (d / "tables.md").write_text("\n".join(txt) + "\n")
-    x = np.arange(len(next(iter(dy.values()))))
+    dates = [r["date"] for r in next(iter(dy.values()))]
+    x = np.arange(len(dates))
+    lab = {i: dt.date.fromisoformat(v).strftime("%b")
+           for i, v in enumerate(dates) if v[8:] == "01"}
     fig.lines(d / "cumulative.svg",
               [(NAME[p], x, np.cumsum([r["net"] for r in dy[p]])) for p in runs],
               f"Cumulative net settlement, {cf.zone}, {cf.te[0]} to {cf.te[1]}",
-              "day of the held-out year", "currency")
+              "month of the held-out year", "currency",
+              fx=lambda v: lab.get(int(v), ""), xt=sorted(lab))
     fig.bars(d / "monthly.svg", [m[5:] for m in mo],
              [(NAME[p], np.array([sum(r["net"] for r in dy[p] if r["date"][:7] == m)
                                   for m in mo])) for p in runs],

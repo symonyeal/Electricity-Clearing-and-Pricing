@@ -11,6 +11,7 @@
 #   rda,rrt    : day-ahead settlement and real-time imbalance settlement, currency
 #   dg,dy,iv   : run diagnostics, one row per day, one row per settlement bin
 #   why        : ok, gap, hold, skip, cold or fail; recorded, never silently dropped
+#   fail       : why a solve missed its tolerance: limit, infeasible, unbounded, other
 #   z,ub       : the offer solve's risk score and its certified upper bound
 
 import time
@@ -66,6 +67,16 @@ def _sc_rt(fr, i, k, an, cf, pol):
     return rt_scen(fr, i, k, an, d.rt, cf, det=pol == "det")
 
 
+def _tag(msg):
+    """Name why a solve did not reach its tolerance, briefly enough for a table."""
+    if not msg:
+        return ""
+    m = msg.lower()
+    return ("limit" if "limit" in m else
+            "infeasible" if "infeasible" in m else
+            "unbounded" if "unbounded" in m else "other")
+
+
 def _solve(b, s, cf, q, w):
     """The requested solve, then a coarse retry, then hold. Every outcome is recorded."""
     t, msg = time.perf_counter(), ""
@@ -101,7 +112,7 @@ def day(fr, i, cf, pol, e):
     z = np.zeros(nb)
     row = {"date": str(d.d), "hours": nh, "bins": nb, "e0": e, "why": "ok",
            "solves": 0, "sec": 0.0, "gap": 0.0, "hold": 0, "coarse": 0, "viol": 0.0,
-           "analogs": 0, "cold": 0, "z": 0.0, "ub": 0.0}
+           "analogs": 0, "cold": 0, "z": 0.0, "ub": 0.0, "fail": ""}
     iv = {"t": d.t0 + BIN * np.arange(nb), "pda": np.repeat(d.da, 12), "prt": d.rt,
           "q": z.copy(), "c": z.copy(), "d": z.copy(), "e": z.copy()}
     if not full(d):
@@ -121,7 +132,8 @@ def day(fr, i, cf, pol, e):
     for k in range(ns):
         tg = _tg(cf, e, ns - k, cf.sp * DTB)
         b = _bat(cf, min(max(e, 0.0), cf.e), tg, cf.sp * DTB)
-        r, w, sec, _ = _solve(b, _sc_rt(fr, i, k, an, cf, pol), cf, qs[k:], _w(cf, pol))
+        r, w, sec, msg = _solve(b, _sc_rt(fr, i, k, an, cf, pol), cf, qs[k:], _w(cf, pol))
+        row["fail"] = row["fail"] or _tag(msg)
         row["solves"] += 1
         row["sec"] += sec
         row["hold"] += w == "hold"
@@ -176,6 +188,8 @@ def run(fr, cf, pol, lo, hi, log=None):
             log(f"{pol} {row['date']} e={e:.2f} net={sum(r['net'] for r in dy):.0f}")
     iv = {k: np.concatenate([a[k] for a in iv]) for k in iv[0]}
     dg = {"policy": pol, "days": len(dy), "first": dy[0]["date"], "last": dy[-1]["date"],
+          "failures": {t: sum(r["fail"] == t for r in dy)
+                       for t in sorted({r["fail"] for r in dy} - {""})},
           "skipped": sum(r["why"] == "skip" for r in dy),
           "cold": sum(r["cold"] for r in dy),
           "solves": sum(r["solves"] for r in dy),

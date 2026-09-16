@@ -11,6 +11,7 @@
 #   a,b      : inclusive first and last local date, "YYYY-MM-DD"
 #   fold     : second pass of a repeated local hour on the autumn transition day
 #   cov      : coverage report; expected, present, missing and partial intervals
+#   gaps     : postings whose interval ran longer than a bin, with the seconds involved
 #   Day      : one local day; hourly day-ahead, binned real-time, hour index per bin
 #   frame    : the local-day dataset every policy and every statistic reads
 
@@ -182,6 +183,37 @@ def load(k, zone, a, b, root="data/nyiso", cache=True):
     i = (t >= t0) & (t < t1)
     return Px(t[i], np.concatenate([x.p for x in r])[i],
               np.concatenate([x.cv for x in r])[i])
+
+
+def gaps(zone, a, b, root="data/nyiso", tol=60):
+    """Postings whose interval ran longer than a bin, read from the published files.
+
+    A real-time price applies from the previous posting to its own stamp, so a longer
+    interval is a longer-lived price, not a filled one. This reports where that happened
+    and for how long, because the binned grid cannot show it.
+    """
+    root = Path(root)
+    out, tot = [], 0.0
+    for m in months(a, b):
+        f = root / "realtime" / f"{m}realtime_zone_csv.zip"
+        if not f.exists():
+            continue
+        with zipfile.ZipFile(f) as z:
+            names = set(z.namelist())
+            for d in days(a, b):
+                n = d.strftime("%Y%m%drealtime_zone.csv")
+                if d.strftime("%Y%m01") != m or n not in names:
+                    continue
+                t0 = int(dt.datetime.combine(d, dt.time(), TZ).timestamp())
+                u, _ = _day(z, n, "realtime", zone)
+                w = np.diff(np.r_[t0, u])
+                i = np.flatnonzero(w > BIN + tol)
+                if len(i):
+                    out.append({"date": str(d), "postings": len(i),
+                                "longest": int(w[i].max()),
+                                "seconds": float((w[i] - BIN).sum())})
+                    tot += out[-1]["seconds"]
+    return {"tolerance": tol, "days": len(out), "seconds": tot, "worst": out[:40]}
 
 
 def cov(px, k):

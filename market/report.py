@@ -8,6 +8,9 @@
 #   cvar,var   : tail loss of the daily net at confidence al
 #   bl,B,seed  : moving block length, bootstrap replications, generator seed
 #   cyc,thr    : equivalent full cycles and grid throughput in MWh
+#   da_mwh     : day-ahead volume; imb_mwh : volume that settled as imbalance instead
+#   arb,spread : the exact split of net into delivered energy and the position's
+#                day-ahead minus real-time spread; the two sum to net by identity
 #   iv,dy,mo   : interval, daily and monthly rows
 
 import datetime as dt
@@ -25,7 +28,7 @@ from market.replay import DTB
 from models.storage import cvar
 
 IVC = ("t", "pda", "prt", "q", "c", "d", "e", "rda", "rrt", "deg", "fee")
-DYC = ("date", "why", "hours", "bins", "analogs", "e0", "e1", "ch", "dis",
+DYC = ("date", "why", "fail", "hours", "bins", "analogs", "e0", "e1", "ch", "dis",
        "rda", "rrt", "deg", "fee", "net", "z", "ub", "gap", "solves", "sec",
        "hold", "coarse", "cold", "viol")
 
@@ -56,6 +59,7 @@ def metrics(rn, cf, seed=0, B=10000):
     lo, hi = boot(net, bl, B, seed)
     thr = float((rn.iv["c"] + rn.iv["d"]).sum() * DTB)
     dis = float(rn.iv["d"].sum() * DTB)
+    g = rn.iv["d"] - rn.iv["c"]
     m = {"policy": rn.dg["policy"], "days": n,
          "traded": int(sum(r["why"] not in ("skip", "cold", "fail") for r in dy)),
          "skipped": rn.dg["skipped"], "cold": rn.dg["cold"],
@@ -71,6 +75,12 @@ def metrics(rn, cf, seed=0, B=10000):
           "var": float(np.percentile(net, 100 * (1 - al))),
           "cvar": cvar(net, np.full(n, 1 / n), al) if n > 1 else float("nan"),
           "throughput": thr, "discharged": dis, "cycles": dis / cf.ed / cf.e,
+          "da_mwh": float(np.abs(rn.iv["q"]).sum() * DTB),
+          "imb_mwh": float(np.abs(g - rn.iv["q"]).sum() * DTB),
+          "arb": float((g * np.nan_to_num(rn.iv["prt"])
+                        - (cf.kd + cf.fee) * (rn.iv["c"] + rn.iv["d"])).sum() * DTB),
+          "spread": float((rn.iv["q"] * (np.nan_to_num(rn.iv["pda"])
+                                         - np.nan_to_num(rn.iv["prt"]))).sum() * DTB),
           "e_open": dy[0]["e0"], "e_close": dy[-1]["e1"],
           "solves": rn.dg["solves"], "solve_seconds": rn.dg["solve_seconds"],
           "ms_per_solve": 1e3 * rn.dg["solve_seconds"] / max(rn.dg["solves"], 1),

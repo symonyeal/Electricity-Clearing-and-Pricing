@@ -44,8 +44,13 @@ autumn transition by order of appearance, and refuses a local time that does not
 A local day therefore carries 23, 24 or 25 hours and 276, 288 or 300 five-minute bins.
 
 Real-time postings are irregular whenever the real-time dispatch reruns inside a
-five-minute clock interval. Each posting is weighted by the seconds it covers inside its
-bin, which is exact when the battery holds one power level across the bin.
+five-minute clock interval. A posted price applies from the previous posting to its own
+stamp, so each posting is weighted by the seconds it covers inside its bin, which is exact
+when the battery holds one power level across the bin. Where the cadence itself lapses the
+price simply lives longer, and `validate` reports every posting that ran more than a
+minute past five so the reader can see how often that happened rather than infer it from a
+grid that cannot show it. Over 2022-10-01 to 2025-12-31 in this zone it happened on 11
+days and covers 4.8 hours of 28,513, the longest single interval being fifteen minutes.
 
 `python run_market.py validate` writes the coverage report: intervals expected, present,
 missing and partial, the price range, and every day the archive did not supply in full.

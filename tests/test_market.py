@@ -15,7 +15,7 @@ import pytest
 
 from market import fig, replay, report, scen
 from market.cfg import Cf, read
-from market.nyiso import BIN, HR, _utc, cov, frame, full, load
+from market.nyiso import BIN, HR, _utc, cov, frame, full, gaps, load
 from models.storage import B, st
 
 FX = "tests/fixtures/nyiso"
@@ -178,6 +178,8 @@ def test_hold_fallback(fr, monkeypatch):
     monkeypatch.setattr(replay, "st", bad)
     rn = replay.run(fr, CF, "det", *CF.te)
     assert rn.dg["holds"] > 0
+    assert rn.dg["failures"] == {"limit": sum(r["fail"] == "limit" for r in rn.dy)}
+    assert any(r["fail"] == "limit" for r in rn.dy)
     assert rn.dg["solves"] == sum(r["solves"] for r in rn.dy)
     assert np.all(np.isfinite(rn.iv["e"]))
     m = report.metrics(rn, CF, B=200)
@@ -238,6 +240,20 @@ def test_missing_prices_settle_nothing(fr):
         replay.settle(bad, CF)
 
 
+def test_long_postings_are_reported():
+    """A price that ran longer than a bin is reported, not hidden by the binned grid."""
+    g = gaps(CF.zone, "2025-06-01", "2025-06-01", FX)
+    assert g["days"] == 0                                   # this day only runs early
+    t, p, last = [], [], None
+    for r in _raw("realtime", "2025-06-01", CF.zone):
+        last = _utc(r[0].strip(), "realtime", last)
+        t.append(last)
+        p.append(float(r[3]))
+    assert max(np.diff(t)) <= BIN + 60
+    d = frame(CF.zone, "2025-06-01", "2025-06-01", FX, cache=False)[0]
+    assert np.all(d.cv == BIN)                              # every bin is fully covered
+
+
 def test_tree_branches_without_merging():
     """A node is a set of paths: labels refine, never merge, and never name one path."""
     rng = np.random.default_rng(3)
@@ -288,6 +304,10 @@ def test_idle_and_metric_identities(fr):
     assert m2["throughput"] == pytest.approx(
         float((r2.iv["c"] + r2.iv["d"]).sum() * BIN / HR))
     assert m2["cycles"] == pytest.approx(m2["discharged"] / CF.ed / CF.e)
+    g = r2.iv["d"] - r2.iv["c"]
+    assert m2["throughput"] == pytest.approx(float(np.abs(g).sum() * BIN / HR))
+    assert m2["imb_mwh"] == pytest.approx(float(np.abs(g - r2.iv["q"]).sum() * BIN / HR))
+    assert m2["arb"] + m2["spread"] == pytest.approx(m2["net"], abs=1e-9)
     assert m2["max_violation"] < 1e-9
 
 

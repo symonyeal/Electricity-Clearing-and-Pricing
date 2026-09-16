@@ -11,6 +11,7 @@
 #   Sc         : scenarios: da, rt, probabilities, information labels, analog days
 #   h,br,mn    : information labels, branch offsets in periods, smallest node to split
 #   rho,res    : fitted hourly persistence of the residual, and the observed residual
+#   MRES       : bins of observed residual averaged before it is carried forward
 #   Ft         : the fit record: coefficient, days used, window, and pair count
 
 import datetime as dt
