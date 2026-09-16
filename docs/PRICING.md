@@ -1,11 +1,8 @@
 # Unit commitment and pricing
 
-The published-case and numerical-face results below are retained from baseline `8e4637e`.
-Current regression checks are recorded in [Validation](VALIDATION.md); larger historical
-timing and AIC sensitivity tables are in the [archive](../_archive/20260915-inl-review/benchmarks.md).
-
 For generator $g$ and period $t$, let $p_{gt}$ be output, $u_{gt}$ commitment,
-$v_{gt}$ start-up, and $w_{gt}$ shut-down. With feasible unit set $X_g$, clearing is
+$v_{gt}$ start-up, and $w_{gt}$ shut-down. Let $X_g$ be the feasible set of unit $g$.
+The clearing problem is
 
 $$
 \begin{aligned}
@@ -18,17 +15,17 @@ $$
 `_rw`, `_eq`, and `_fx` define $X_g$: output bounds, ramps, start and stop limits,
 minimum up/down times, and the initial state.
 
-Those rows are the reference unit-commitment formulation of Knueven, Ostrowski and
-Watson, published as `MODEL.pdf` in [pglib-uc](https://github.com/power-grid-lib/pglib-uc)
-and implemented in [Egret](https://github.com/grid-parity-exchange/Egret). The minimum up
-and down rows are the Rajan-Takriti pair. This model restricts that formulation to one
-linear production cost, one start-up cost, and no reserve requirement, so it does not yet
-clear a pglib-uc instance.
+These rows follow the formulation of Knueven, Ostrowski, and Watson, published as
+`MODEL.pdf` in [pglib-uc](https://github.com/power-grid-lib/pglib-uc) and implemented in
+[Egret](https://github.com/grid-parity-exchange/Egret). The minimum up- and down-time rows
+are the Rajan–Takriti inequalities. This formulation has one linear production cost, one
+start-up cost, and no reserve requirement. The full formulation is implemented separately
+in the [pglib-uc benchmark](PGLIB.md).
 
 `_nw` and `_tr` replace the single balance by one balance per bus under direct current, or
 per zone under transport.
 
-### Price definitions
+## Price definitions
 
 | Price | Priced problem |
 | --- | --- |
@@ -39,7 +36,7 @@ per zone under transport.
 Make-whole is computed by commitment block. Total uplift equals make-whole plus lost
 opportunity.
 
-### Solve routes
+## Solve routes
 
 | Function | Method | Role |
 | --- | --- | --- |
@@ -57,7 +54,7 @@ $2^T$ schedules. The two formulations agree on every published case and all 104 
 markets among seeds 0 through 140: relative objective tolerance $10^{-9}$, price tolerance
 $0.0001/MWh.
 
-### Canonical price selection
+## Price selection
 
 `_px` selects one vector from the optimal dual face:
 
@@ -66,20 +63,20 @@ $0.0001/MWh.
 3. If the probe differs by at most $0.001/MWh, stop. Otherwise minimize each balance price
    lexicographically.
 
-The probe is a screen, not a bound on face diameter. It is identical for capped and
-uncapped models.
+The probe screens the optimal face; it does not bound its diameter. The rule is identical
+for capped and uncapped models.
 
-| Case | Payment and probe | Forced walk | Price change | Decision |
-| --- | ---: | ---: | ---: | --- |
-| 48 x 24 | 2.66s | 32.50s | $0.00000226/MWh | Skip |
-| 96 x 24 | 6.48s | 94.82s | $0.15225/MWh | Retain |
+| Case | Forced-walk price change | Decision |
+| --- | ---: | --- |
+| 48 x 24 | $0.00000226/MWh | Skip |
+| 96 x 24 | $0.15225/MWh | Retain |
 
-A forced-walk scan covered 410 capped and uncapped `hc` and `hl` routes. The screen skipped
-391; the largest omitted change was $0.00000444/MWh. `LIM[3]` remains the maximum number of
-balance rows in the lexicographic walk. The seed-61 capped test still requires `hc` and
-`hl` to return different prices while agreeing on objective and demand payment.
+A forced-walk scan covered 410 capped and uncapped `hc` and `hl` routes. The screen
+skipped 391; the largest omitted change was $0.00000444/MWh. `LIM[3]` bounds the number
+of balance rows in the lexicographic walk. In the capped seed-61 case, `hc` and `hl`
+return different prices but the same objective and demand payment.
 
-### Published cases
+## Published cases
 
 | Case | Reproduced result |
 | --- | --- |
@@ -87,11 +84,11 @@ balance rows in the lexicographic walk. The seed-61 capped test still requires `
 | Hua and Baldick (2017), Example 2 | Published dispatch; LMP (60, 60, 60) with uplift (0, 560); CHP (60, 60, 65.6) with uplift (168, 0) |
 | Chen, O'Neill, and Whitman (2020) | Dispatch; LMP (10, 10, 90); unit-2 profits (-1,830, -1,030, 1,170); make-whole and uplift 1,690 |
 
-At the talk's AIC price $(10,10,146.33)$, the implementation gives profit 13,633, best
-self-schedule profit 14,771, uplift 1,138, and zero make-whole. The exact restricted hull
-instead gives $(10,10,422)$. Limiting unit 2 to the cleared and off schedules recovers
-$146.33 exactly; the full hull also contains a start in period 2. Both `hc` and `hl` give
-$422. The talk does not publish the rows needed to resolve this difference.
+At the talk's AIC price $(10,10,146.33)$, unit 2 has profit 13,633, best self-schedule
+profit 14,771, uplift 1,138, and zero make-whole. The full restricted hull gives
+$(10,10,422)$. Restricting unit 2 to the cleared and off schedules gives $146.33$; the
+full hull also permits a start in period 2. Both `hc` and `hl` give $422$. The talk does
+not publish the rows needed to resolve the difference.
 
 The talk also reports $1,161 for a three-binary relaxation without listing its valid
 inequalities. This formulation gives $218.31; it is not presented as a replication.

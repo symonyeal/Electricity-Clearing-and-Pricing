@@ -6,6 +6,8 @@ markers = ["slow: clears the full pglib-uc MIP benchmark"]
 
 [tool.ruff]
 line-length = 100
+# Archived material is historical and is not maintained against current lint rules.
+exclude = ["_archive"]
 
 [tool.ruff.lint]
 # E741 rejects l, I and O as names. This project names variables after the

@@ -1,43 +1,38 @@
-# Scale bench for market pricing and ultimate pit. Historical tables are under _archive/.
+# Benchmarks for unit commitment, prices and networks.
 #
 # LEGEND
-#   DIMS,MKT,HUL : the measured pit sizes, market sizes and convex-hull sizes
-#   EPS,EPS10    : common epsilon sweep and the extra 10x8 transition points
-#   tm,time      : timer helper and the clock module
-#   pit,mkt,hul  : one row of each scale table
-#   aic,aseed    : the epsilon table and the 10x8 seed check
-#   z1,t1 : pit value and seconds from OR-Tools
-#   z2,t2 : pit value and seconds from NetworkX
-#   z3,t3 : pit value and seconds from the linear program
-#   fr    : count of fractional entries in the linear program's solution
-#   o     : ore blocks inside the pit          w : waste blocks inside the pit
-#   sr    : waste-to-ore strip ratio           lost : ore blocks left outside the pit
-#   v,E   : block values and precedence arcs   C : blocks inside the pit
-#   b     : one block index                    x : linear-program block choices
-#   nx_,ny_,nz_ : model dimensions             d : one model size, or market demand
-#   f,a   : timed function and its arguments   y : timed function result
-#   t     : timer reading
-#   G,T   : unit and period counts             g : the units of a market
-#   s,R   : integer clearing and relaxed solve L,H,A : LMP, CHP and AIC solutions
-#   P     : payments at one price              K : hull columns, q : hull variables
-#   cap   : the AIC output ceilings            mw : units needing a make-whole payment
-#   ep    : the AIC output relaxation          cm,pm : cleared cost and price per MWh
-#   h     : capped spare MW                     tag : one market label
-#   net   : one row of the network table       lim : one line limit
-#   zon   : the coupled-zone table             e : one exchange flow
-#   nw,pi : the three-bus network and its nodal prices
-#   rent  : congestion rent, demand payment less generator revenue
-#   e,K   : the schedule-wise column, and the schedule count
+#   MKT,HUL     : market and convex-hull dimensions
+#   LIN         : three-bus line limits
+#   EPS,EPS10   : AIC output relaxations
+#   tm,time     : timer and clock module
+#   mkt,hul     : one market or convex-hull row
+#   aic,aseed   : AIC sweep and seeded check
+#   net,zon     : nodal and zonal network rows
+#   f,a,y,t     : timed function, arguments, result and seconds
+#   G,T         : unit and period counts
+#   g,d         : units and demand
+#   s,R         : integer clearing and relaxation
+#   L,H,A,E     : LMP, CHP, AIC and schedule-wise solutions
+#   P           : payments at one price
+#   q,K         : hull columns and schedule count
+#   cap,ep      : AIC output ceilings and relaxation
+#   cm,pm       : cleared cost and weighted price per MWh
+#   h           : spare MW in the peak-price period
+#   mw          : units requiring make-whole
+#   pi          : price vector
+#   nw          : three-bus network
+#   lim         : line limit
+#   e           : schedule-wise comparison or exchange flow
+#   rent        : demand payment less generator revenue
+#   tag         : market label
 
 import time
 
 import numpy as np
 
-from models.lg_pit import lp, mc, mc_nx, mk_E, mk_v
 from models.uc_price import (_ar, _cl, ck, ex3, ex4, ex5, hc, hl, lmp, mk_g, pay, pc, rx,
                              uc)
 
-DIMS = [(30, 30, 12), (60, 60, 20), (90, 90, 30)]
 MKT = [(12, 8), (24, 16), (48, 24), (96, 24)]
 HUL = [(6, 4), (8, 6), (10, 8), (12, 10), (8, 14)]
 LIN = [100.0, 60.0, 40.0, 20.0]
@@ -46,29 +41,10 @@ EPS10 = (1e-6, 1e-5, 1e-4, 1e-3, 0.0025, 0.00275, 0.005, 0.1, 1.0, 10.0)
 
 
 def tm(f, *a):
-    """Return one function result and its elapsed seconds."""
+    """Return one result and its elapsed seconds."""
     t = time.perf_counter()
     y = f(*a)
     return y, time.perf_counter() - t
-
-
-def pit(nx_, ny_, nz_):
-    v, E = mk_v(nx_, ny_, nz_), mk_E(nx_, ny_, nz_)
-    (z1, C), t1 = tm(mc, v, E)
-    (z2, _), t2 = tm(mc_nx, v, E)
-    (z3, x), t3 = tm(lp, v, E)
-    fr = int(((x > 1e-6) & (x < 1 - 1e-6)).sum())
-    o = sum(1 for b in C if v[b] > 0)
-    w = len(C) - o
-    sr = w / o
-    lost = int((v > 0).sum()) - o
-    print(
-        f"| {nx_}x{ny_}x{nz_} | {len(v):,} | {len(E):,} | {z1:,.2f} | {t1:.3f}s | "
-        f"{t2:.2f}s | {t3:.2f}s | {fr} | {sr:.2f} | {lost} |"
-    )
-    assert abs(z1 - z2) < 1e-6
-    assert abs(z1 - z3) < 1e-6
-    assert 1.5 <= sr <= 3.0
 
 
 def mkt(G, T):
@@ -112,7 +88,7 @@ def hul(G, T):
 
 
 def aic(tag, g, d, eps):
-    """Print one market's AIC prices and payments over an epsilon sweep."""
+    """Print AIC prices and payments over an epsilon sweep."""
     s = uc(g, d)
     L = lmp(g, d, s)
     d = np.asarray(d, dtype=float)
@@ -133,7 +109,7 @@ def aic(tag, g, d, eps):
 
 
 def aseed():
-    """The default epsilon across fifteen independently seeded 10x8 markets."""
+    """Measure the default epsilon on fifteen seeded 10 x 8 markets."""
     up, mw, peak, scarce = [], [], [], 0
     for sd in range(15):
         g, d = mk_g(10, 8, sd)
@@ -157,7 +133,7 @@ def aseed():
 
 
 def net(lim):
-    """The three-bus loop at one line limit: dispatch, nodal prices and congestion rent."""
+    """Solve the three-bus loop at one line limit."""
     g, d, nw = ex4(lim)
     s = uc(g, d, net=nw)
     L = lmp(g, d, s, net=nw)
@@ -173,7 +149,7 @@ def net(lim):
 
 
 def zon():
-    """The two coupled bidding zones: zonal prices, the exchange flow and congestion rent."""
+    """Solve the two-zone market."""
     g, d, q = ex5()
     s = uc(g, d, net=q)
     pi, d = lmp(g, d, s, net=q).pi, np.atleast_2d(d)
@@ -187,15 +163,7 @@ def zon():
 
 
 if __name__ == "__main__":
-    print("## Ultimate pit limit\n")
-    print(
-        "| Model | Blocks | Arcs | Pit value | OR-Tools | NetworkX | LP | Fractional | "
-        "Strip ratio | Ore left out |"
-    )
-    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
-    for d in DIMS:
-        pit(*d)
-    print("\n## Market clearing and locational prices\n")
+    print("## Market clearing and locational prices\n")
     print(
         "| Units x periods | Variables | Cleared cost | uc | rx | pay | Relaxation gap | "
         "Units needing make-whole | LMP uplift |"
@@ -220,7 +188,7 @@ if __name__ == "__main__":
     aic("ex3", *ex3(), EPS)
     aic("8 x 6, seed 7", *mk_g(8, 6), EPS)
     aic("10 x 8, seed 7", *mk_g(10, 8), EPS10)
-    print("\n## AIC across 10x8 seeds\n")
+    print("\n## AIC across 10 x 8 seeds\n")
     print(
         "| Seeds | Peak >$1,000/MWh: markets (uplift range, $) | "
         "Peak <=$1,000/MWh: markets (uplift range, $) | Peak at epsilon headroom | "
