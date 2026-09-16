@@ -23,19 +23,37 @@ $E$ is usable energy above the physical SOC floor. The implementation tightens $
 $\min(C,E/(\Delta\eta_c))$ and $D$ to $\min(D,E\eta_d/\Delta)$. These are valid physical
 bounds. Simultaneous charging and discharging is excluded even at negative prices.
 
-Path 0 defines the common forward offer $q_t=d_{0t}-c_{0t}$. It obeys the same physical
-limits and endpoints, so an offer must be deliverable as a complete battery schedule.
-Actual paths may deviate. In scenario $s$, profit is
+Path 0 defines the common forward position $q_t$. In scenario $s$, profit is
 
 $$
-R_s=\Delta\sum_t\left[\lambda_t^{DA}q_t+
+R_s=\Delta\sum_t\left[\lambda_{st}^{DA}q_t+
 \lambda_{st}^{RT}(d_{st}-c_{st}-q_t)-k(c_{st}+d_{st})\right].
 $$
+
+The day-ahead price may be one common curve $\lambda_t^{DA}$ or one curve per scenario.
+A position decided before the day-ahead market clears faces an unknown clearing price,
+and a scenario then carries a day-ahead and a real-time curve together.
 
 $k$ is a linear cost per grid MWh charged or discharged. The nominal schedule incurs no
 physical throughput cost: actual operation incurs it once. The deviation term avoids
 counting the forward sale twice. Both settlements use the same time grid; an hourly
 day-ahead price and MW schedule must be repeated over its real-time intervals.
+
+## An offer and an obligation are different objects
+
+A position being chosen must be deliverable. With `q=None` the nominal path is a physical
+schedule: it obeys the same limits, balance and endpoints as any other path, so the model
+cannot offer energy the battery cannot produce from the energy it is assumed to hold.
+
+A position already contracted is financial. Passing `q` fixes it, and the model then
+builds no nominal path at all: the fixed terms enter the scenario profit as a constant,
+physical rows exist only for the scenario paths, and dispatch and imbalance settlement
+adapt around the obligation. This matters after real-time deviations. The energy a
+schedule was planned from is not the energy the battery now holds, and requiring an
+existing obligation to be physically reproducible from the current energy would report a
+false infeasibility for a position that in fact simply settles. `Sol.e[0]` is `nan` for a
+fixed position, because a contract has no physical trajectory, and `Sol.c[0]`, `Sol.d[0]`
+carry the position split into its buying and selling parts.
 
 For probabilities $p_s>0$ summing to one, confidence $0\le\alpha<1$, and weight
 $0\le w\le1$, maximize
@@ -67,7 +85,7 @@ reveals the remaining price path at hour 13; it tests a tree, not a live trading
 
 | Route | Formulation | Limit |
 | --- | --- | --- |
-| `st` | Sparse MIP with one binary per information node and per nominal period | HiGHS branch and bound; default requested relative gap zero |
+| `st` | Sparse MIP with one binary per information node, and per nominal period when an offer is chosen | HiGHS branch and bound; default requested relative gap zero, optional time limit |
 | `en` | Enumerate charge/export signs, then solve signed-flow LPs with cumulative energy bounds | At most 12 nodes, including the nominal path |
 
 The independent route has no SOC variables or separate charge/discharge columns and does
@@ -92,10 +110,15 @@ print(r.q, r.r, r.mu, r.cv, r.ub, r.gap)
 # [-1, 1], [30, 30], 30, -30, 30, 0 (up to numerical tolerance)
 ```
 
-Pass `q=r.q` on a subsequent solve to hold an existing offer fixed. For rolling operation,
-pass the measured initial energy in `B.e0`, the remaining fixed offer, and scenarios
-conditioned only on available information; implement the first action and repeat.
-`ef` is a hard terminal requirement, so choose it for the remaining horizon.
+Pass `q=r.q` on a subsequent solve to settle an existing obligation. For rolling
+operation, pass the measured initial energy in `B.e0`, the remaining contracted position,
+and scenarios conditioned only on available information; implement the first action and
+repeat. `ef` is a hard terminal requirement, so choose it for the remaining horizon, and
+choose one it can reach. `lim` bounds solver seconds; a solve that does not reach the
+requested gap raises rather than returning its incumbent.
+
+[The historical study](MARKET.md) runs exactly this loop against published New York ISO
+prices, and reports what it measured.
 
 The published mathematical precedents are the energy/mode rows in HydroBoost and the
 Rockafellar-Uryasev risk formulation, also used by LOGOS. The combined model here is a
@@ -105,8 +128,9 @@ examples are synthetic. `run_storage.py` reproduces them and the timings in
 
 ## Scope
 
-Prices are exogenous. `da` is one supplied day-ahead curve; before clearing, treating it
-as fixed omits day-ahead price uncertainty and bid acceptance. The model produces a
+Prices are exogenous. `da` may be one curve or one per scenario; either way the model
+takes the clearing price as given and assumes the position is accepted in full, which
+omits bid acceptance. The model produces a
 quantity schedule, not a price-dependent bid curve or an exchange submission. It includes
 single-price real-time imbalance settlement and unrestricted deviations within battery
 limits. It omits reserve products, network constraints, nonlinear degradation, fees,
@@ -115,6 +139,8 @@ collateral, market-specific qualification, imbalance penalties and market impact
 Use this for formulation research, schedule valuation and scenario hedging. Real trading
 requires the target market's rules and time-stamped out-of-sample inputs. An exact optimum
 for supplied scenarios does not establish forecast skill or realized trading profit.
+[The historical study](MARKET.md) supplies time-stamped out-of-sample inputs and states
+which market execution assumptions remain unvalidated.
 
 The existing UC and CHP models provide structural prices and uplift diagnostics. Feeding
 their prices here is meaningful only under the price-taker assumption; including a large

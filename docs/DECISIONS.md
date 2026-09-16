@@ -81,9 +81,33 @@ different thing.
 | 34 | Check the MIP with enumerated signed-flow LPs and cumulative energy bounds. | Independent physical formulation, bounded to 12 nodes for tractability. |
 | 35 | Keep the INL tools as formulation references and optional checks. | No measured benefit justifies adding their frameworks to runtime requirements. |
 
+## Historical study
+
+[The study](MARKET.md) states the protocol; these are the decisions behind it.
+
+| ID | Decision | Reason |
+| ---: | --- | --- |
+| 36 | Separate a chosen offer from a contracted position. `q=None` builds a nominal physical path, so an offer must be deliverable. A supplied `q` builds none: its terms enter each scenario's profit as a constant and only the scenario paths carry physical rows. | After a real-time deviation the battery no longer holds the energy the schedule was planned from. Requiring an existing obligation to be reproducible from current energy reports a false infeasibility for a position that simply settles. |
+| 37 | Accept one day-ahead curve per scenario. | The position is chosen before the day-ahead market clears, so its price is not known then. One curve per scenario also keeps each scenario's day-ahead and real-time curves the pair that actually occurred. |
+| 38 | Take the NYISO archive unchanged. Resolve the repeated hour of the autumn transition by order of appearance, and refuse a local time that does not exist. | The files carry eastern prevailing time with no offset column. Order is the only information that separates the two passes, and a silent reinterpretation of a missing hour would move prices by an hour. |
+| 39 | Weight each real-time posting by the seconds it covers inside its five-minute bin. | The dispatch reruns inside a clock interval and posts irregular stamps. Duration weighting is exact when the battery holds one power level across the bin, which the decision cadence guarantees. |
+| 40 | Decide every fifteen minutes; settle every five. | A decision cadence coarser than settlement is a restriction on the policy, not an information advantage, so it cannot flatter the measured result. |
+| 41 | Build scenarios from realized days and fit exactly one coefficient, the hourly persistence of the residual. | Realized days carry their own within-day shape and their own joint day-ahead and real-time curves. One fitted coefficient keeps the statistical layer inspectable and separate from the optimizer. Model standard 6. |
+| 42 | A tree node is a set of paths, and a node is split only when it has at least twice the smallest node size. | A unique label would reveal an entire future path to a decision taken before it. |
+| 43 | One end-of-day energy target for every trading policy, clipped to the interval reachable from current energy. | It makes the day-ahead offer deliverable from a known starting energy, keeps every real-time solve feasible, and is identical across policies, including perfect foresight. |
+| 44 | A day the archive did not supply in full is skipped and recorded, never filled or dropped. | A filled price is a modelling assumption disguised as data; a dropped day is a silent selection. |
+| 45 | Choose hyperparameters on the validation year only, refit the coefficient before each evaluation period, and replay the held-out year once. | Selection on the evaluated period is the leak that makes a backtest meaningless. |
+| 46 | Report a moving block bootstrap interval; report no return on investment or Sharpe ratio. | Daily results are dependent, so an independent resample understates the interval. There is no defensible capital base here for a ratio. |
+| 47 | Write figures directly as SVG. | No implemented result needs a plotting framework, and the figures stay reproducible byte for byte. Model standard 6. |
+| 48 | Keep continuous integration offline against committed fixtures, rebuilt from the archive by a committed script. | A test that depends on a market website is a test of the website. |
+| 49 | On a solve that does not reach its tolerance, retry once at a coarse gap, then hold power at zero for the step. Record every outcome. | Holding is always feasible and is an action the operator could take. A discarded difficult step would quietly remove the hardest days from the result. |
+
 ## Remaining work
 
-1. Market-specific storage participation and timestamped out-of-sample evaluation.
+1. Market-specific storage participation: the New York energy storage resource model,
+   bid parameters, ISO dispatch and the charges listed in [the study](MARKET.md). The
+   timestamped out-of-sample evaluation now exists for one zone and one held-out year;
+   acceptance, dispatch and settlement under the real participation model do not.
 2. Energy and reserve pricing for the full pglib-uc formulation, then exact hull pricing
    with piecewise costs and start-up tiers. Fixed-commitment pricing alone does not require
    a hull re-derivation. The current benchmark still clears without pricing.
@@ -104,8 +128,9 @@ active checks; model differences and numerical pricing limitations remain docume
 | Subgradient CHP search | Hua and Baldick report 0.88% suboptimality after 550 iterations; the LP is exact. |
 | Pit metaheuristic | It cannot improve an exact minimum-cut solution. |
 | Neural dependency | No implemented model requires it. |
-| Fitted day-ahead price forecasting in the solver | Forecast fitting is a separate statistical task. External scenarios may be supplied, but their predictive quality requires out-of-sample checks; an exact optimizer does not establish it. |
-| Live price and generation feeds | An API key and a network dependency, with no implemented model measuring better for either. Model standard 6. |
+| Fitted day-ahead price forecasting in the solver | Forecast fitting is a separate statistical task. It now lives in `market/scen.py`, is fitted only on data that precedes each decision, and is measured out of sample; the optimizer still receives scenarios as inputs. |
+| Live price and generation feeds | An API key and a network dependency, with no implemented model measuring better for either. The study reads a published archive of settled prices, offline after one fetch, which is a different thing. |
+| Filling a missing interval to keep a day tradable | A filled price is an assumption presented as a measurement. Incomplete days are skipped and counted. |
 | Warm-started price walk | The prototype erased the required seed-61 price difference without proving closure of the face. |
 | Unreviewed reading-list entries | A title is not evidence. |
 | Synthetic inputs without a tested property | A benchmark must state what it is designed to exhibit. |

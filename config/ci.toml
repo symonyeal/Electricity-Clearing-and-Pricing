@@ -1,0 +1,33 @@
+# The offline smoke configuration: committed fixtures, a short lookback, small trees.
+# It exercises every command path, including a 25-hour transition day, without a network.
+
+zone = "N.Y.C."
+root = "tests/fixtures/nyiso"
+tr = ["2025-10-25", "2025-10-29"]
+va = ["2025-10-30", "2025-10-31"]
+te = ["2025-11-01", "2025-11-03"]
+e = 4.0
+c = 1.0
+d = 1.0
+ec = 0.92
+ed = 0.92
+e0 = 2.0
+ef = 2.0
+kd = 2.0
+fee = 0.5
+sp = 12
+lag = 2
+bid = 5
+L = 7
+S = 4
+mn = 2
+bd = [6, 12]
+bt = [2, 6]
+w = 0.5
+al = 0.95
+gap = 1e-4
+lim = 20.0
+rho = 0.0
+
+# Parsed months are not cached into the fixture tree.
+cache = false

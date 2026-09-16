@@ -23,6 +23,28 @@ negative-price exclusivity, two-settlement accounting, nonanticipativity, a risk
 forward hedge and compression of identical information nodes. No market-price dataset or
 claim of observed trading returns is attached to these cases.
 
+## Historical study: prices and methods
+
+[The study](MARKET.md) uses one price source and four method references. The archive was
+downloaded on 2026-09-15.
+
+| Source | Use in this repository |
+| --- | --- |
+| [NYISO, Day-Ahead Market LBMP - Zonal, index P-2A](http://mis.nyiso.com/public/P-2Alist.htm) | Read the index. Names the report, its CSV files and the note that corrected prices are reposted. The hourly day-ahead zonal price of this study. |
+| [NYISO, Real-Time Market LBMP - Zonal, index P-24A](http://mis.nyiso.com/public/P-24Alist.htm) | Read the index. Same, for the five-minute real-time zonal price, with the same restatement note. |
+| Monthly archives `http://mis.nyiso.com/public/csv/{damlbmp,realtime}/{YYYYMM01}{report}_zone_csv.zip` | The files themselves. Column layout, stamp format, zone names, hour conventions and transition-day behaviour were read from the published files, not from a specification: the day-ahead file stamps the beginning of an hour and carries 23, 24 or 25 rows a day; the real-time file stamps the end of an interval and reruns inside a clock interval. |
+| [NYISO manuals, technical bulletins and user guides](https://www.nyiso.com/manuals-tech-bulletins-user-guides) | Not read in detail. Named as the location of the participation, bidding and settlement rules that this study does not implement. Nothing in this repository is derived from them. |
+| Künsch, H. R. (1989). ["The Jackknife and the Bootstrap for General Stationary Observations"](https://doi.org/10.1214/aos/1176347265). *The Annals of Statistics* 17(3). | Not opened; catalogue record checked. The moving block bootstrap used for the interval on the annual total. |
+| Politis, D. N. and Romano, J. P. (1994). ["The Stationary Bootstrap"](https://doi.org/10.1080/01621459.1994.10476870). *Journal of the American Statistical Association* 89(428), 1303-1313. | Not opened; catalogue record checked. The random-length-block alternative, not implemented; the fixed block length is reported instead. |
+| Høyland, K. and Wallace, S. W. (2001). ["Generating Scenario Trees for Multistage Decision Problems"](https://doi.org/10.1287/mnsc.47.2.295.9834). *Management Science* 47(2), 295-307. | Not opened; catalogue record checked. Moment-matching tree construction. Not implemented: this study keeps realized days as scenarios and splits nodes by a quantile of the next segment's mean. |
+| Heitsch, H. and Römisch, W. (2009). ["Scenario tree modeling for multistage stochastic programs"](https://doi.org/10.1007/s10107-007-0197-2). *Mathematical Programming* 118(2), 371-406. | Not opened; catalogue record checked. Tree construction and reduction with stability guarantees. Not implemented; the tree here has no such guarantee and is described in full in [the study](MARKET.md). |
+| Sioshansi, R., Denholm, P., Jenkin, T. and Weiss, J. (2009). ["Estimating the value of electricity storage in PJM: Arbitrage and some welfare effects"](https://doi.org/10.1016/j.eneco.2008.10.005). *Energy Economics* 31(2), 269-277. | Not opened; catalogue record checked. Named as prior work that values storage against historical prices, including a perfect-foresight benchmark. No number from it is used or compared here. |
+
+Prices are restated: the NYISO indexes state that corrected prices are reposted. This
+study reads the archive as it stood on the download date, so a corrected price is used
+where one exists. A participant deciding at the time would have seen the original. The
+difference is not measured here.
+
 ## Unit commitment and electricity prices
 
 | Source | Use in this repository |

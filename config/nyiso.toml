@@ -1,0 +1,41 @@
+# The held-out experiment: one New York City battery, price taking, 2025 held out.
+# Dates are inclusive local dates. Money is US dollars; energy is MWh; power is MW.
+
+zone = "N.Y.C."
+root = "data/nyiso"
+tr = ["2022-10-01", "2023-12-31"]
+va = ["2024-01-01", "2024-12-31"]
+te = ["2025-01-01", "2025-12-31"]
+
+# A one megawatt, four hour battery with 92% one-way efficiency, 84.6% round trip.
+e = 4.0
+c = 1.0
+d = 1.0
+ec = 0.92
+ed = 0.92
+e0 = 2.0
+ef = 2.0
+
+# Degradation and transaction cost per megawatt hour of grid energy, either direction.
+kd = 2.0
+fee = 0.5
+
+# Fifteen minute decisions, ten minute information lag, 05:00 day-ahead bid close.
+sp = 3
+lag = 2
+bid = 5
+
+# Statistics and information tree.
+L = 60
+S = 8
+mn = 2
+bd = [6, 12, 18]
+bt = [4, 12]
+
+# Risk and solver.
+w = 0.0
+al = 0.95
+gap = 1e-4
+lim = 20.0
+rho = 0.0
+cache = true
