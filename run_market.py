@@ -148,10 +148,10 @@ def cmd_report(cf, a, log):
     txt = [f"# Held-out results: {cf.zone}, {runs[next(iter(runs))]['metrics']['days']} days",
            "", "## Settlement", "",
            report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
-                      ["Policy", "Day ahead", "Imbalance", "Costs", "Net", "2.5%",
-                       "97.5%", "Worst day", "Drawdown", "Tail loss 5%", "Cycles"],
-                      ["policy", "rda", "rrt", "costs", "net", "net_lo", "net_hi",
-                       "worst_day", "drawdown", "cvar", "cycles"], {"cycles": 1}),
+                      ["Policy", "Day ahead", "Imbalance", "Gross", "Costs", "Net",
+                       "2.5%", "97.5%", "Worst day", "Drawdown", "Tail loss 5%"],
+                      ["policy", "rda", "rrt", "gross", "costs", "net", "net_lo",
+                       "net_hi", "worst_day", "drawdown", "cvar"]),
            "", "## Volume", "",
            report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
                       ["Policy", "Day-ahead MWh", "Imbalance MWh", "Grid MWh",
@@ -186,10 +186,15 @@ def cmd_report(cf, a, log):
              [(NAME[p], np.array([sum(r["net"] for r in dy[p] if r["date"][:7] == m)
                                   for m in mo])) for p in runs],
              "Net settlement by month", "month", "currency")
-    fig.lines(d / "tail.svg",
-              [(NAME[p], np.linspace(0, 100, len(dy[p])),
-                np.sort([r["net"] for r in dy[p]])) for p in runs],
-              "Daily net settlement, sorted", "percentile of days", "currency")
+    con = []
+    for p in runs:
+        n = np.sort([r["net"] for r in dy[p]])[::-1]
+        if abs(n.sum()) > 1:
+            con.append((NAME[p], 100 * np.arange(1, len(n) + 1) / len(n),
+                        100 * np.cumsum(n) / n.sum()))
+    fig.lines(d / "concentration.svg", con,
+              "Share of the year's net settlement, best days first",
+              "percentage of days, ranked by daily net", "percentage of the year's net")
     pol = "neutral" if "neutral" in runs else next(iter(runs))
     day = max(dy[pol], key=lambda r: abs(r["net"]))["date"]
     iv = _intervals(d / pol / "intervals.csv.gz", day)
@@ -197,7 +202,7 @@ def cmd_report(cf, a, log):
               iv["d"] - iv["c"], f"{NAME[pol]}, {day}, {cf.zone}",
               f"largest absolute daily net settlement of the {NAME[pol]} policy: "
               f"{max(dy[pol], key=lambda r: abs(r['net']))['net']:,.0f}")
-    log(f"wrote {d}/tables.md and four figures")
+    log(f"wrote {d}/tables.md and its figures")
     return txt
 
 

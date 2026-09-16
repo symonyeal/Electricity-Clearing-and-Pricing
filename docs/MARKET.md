@@ -196,7 +196,9 @@ python run_market.py report --dir results/test
 committed fixtures in `tests/fixtures/nyiso`, which `tests/fixtures/build.py` rebuilds
 from the archive. Each run writes `intervals.csv.gz`, `daily.csv`, `monthly.csv`,
 `metrics.json` with its diagnostics, fit record and environment, and the `config.toml`
-that produced it. `report` writes `tables.md` and three standalone SVG figures.
+that produced it. `report` writes `tables.md` and four standalone SVG figures: the cumulative net
+settlement of every policy, net settlement by month, the share of the year earned on its
+best days, and one day's prices, stored energy and grid power.
 
 ## Limits
 
