@@ -32,13 +32,11 @@ they break the result that one clearing price supports the schedule the ISO just
 shows up on settlement statements: a unit held at EcoMin through an off-peak hour can lose
 money at the posted LMP even though the ISO needed it committed.
 
-So the ISO writes a side payment. MISO calls it Revenue Sufficiency Guarantee, day-ahead and
-real-time; NYISO calls it Bid Production Cost Guarantee; PJM calls it operating reserve
-credits. Whatever the name, it is out-of-market money — paid to named units, absent from the
-price everyone else sees, and allocated back to load. FERC has worked the subject since
-Docket AD14-14, price formation, opened in June 2014, and every independent market monitor
-reports the annual total. [Sources](docs/SOURCES.md) records the tariff and staff documents
-these names come from.
+So the ISO writes a side payment: Revenue Sufficiency Guarantee at MISO, Bid Production Cost
+Guarantee at NYISO, operating reserve credits at PJM. Whatever the name, it is out-of-market
+money — paid to named units, absent from the price everyone else sees, allocated back to
+load. FERC has worked the subject since Docket AD14-14, price formation, opened in June 2014.
+[Sources](docs/SOURCES.md) records the documents these names come from.
 
 ### What this computes
 
@@ -58,19 +56,43 @@ engineering compromise, but an approximation cannot report its own error. This c
 the benchmark exactly on small systems, so the approximations have something to be held
 against.
 
-The other half is the participant side: a 1 MW, 4 MWh battery offered into the day-ahead
-market and settled two-settlement against its real-time deviations, replayed chronologically
-on published NYISO N.Y.C. zonal prices.
-
 ### What it shows
 
-Two independent constructions of the benchmark agree to machine precision — 2.551e-16
-relative — on all 104 feasible systems in a 141-case randomized set. The FERC staff example
-prices at $422; the $146.33 in the talk is recoverable only by deleting a schedule the unit
-could genuinely have run, and both numbers are pinned. On a constrained network the benchmark
-must carry a transmission term: omit it and it reports 4,500 against a clearing of 2,100,
-which cannot happen. Across 2025 the battery nets $33,131 risk-neutral, against a $190,720
-perfect-foresight ceiling no real policy reaches.
+The FERC staff case is two units over three periods — a cheap flexible unit, and a costly
+slow one with a $1,000 start-up that only period 3 can pay for — serving 95, 100 and 130 MW.
+Production cost clears at $7,340. What changes with the pricing rule is not the schedule, it
+is who pays for it and how:
+
+| Rule | Period-3 price, $/MWh | Make-whole, $ | Total uplift, $ |
+| --- | ---: | ---: | ---: |
+| LMP | 90 | 1,690 | 1,690 |
+| Convex hull | 276 | 0 | 365 |
+| Average incremental cost | 422 | 0 | 730 |
+
+LMP posts $90/MWh in the tight period, then writes $1,690 of make-whole. The hull posts
+$276/MWh and writes none: uplift falls 78%, and what remains is lost opportunity cost rather
+than cost recovery. Higher posted price, less out-of-market money, same dispatch.
+
+**The published benchmark is off.** The talk reports $146.33/MWh for the AIC price above.
+Computed exactly it is $422/MWh. The $146.33 is reachable only by deleting a schedule the
+unit could genuinely have run. An implementation calibrated to $146.33 is calibrated to the
+wrong number, so both are pinned in the tests.
+
+**Congestion breaks a shortcut.** On a three-bus loop with 90 MW of load behind a 40 MW
+constraint, the clearing costs $2,100 — 60 MW cheap, 30 MW expensive — and hull prices
+separate by bus at $10, $30 and $50/MWh, which is congestion showing up in the price. Compute
+the hull without its transmission term and the floor comes back at $4,500 against a $2,100
+cost: a lower bound above the thing it bounds. Nothing flags it, and any uplift figure built
+on it is wrong.
+
+Both constructions of the hull agree to 2.551e-16 across 104 feasible systems in a 141-case
+random set, which is what makes the benchmark a property of the market rather than of the
+code.
+
+On the participant side, a 1 MW, 4 MWh battery offered into the day-ahead market and settled
+two-settlement against its real-time deviations nets, through 2025 in N.Y.C., $41,178 on a
+deterministic forecast and $33,131 risk-neutral — 22% and 17% of the $190,720 a trader who
+knew every price in advance would have captured.
 
 ### Where it stops
 
