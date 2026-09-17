@@ -19,59 +19,63 @@ master and states when column generation becomes a candidate.
 
 ## Background
 
-### The source
+### The problem: price formation
 
-A generator cannot be switched on for an hour at a time: it carries a start-up cost, a
-minimum output once running, and a minimum number of hours it must then stay on. Those
-integer decisions make the market's cost function nonconvex. The consequence is a theorem,
-not an inconvenience: in general **no single price per megawatt-hour supports the schedule
-the market just selected.** Somebody is always instructed to do what loses money at that
-price, and the market covers the difference with a side payment: uplift, or make-whole.
+An ISO clears its day-ahead market with a security-constrained unit commitment — which
+units start, when, and how much each produces — then posts a locational marginal price at
+every node. If every resource were perfectly flexible, that LMP would settle the market and
+nothing further would be needed.
 
-How much uplift is paid depends on which price is posted, and more than one answer is
-defensible. Locational marginal pricing holds the commitment and prices the dispatch that
-remains. Convex hull pricing replaces each generator by the hull of everything it could have
-done, and provably minimizes uplift. Average incremental cost prices that hull after
-restricting the blocks that failed to cover their own cost.
+Thermal units are not flexible in that way. A unit carries a start-up cost, an economic
+minimum it cannot run below, and minimum run and down times. Those are on/off decisions, and
+they break the result that one clearing price supports the schedule the ISO just issued. It
+shows up on settlement statements: a unit held at EcoMin through an off-peak hour can lose
+money at the posted LMP even though the ISO needed it committed.
 
-### The task
+So the ISO writes a side payment. MISO calls it Revenue Sufficiency Guarantee, day-ahead and
+real-time; NYISO calls it Bid Production Cost Guarantee; PJM calls it operating reserve
+credits. Whatever the name, it is out-of-market money — paid to named units, absent from the
+price everyone else sees, and allocated back to load. FERC has worked the subject since
+Docket AD14-14, price formation, opened in June 2014, and every independent market monitor
+reports the annual total. [Sources](docs/SOURCES.md) records the tariff and staff documents
+these names come from.
 
-Compute all three exactly on small systems, and measure what each leaves behind.
+### What this computes
 
-Exactness is the point and also the difficulty. Production markets approximate the hull
-because computing it is expensive: MISO's Extended LMP relaxes the binary on a narrow set of
-fast-start units and, from Phase III, drops ramp-down from the pricing run. An approximation
-cannot measure its own error; built exactly, these rules become the instrument it is held
+Uplift is not a fixed cost of doing business. It depends on which price the ISO posts, and
+there is more than one defensible choice:
+
+| Rule | What it prices | Standing |
+| --- | --- | --- |
+| LMP | the dispatch, commitment held as cleared | what markets settle on today |
+| Convex hull | what each unit could have offered to do, not only what it was told to do | the benchmark that provably minimizes total uplift |
+| Average incremental cost | that benchmark, after screening blocks that did not cover their own cost | the FERC staff variant |
+
+Real markets approximate the benchmark, because computing it at ISO scale is expensive.
+MISO's Extended LMP relaxes the on/off decision for a short list of fast-start resources and,
+from Phase III, stops enforcing ramp-down in the pricing run. That is a defensible
+engineering compromise, but an approximation cannot report its own error. This code computes
+the benchmark exactly on small systems, so the approximations have something to be held
 against.
 
-### The method
+The other half is the participant side: a 1 MW, 4 MWh battery offered into the day-ahead
+market and settled two-settlement against its real-time deviations, replayed chronologically
+on published NYISO N.Y.C. zonal prices.
 
-Formulations come from the literature, never from invention: Gribik, Hogan and Pope for the
-rule, Hua–Baldick and the Chen–O'Neill–Whitman FERC talk for worked cases, Balas and
-Yu–Guan–Chen for the two hulls, Beck for the duality that settles what a dual must minimize
-over. Data is public — NYISO zonal archives, pglib-uc's RTS-GMLC instance.
+### What it shows
 
-One unit's feasible set is written once and every route reads that copy; a separate pglib-uc
-model writes its own rows and exists in order to disagree. Prices are duals, and a dual
-optimum can be a face rather than a point, so the price is chosen by a stated rule, not by
-whichever vertex the solver reached. Any claim of exactness asks for a zero gap and reads
-back the gap achieved. SciPy and HiGHS do the solving; no commercial licence is required.
+Two independent constructions of the benchmark agree to machine precision — 2.551e-16
+relative — on all 104 feasible systems in a 141-case randomized set. The FERC staff example
+prices at $422; the $146.33 in the talk is recoverable only by deleting a schedule the unit
+could genuinely have run, and both numbers are pinned. On a constrained network the benchmark
+must carry a transmission term: omit it and it reports 4,500 against a clearing of 2,100,
+which cannot happen. Across 2025 the battery nets $33,131 risk-neutral, against a $190,720
+perfect-foresight ceiling no real policy reaches.
 
-### The result
+### Where it stops
 
-The two hull constructions agree on all 104 feasible markets among 141 seeds, to 2.55e-16
-relative. Case `ex3`'s exact average incremental cost is $422; the talk's $146.33 is
-recovered only by deleting a feasible schedule the source does not exclude. Both are pinned.
-On a network the Lagrangian dual needs a transmission term, identically zero on one bus and
-decisive on several; omitting it reported a dual of 4,500 against a clearing of 2,100, which
-weak duality forbids. A 1 MW, 4 MWh battery replayed against 2025 NYISO prices nets $33,131
-risk-neutral, against a $190,720 perfect-foresight ceiling it cannot reach.
-
-### The context
-
-A research and verification instrument, not a clearing engine: no contingencies, no losses,
-no ISO-scale network, no ancillary co-optimization. Where it departs from a production
-market, the documentation names which of the two is right.
+Small systems. No contingencies, no losses, no ancillary co-optimization, no ISO-scale
+network, no offer mitigation. It measures pricing rules. It does not clear a market.
 
 ## Run
 
