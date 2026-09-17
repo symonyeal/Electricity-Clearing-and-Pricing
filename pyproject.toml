@@ -10,6 +10,10 @@ line-length = 100
 exclude = ["_archive"]
 
 [tool.ruff.lint]
+# E501 is not in ruff's default selection, so line-length above is a formatting
+# setting until it is asked for. This project writes to 100 columns; select it
+# so the check enforces what the setting states.
+extend-select = ["E501"]
 # E741 rejects l, I and O as names. This project names variables after the
 # symbols in the cited papers, where single letters are the notation.
 # I001 orders and wraps imports. Ruff's only wrap mode puts one name per line,

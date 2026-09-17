@@ -59,7 +59,8 @@ def main():
     print(f"{len(_tree(h)[1])} binary nodes, {t:.4f}s; mean {r.mu:.6f}, "
           f"CVaR loss {r.cv:.6f}, score {r.z:.6f}, upper bound {r.ub:.6f}, gap {r.gap:.3g}.")
     print("\nSynthetic duplicate paths: identical prices, same optimal objective.")
-    print("| Paths | Shared nodes | Separate nodes | Shared s | Separate s | Objective difference |")
+    print("| Paths | Shared nodes | Separate nodes | Shared s | Separate s | "
+          "Objective difference |")
     print("| ---: | ---: | ---: | ---: | ---: | ---: |")
     # Warm HiGHS once before comparing median assembly + solve times.
     st(b, da, [da], [1])
