@@ -8,6 +8,7 @@
 #   dy,v       : the daily export, and the interval export as arrays
 #   off        : the contracted position's constant profit, removed from the raw ratio
 #   seen       : every solve of one probed day, in order
+#   SRC        : every source a replay's numbers depend on, fingerprinted beside them
 #   KEEP       : the files published beside the study; interval files stay local
 #   STOP       : the message a replay ends with when a capped dispatch is infeasible
 
@@ -30,8 +31,8 @@ from market.nyiso import frame
 from market.replay import DTB
 from market.report import tbl
 
-SRC = ("models/storage.py", "market/cfg.py", "market/replay.py", "market/report.py",
-       "market/scen.py", "market/nyiso.py", "run_market.py")
+SRC = ("models/storage.py", "market/bid.py", "market/cfg.py", "market/replay.py",
+       "market/report.py", "market/scen.py", "market/nyiso.py", "run_market.py")
 KEEP = ("metrics.json", "config.toml", "daily.csv", "monthly.csv")
 STOP = re.compile(r"^ValueError: (\d{4}-\d{2}-\d{2}) step (\d+): (capped dispatch .*)$",
                   re.MULTILINE)
