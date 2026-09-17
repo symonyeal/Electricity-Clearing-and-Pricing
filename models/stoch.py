@@ -29,6 +29,7 @@
 #   cs           : scenario s's own cost vector over its own columns
 #   zt,xi        : the CVaR level and the per-scenario excess above it
 #   q            : scenario costs at the solution
+#   sm,md        : whether the storage mode is common across scenarios, and its held values
 
 import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, milp
@@ -238,6 +239,12 @@ def _cv(z, pr, al):
 def lmp(g, st, d, s, pr=None, net=None, sm=False):
     """Hold the cleared commitment, re-dispatch every scenario, and read the balance duals.
 
+    Every integer column is pinned by its own bounds, the commitment and the storage mode
+    alike, so what remains is a linear program over dispatch, storage flows and the
+    network. The mode is pinned whether or not sm tied it across scenarios: leaving any
+    integer free would price a relaxation of the program that cleared rather than that
+    program, and its objective could fall below the clearing it is meant to price.
+
     Scenario s's balance row carries the weight p_s, so its dual is p_s times that
     scenario's price; the weight is divided back out here. The commitment is common, so a
     price is still one price per bus and period in each scenario.
@@ -245,8 +252,9 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     g, st, d, net, pr, _w, _al = ck(g, st, d, pr, net, 0.0, 0.95)
     S, G, R, T, B = len(pr), len(g), len(st), d.shape[2], net.nb
     u = np.atleast_2d(np.asarray(s.u, dtype=float)).reshape(G, T)
-    if not np.isin(u, [0.0, 1.0]).all():
-        raise ValueError("the held commitment must be binary")
+    md = np.asarray(s.sm, dtype=float).reshape(S, R, T) if R else np.zeros((S, 0, T))
+    if not np.isin(u, [0.0, 1.0]).all() or not np.isin(md, [0.0, 1.0]).all():
+        raise ValueError("the held commitment and mode must be binary")
     c, A, b, Ae, be, lb, ub, _it, ou, os, ns, es, nb, cs = _sys(
         g, st, d, net, pr, 0.0, 0.95, False, sm)
     lb, ub = np.array(lb, dtype=float), np.array(ub, dtype=float)
@@ -257,6 +265,10 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
             for k, y in enumerate((u[i], np.maximum(v, 0.0), np.maximum(-v, 0.0)), start=1):
                 lb[o + k * T : o + (k + 1) * T] = y
                 ub[o + k * T : o + (k + 1) * T] = y
+        for j in range(R):
+            o = q * ns + os[j]
+            lb[o + 3 * T : o + 4 * T] = md[q, j]
+            ub[o + 3 * T : o + 4 * T] = md[q, j]
     nna = Ae.shape[0] - (es * S)
     Ae, be = _order(Ae, be, nb, S, nna)
     res = _px(c, A, b, Ae, be, lb, ub, S * nb)
@@ -268,4 +280,4 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     pi = pi / pr[:, None, None]
     z = np.array([float(cs[k] @ y[k * ns : (k + 1) * ns]) for k in range(S)])
     return Sc(res[0], float(pr @ z), _cv(z, pr, 0.95), z, u, p,
-              q[0], q[1], q[2], q[3], pi, res[3])
+              q[0], q[1], q[2], md, pi, res[3])

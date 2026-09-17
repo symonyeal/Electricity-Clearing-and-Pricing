@@ -167,3 +167,29 @@ def test_refused(kw, msg):
 def test_demand_shape_refused():
     with pytest.raises(ValueError, match="scenarios, buses, periods"):
         ck(G, [], np.zeros((2, 2, 2, 2)))
+
+
+@pytest.mark.parametrize("sm", [False, True])
+def test_priced_redispatch_holds_the_storage_mode(sm):
+    """Pricing pins the cleared mode, so the held program is the one that cleared.
+
+    joint.lmp pins the mode and reproduces its clearing's cost. The stochastic pricing must
+    do the same in every scenario: the mode is an integer column, and a priced program that
+    left one free would be a relaxation of the clearing, free to reach a cost below it. The
+    cost is the assertion that catches that, because a relaxation is cheaper; the mode is
+    asserted binary because that is what leaving it free shows up as.
+    """
+    st = [S(e=40.0, c=20.0, d=20.0, ec=0.9, ed=0.9, e0=10.0, k=1.0)]
+    a = cl(G, st, D, PR, sm=sm)
+    q = lmp(G, st, D, a, PR, sm=sm)
+    assert q.mean == pytest.approx(a.mean, rel=1e-9)
+    assert np.isin(q.sm, [0.0, 1.0]).all()
+    assert q.sm == pytest.approx(a.sm)
+
+
+def test_priced_redispatch_refuses_a_fractional_mode():
+    """A mode that is not binary is refused rather than priced."""
+    st = [S(e=40.0, c=20.0, d=20.0, ec=0.9, ed=0.9, e0=10.0, k=1.0)]
+    a = cl(G, st, D, PR)
+    with pytest.raises(ValueError, match="commitment and mode must be binary"):
+        lmp(G, st, D, a._replace(sm=np.full_like(a.sm, 0.5)), PR)
