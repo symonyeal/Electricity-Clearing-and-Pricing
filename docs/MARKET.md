@@ -156,6 +156,14 @@ The defaults reproduce the study above exactly, which is asserted in the tests. 
 shape, the rate and the thresholds are parameters; they are not NYISO's, and fitting them
 to a published tariff and qualification manual is not done here.
 
+The curve is offered around the price the position was chosen at: the probability-weighted
+day-ahead price of the scenario set. Under `fore` that reference is the realized price
+itself, so the cleared price lands exactly at the centre of the curve and the accepted
+share is $\lceil bk/2 \rceil / bk$ whatever the spread, one half for even `bk`. A
+perfect-foresight run with `bk > 1` is therefore no longer an upper reference on what the
+policies could earn; it is foresight bidding into its own price. Read the `fore` row with
+`bk = 0`, which is how the study above is run.
+
 ## Reproduction
 
 ```text

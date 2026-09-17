@@ -147,3 +147,76 @@ def test_an_unqualified_resource_is_refused(fr):
         replay.run(fr, CF.rep(qmin=10.0), "neutral", *CF.te)
     with pytest.raises(ValueError, match="does not qualify"):
         replay.run(fr, CF.rep(qdur=8.0), "neutral", *CF.te)
+
+
+@pytest.mark.parametrize(
+    "kw,msg",
+    [
+        ({"bk": -1}, "negative number of steps"),
+        ({"bk": 4, "bs": -0.1}, "bid spread"),
+        ({"bs": float("inf")}, "bid spread"),
+        ({"tar": -1.0}, "tariff rate"),
+        ({"tar": float("nan")}, "tariff rate"),
+    ],
+)
+def test_market_parameters_are_refused_before_a_solve(fr, monkeypatch, kw, msg):
+    """A malformed market parameter stops the run, and stops it before any solving.
+
+    Each of these would otherwise surface late or not at all: a negative spread inside the
+    first day's offer, a negative rate inside its settlement, and a negative step count
+    nowhere, because accept reads any step count below one as full acceptance. Counting
+    calls into the solver is what separates refusing the configuration from discovering it
+    partway through a replay; a wall clock would only say the fixture is small.
+    """
+    n = []
+    monkeypatch.setattr(replay, "st", lambda *a, **k: n.append(1))
+    with pytest.raises(ValueError, match=msg):
+        replay.run(fr, CF.rep(**kw), "neutral", *CF.te)
+    assert not n
+
+
+@pytest.mark.parametrize("k", [1, 2, 3, 4, 5, 8])
+@pytest.mark.parametrize("sp", [0.05, 0.25, 0.5])
+def test_a_curve_centred_on_the_cleared_price_fills_half(k, sp):
+    """At the reference price the fill is ceil(k/2)/k, whatever the spread.
+
+    The curve is symmetric about ref and ties go to acceptance, so a cleared price landing
+    exactly on ref takes the slices at or below it and no others. The spread moves where
+    the slices sit, not how many are on each side, so it cancels out. This is the arithmetic
+    behind the foresight caveat in docs/MARKET.md.
+    """
+    want = -(-k // 2) / k
+    assert clear(curve(10.0, 50.0, k, sp), 50.0) == pytest.approx(10.0 * want)
+    assert clear(curve(-10.0, 50.0, k, sp), 50.0) == pytest.approx(-10.0 * want)
+
+
+def test_foresight_bids_into_its_own_price(fr):
+    """Under fore the reference is the realized price, so an even curve fills exactly half.
+
+    docs/MARKET.md warns that a foresight run with a curve stops being an upper reference.
+    That is this: fore's scenario set is the realized path, so ref equals the cleared price
+    in every hour and half the offered position is left behind for no informational reason.
+    """
+    a = replay.run(fr, CF, "fore", *CF.te)
+    for k in (2, 4, 8):
+        b = replay.run(fr, CF.rep(bk=k, bs=0.25), "fore", *CF.te)
+        assert float(np.abs(b.iv["q"]).sum()) == pytest.approx(
+            0.5 * float(np.abs(a.iv["q"]).sum()), rel=1e-9)
+
+
+@pytest.mark.parametrize("ref", [80.0, -80.0])
+@pytest.mark.parametrize("q", [10.0, -10.0])
+def test_acceptance_is_monotone_at_a_negative_reference(ref, q):
+    """Acceptance sweeps from nothing to the whole position as the cleared price rises.
+
+    At a negative reference the rows are no longer sorted, which the docstring used to
+    claim they were. Nothing reads the order, so the property that matters survives: a
+    seller takes more as the price rises and a buyer takes less, which in signed terms is
+    the same monotone sweep, from one end of the band to the other.
+    """
+    cv = curve(q, ref, 6, 0.3)
+    lo, hi = float(cv[:, 0].min()), float(cv[:, 0].max())
+    got = [clear(cv, p) for p in np.linspace(lo - 10.0, hi + 10.0, 60)]
+    assert got == sorted(got)
+    assert clear(cv, lo - 10.0) == pytest.approx(0.0 if q > 0 else q)
+    assert clear(cv, hi + 10.0) == pytest.approx(q if q > 0 else 0.0)

@@ -176,7 +176,20 @@ def settle(iv, cf):
 
 
 def run(fr, cf, pol, lo, hi, log=None):
-    """Replay a date range in order. Energy is never reset at a day boundary."""
+    """Replay a date range in order. Energy is never reset at a day boundary.
+
+    The market-interface parameters are checked here rather than where they are first
+    used. A negative spread or tariff would otherwise raise inside the first day's offer
+    or its settlement, after a solve that can run for seconds, and a negative step count
+    would not raise at all: accept reads any k below one as "take the position in full",
+    which silently turns the curve off instead of refusing the configuration.
+    """
+    if cf.bk < 0:
+        raise ValueError("an offer curve cannot have a negative number of steps")
+    if not np.isfinite(cf.bs) or cf.bs < 0:
+        raise ValueError("the bid spread must be finite and non-negative")
+    if not np.isfinite(cf.tar) or cf.tar < 0:
+        raise ValueError("a tariff rate must be finite and non-negative")
     ok, msg = qual(max(cf.c, cf.d), cf.e, cf.qmin, cf.qdur)
     if not ok:
         raise ValueError(f"this resource does not qualify: {msg}")

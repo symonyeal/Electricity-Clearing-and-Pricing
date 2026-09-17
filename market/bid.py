@@ -12,7 +12,7 @@
 # this: what is here is the mechanism those documents would parameterise.
 #
 # LEGEND
-#   cv         : one hour's offer curve, (price, quantity) rows, ascending in price
+#   cv         : one hour's offer curve, (price, quantity) rows, in no particular order
 #   curve      : build that curve around an intended position
 #   clear      : the quantity one clearing price accepts from a curve
 #   accept     : both of the above over a day of hours
@@ -28,10 +28,17 @@ import numpy as np
 def curve(q, ref, k, sp):
     """One hour's offer curve: k equal slices of q spread by sp around ref.
 
-    A resource that means to discharge q offers it in slices whose reservation prices rise
-    from ref(1 - sp) to ref(1 + sp); one that means to charge bids for it over the same
-    band. The curve is monotone in price in the direction the resource is trading, which is
-    what makes a single clearing price pick out one quantity.
+    A resource that means to discharge q offers it in slices whose reservation prices span
+    the band between ref(1 - sp) and ref(1 + sp); one that means to charge bids for it over
+    the same band. What makes a single clearing price pick out one quantity is that clear
+    tests each slice against its own reservation, so the accepted quantity is monotone in
+    the cleared price however the rows happen to be ordered.
+
+    The rows ascend in price for a discharging resource only while ref is positive; at a
+    negative reference the same band is walked the other way, because the band is ref
+    scaled rather than ref offset. Nothing reads the order, so this changes the listing
+    and not the clearing. NYISO day-ahead prices in the committed archive are never
+    negative, but the real-time ones are, and a market may price either way.
 
     sp is a bidding stance, not a derivation. sp = 0 collapses the curve to one block at
     ref and reproduces full acceptance whenever the cleared price is on the right side of
