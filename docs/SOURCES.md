@@ -6,7 +6,10 @@ Only sources used by a live formulation, dataset, or validation case are listed.
 
 | Source | Use |
 | --- | --- |
+| Gribik, P. R., Hogan, W. W. and Pope, S. L. (2007), [“Market-Clearing Electricity Prices and Energy Uplift”](http://www.lmpmarketdesign.com/papers/Gribik_Hogan_Pope_Price_Uplift_123107.pdf), working paper, 31 December 2007 | Convex hull pricing and the uplift it minimizes; the origin of the rule `hc` and `hl` compute |
+| Liberopoulos, G. and Andrianesis, P. (2016), [“Critical Review of Pricing Schemes in Markets with Non-Convex Costs”](https://doi.org/10.1287/opre.2015.1451), *Operations Research* 64(1), 17–31 | The taxonomy the three priced rules sit inside |
 | Hua, B. and Baldick, R. (2017), [“A Convex Primal Formulation for Convex Hull Pricing”](https://arxiv.org/abs/1605.05002), *IEEE Transactions on Power Systems* 32(5), 3814–3823 | Convex-primal CHP and examples `ex1` and `ex2` |
+| O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017), [“Dual Pricing Algorithm in ISO Markets”](https://doi.org/10.1109/TPWRS.2016.2614891), *IEEE Transactions on Power Systems* 32(4), 3308–3310 | Axiomatic dual pricing; reference [4] of the FERC talk the AIC case rests on |
 | Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [“A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing”](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf) | AIC, payments, and `ex3` |
 | Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [Optimization Online version](https://optimization-online.org/2020/09/8004/) | Restricted-block result used to interpret AIC make-whole payments |
 | Balas, E. (1998), [“Disjunctive Programming: Properties of the Convex Hull of Feasible Points”](https://doi.org/10.1016/S0166-218X(98)00136-X) | Schedule-wise union-of-polyhedra formulation `hl` |
@@ -18,6 +21,21 @@ Only sources used by a live formulation, dataset, or validation case are listed.
 
 The FERC talk is also stored locally as `Research PDF Files\electricity pricing.pdf`, and
 Beck as `Research PDF Files\beck.pdf`.
+
+### Production practice
+
+What is actually settled, against which the priced rules here are a measurement. Cited by
+[Pricing](PRICING.md), "What is settled in practice".
+
+| Source | Use |
+| --- | --- |
+| MISO (2024), [“Fast Start Pricing / ELMP at MISO”](https://stakeholdercenter.caiso.com/InitiativeDocuments/Presentation-Fast%20Start-Pricing-ELMP-at-MISO-Dec-19-2024.pdf), presented to the CAISO stakeholder process, 19 December 2024 | The partial-commitment relaxation, the unenforced ramp-down row, Fast Start Resource eligibility, the phase dates, and the Phase I and Phase II results |
+| Guan, Y. (2019), [“Optimal Convex Hull Pricing and MISO Case Studies”](https://www.ferc.gov/sites/default/files/2020-09/T4-3-Guan.pdf), FERC Technical Conference, June 2019 | The interval dynamic program behind `hc`, and its $O(T^2)$ proposition |
+| Ahunbay, M. Ş., Bichler, M., Dobos, T. and Knörr, J. (2023), [“Solving Large-Scale Electricity Market Pricing Problems in Polynomial Time”](https://arxiv.org/abs/2312.07071) | An alternative that changes the allocation rather than the price: approximate competitive equilibrium with no budget deficit |
+
+Guan's deck is served from FERC's `2020-09` directory; its slides and PDF date are June 2019.
+Reference [4] of the FERC talk gives the O'Neill dual-pricing pages as 3301–3310; the
+publisher's own deposit gives 3308–3310, which is what is recorded above.
 
 ### Small cases
 

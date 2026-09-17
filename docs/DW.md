@@ -142,7 +142,8 @@ resource can form one Dantzig–Wolfe block if its self-scheduling MILP or dynam
 optimization is a practical pricing oracle. No such master or benchmark is implemented.
 
 These are candidate applications, not evidence that column generation is faster than a
-direct formulation not yet constructed.
+direct formulation not yet constructed, nor than another decomposition of the same dual.
+Benders is the measured competitor; see Sources below.
 
 ## Computational requirements
 
@@ -192,5 +193,11 @@ documented numerical tolerances.
 | Andrianesis, P., Bertsimas, D., Caramanis, M. C. and Hogan, W. W. (2020), [“Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition”](https://arxiv.org/abs/2012.13331), §II–III, pp. 3–5 | Lagrangian-dual price, extreme-point master, reduced cost, self-scheduling oracle, and finite convergence |
 | Wolsey, L. A. (2021), *Integer Programming*, 2nd ed., Wiley, ch. 10, pp. 195–209; §§11.2–11.3, pp. 215–217; p. 226 | Lagrangian duality, Dantzig–Wolfe reformulation, column generation, initialization, stopping, and computational issues |
 | Dantzig, G. B. and Wolfe, P. (1960), [“Decomposition Principle for Linear Programs”](https://doi.org/10.1287/opre.8.1.101), *Operations Research* 8(1), 101–111 | Original decomposition |
+| Knueven, B., Ostrowski, J., Castillo, A. and Watson, J.-P. (2022), [“A computationally efficient algorithm for computing convex hull prices”](https://doi.org/10.1016/j.cie.2021.107806), *Computers & Industrial Engineering* 163, 107806 | Benders alternative to column generation; the standing computational comparison |
 
 The direct hull formulations are cited in [Sources](SOURCES.md).
+
+Column generation is not the only decomposition on offer. Knueven, Ostrowski, Castillo and
+Watson cut the same dual by Benders and report at least an order of magnitude against the
+equivalent large linear program. That is the figure any generation loop added here would have
+to beat, and it is not measured in this repository.

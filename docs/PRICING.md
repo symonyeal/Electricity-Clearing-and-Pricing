@@ -34,7 +34,8 @@ per zone under transport.
 | AIC | Restrict losing commitment blocks to cleared output plus epsilon, then price the restricted hull |
 
 Make-whole is computed by commitment block. Total uplift equals make-whole plus lost
-opportunity.
+opportunity. All three rules hold the allocation fixed and choose a price for it; Liberopoulos
+and Andrianesis survey that family and the alternatives to it.
 
 ## Solve routes
 
@@ -138,3 +139,43 @@ $$
 exact at every price to $9.3\times10^{-10}$ over 400 random prices on `ex4` and `ex5`. At a
 price that is a dual the cleared flows solve the subproblem, so $W(\pi)=-R(\pi)$ and the
 single-bus form returns. Both $W$ and $R$ vanish identically on one bus.
+
+## What is settled in practice
+
+No market settles an exact hull price. The base rule everywhere is LMP with the commitment
+fixed, relaxed in some markets for fast-start resources only, and the residue is paid as
+uplift in all of them: Chen and O'Neill put it as "all ISO/RTOs compensate for MWP", the
+objection being transparency rather than existence. MISO's Extended LMP is the oldest
+production rule of the relaxed family, and it is an approximation in two distinct senses.
+
+| | Extended LMP, in production | `hc` and `hl` |
+| --- | --- | --- |
+| Integrality | A variable $\mathit{on}\in[0,1]$ replaces the binary, with cost $\mathit{on}\times(\text{start-up}+\text{no-load})$ and limits $\mathit{on}\times\underline{P}\le p\le \mathit{on}\times\overline{P}$ | The convex hull of $X_g$ |
+| Ramp rows | Ramp-down is **not enforced** in the pricing run, so a unit held at its minimum can still set price | Retained inside $X_g$ |
+| Who is eligible | Fast Start Resources only: start-up plus notification $\le 60$ min, minimum run $\le 1$ h, excluding storage, pumped storage, run-of-river hydro and wind | Every unit |
+
+A relaxed binary with a deleted constraint is not a hull. The exact hull is therefore an
+instrument for measuring that rule rather than a competitor to it, which is the use this
+model is fit for.
+
+| Measured, MISO | Value |
+| --- | ---: |
+| Market units, of which fast-start eligible (2014 parallel operation) | 1,391 / ~60 |
+| Real-time intervals where ELMP equalled LMP | 94.3% |
+| Revenue sufficiency guarantee make-whole reduction, Phase I / Phase II | ~1% / ~9% |
+| Make-whole under an exact hull, relative to LMP, seven day-ahead cases | 1.64%–26.55% |
+
+The last two rows are different metrics on different markets and do not divide into one
+another. Their separation is the open question.
+
+Two consequences of the network term above are recorded in the same study. Constraints not
+binding in the clearing may bind under a hull price, so $R$ moves and the rent that funds
+financial transmission rights moves with it; its measured FTR uplift is zero under LMP by
+construction and 1.19%–5.76% of generator profit under the hull. And the convex hull of a
+storage resource is named there as open research, which is the same limitation
+[JOINT](JOINT.md) records for the mode cut.
+
+Holding the allocation fixed and choosing a price for it is itself a choice. Ahunbay, Bichler,
+Dobos and Knörr instead compute an approximate competitive equilibrium in polynomial time,
+changing the schedule to obtain a price with no budget deficit. Nothing here implements that,
+and it is the alternative worth knowing about.
