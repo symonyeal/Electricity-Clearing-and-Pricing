@@ -8,6 +8,9 @@
 | Retain an independent formulation or external benchmark. | Two solvers on one matrix share its errors. |
 | Compare objective values when optima are nonunique. | A dual-optimal face need not determine one price vector. |
 | Report achieved gaps and bounds. | A requested tolerance is not a result. |
+| Ask the reference clearings for a zero gap and read back the gap achieved. | HiGHS stops at 1e-4 by default, so "opt" without a read-back reports a tolerance nobody checked. |
+| Build a dual bound from the solver's bound, never from its incumbent. | An incumbent can understate a subproblem optimum and carry the reported dual past the primal. |
+| Name a failed solve by the solver's own status. | Bad data and an infeasible program both end in a failure; calling both infeasible is right once. |
 | Label synthetic data and its tested property. | A synthetic result has no empirical interpretation without one. |
 | Add dependencies only after measurement. | The live models require no framework layer. |
 
@@ -45,6 +48,8 @@
 | Default to full acceptance at no charge with every resource admitted. | It is the replay's own assumption, and the baseline must not move. |
 | Supply the curve, the charge and the screens as parameters. | Calibrating them needs a tariff, which is a different kind of work. |
 | Screen qualification before the first solve. | An ineligible resource has no result worth computing. |
+| Charge `tar` in settlement and leave it out of the optimizing objective. | The charge is an ex-post stress test of a policy chosen without it; pricing it in is a calibration question, not a correction, and is open work. |
+| Require a whole, finite step count, spread, rate and screen threshold. | A nan passes a sign test, turns a screen into one that cannot refuse, and fails later somewhere that does not name the configuration. |
 
 ## Storage
 
@@ -64,6 +69,7 @@
 | Decision | Reason |
 | --- | --- |
 | Preserve NYISO archives and parse local timestamps to UTC. | Transition days contain 23 or 25 hours. |
+| Align an analog day to its target by local clock hour and fold. | A price shape belongs to the clock; by array position every hour past a transition slides by one. |
 | Skip and record incomplete days; do not fill prices. | Imputation would add an untested data model. |
 | Apply a two-bin real-time information lag. | A decision must not read its settlement interval. |
 | Fit on training data, select on 2024, and evaluate the frozen policies on 2025. | This separates estimation, selection, and evaluation. |
@@ -75,10 +81,19 @@
 
 1. Calibrate `market/bid.py` to one market's published tariff and qualification manual.
    The mechanism is implemented; the parameters are not anyone's.
-2. A convex hull price for the joint feasible set. Today the joint and stochastic clearings
+2. Price `tar` inside the policy rather than after it. Today the optimizing battery carries
+   throughput cost `kd + fee`, so a run at `tar > 0` takes the schedule it would have taken
+   at `tar = 0` and pays the charge afterwards; a large enough rate therefore makes the
+   selected trade lose money, and `arb` in `market/report.py` reconciles only at `tar = 0`.
+   The work is to put `tar` into `_bat(...).k`, give the report identity its own tariff
+   component, and add a high-rate no-trade regression. It is deliberately not bundled with
+   item 1: moving a cost into the objective changes which trades a policy takes, so it
+   changes every result it touches and belongs with the calibration that gives the rate a
+   number, not before it. [Market interface](MARKET.md) states the current boundary.
+3. A convex hull price for the joint feasible set. Today the joint and stochastic clearings
    pin the integers, so the nonconvexity is left as make-whole.
-3. A multi-stage scenario tree. The stochastic clearing branches once.
-4. Ramping and reserve carried between scenarios, and a reserve product in `uc_price`.
+4. A multi-stage scenario tree. The stochastic clearing branches once.
+5. Ramping and reserve carried between scenarios, and a reserve product in `uc_price`.
 
 Superseded decisions and the out-of-scope pit model are in the
 [dated archive](../_archive/20260916-focus-reset/README.md).

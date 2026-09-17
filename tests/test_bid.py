@@ -111,8 +111,12 @@ def test_qual_screens():
     assert "below the 5 MW minimum" in qual(1.0, 4.0, 5.0, 0.0)[1]
     assert not qual(1.0, 2.0, 0.0, 4.0)[0]
     assert "below the 4 h minimum" in qual(1.0, 2.0, 0.0, 4.0)[1]
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="must be finite and positive"):
         qual(0.0, 4.0, 0.0, 0.0)
+    for bad in ((1.0, 4.0, -1.0, 0.0), (1.0, 4.0, 0.0, float("nan")),
+                (1.0, 4.0, float("inf"), 0.0)):
+        with pytest.raises(ValueError, match="thresholds must be finite"):
+            qual(*bad)
 
 
 def test_defaults_reproduce_the_baseline(fr):
@@ -152,7 +156,9 @@ def test_an_unqualified_resource_is_refused(fr):
 @pytest.mark.parametrize(
     "kw,msg",
     [
-        ({"bk": -1}, "negative number of steps"),
+        ({"bk": -1}, "whole, non-negative number of steps"),
+        ({"bk": 1.5}, "whole, non-negative number of steps"),
+        ({"bk": float("nan")}, "whole, non-negative number of steps"),
         ({"bk": 4, "bs": -0.1}, "bid spread"),
         ({"bs": float("inf")}, "bid spread"),
         ({"tar": -1.0}, "tariff rate"),

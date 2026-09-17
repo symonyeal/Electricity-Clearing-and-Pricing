@@ -104,9 +104,15 @@ def qual(pw, en, qmin, qdur):
     resource can hold rated output. A market that requires a minimum size states qmin; one
     that requires a sustained duration states qdur. Both default to zero, which admits
     everything.
+
+    A threshold is compared with a tolerance, so a nan threshold compares false and admits
+    every resource while reading as a screen that was applied. A screen that cannot refuse
+    anything is not a screen, so the thresholds are required to be finite numbers here.
     """
-    if pw <= 0 or en <= 0:
-        raise ValueError("rated power and usable energy must be positive")
+    if not np.isfinite(pw) or not np.isfinite(en) or pw <= 0 or en <= 0:
+        raise ValueError("rated power and usable energy must be finite and positive")
+    if not np.isfinite(qmin) or not np.isfinite(qdur) or qmin < 0 or qdur < 0:
+        raise ValueError("qualification thresholds must be finite and non-negative")
     if pw < qmin - 1e-12:
         return False, f"rated power {pw:g} MW is below the {qmin:g} MW minimum"
     if en / pw < qdur - 1e-12:

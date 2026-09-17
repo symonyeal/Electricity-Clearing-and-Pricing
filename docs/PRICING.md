@@ -56,6 +56,29 @@ dispatch variables make the implemented LP $O(T^3)$ in the worst case. The two f
 agree on every published case and all 104 feasible markets among seeds 0 through 140:
 relative objective tolerance $10^{-9}$, price tolerance $0.0001/MWh.
 
+## What a clearing certifies
+
+`uc` and the self-schedule subproblems inside `qd` carry claims of exactness, so they ask
+the solver for a relative gap of zero and read back the gap it achieved. `Sol.st` is `opt`
+only when the bound closed and `gap` when the search returned an incumbent, which is a
+feasible cost and not a proved optimum. A requested tolerance is not a result: HiGHS stops
+at $10^{-4}$ unless told otherwise, and on the 12-by-10 synthetic market that default
+returns an incumbent 23.4 above its own certified bound.
+
+`qd` subtracts each unit's best self-schedule profit, so it takes the solver's certified
+bound on that profit rather than its incumbent. An incumbent can understate the profit a
+unit could take; understating it lifts the reported dual, and a dual above the primal is
+what weak duality forbids. The bound errs the other way, so
+
+$$q(\pi)\le z_{\rm UC}$$
+
+holds whatever the search was able to prove, and not only when every subproblem closed. At
+a closed gap the bound and the incumbent are the same number.
+
+A solve that fails is named by the solver's own status — infeasible, limit, unbounded or
+numerical — and not called infeasible by default. Malformed data and a demand no commitment
+can serve both end in a failed solve, and only the second of them is an infeasibility.
+
 ## Price selection
 
 `_px` selects one vector from the optimal dual face:

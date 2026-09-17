@@ -60,9 +60,36 @@ $$
 with $C_s$ scenario $s$'s own cost. The bracket is the Rockafellar–Uryasev CVaR of cost;
 $w=0$ minimises the expected cost.
 
+## What `lmp` prices, when the clearing was risk averse
+
 Scenario $s$'s balance row enters the objective already multiplied by $p_s$, so its dual is
 $p_s$ times that scenario's price. `lmp` divides the weight back out, and a zero probability
 is refused rather than divided by.
+
+That statement is complete only for $w=0$. With $w>0$ the objective above also carries the
+CVaR epigraph, the cost block is scaled by $1-w$, and the rows $\xi_s\ge C_s-\zeta$ couple
+each scenario's cost back into its own dispatch. A balance dual of that program carries
+$(1-w)p_s$ plus that row's own epigraph multiplier, so dividing by $p_s$ does not return a
+price, and pinning the integers does not by itself produce one either: the objective
+coefficients enter stationarity, so changing them changes the dual.
+
+**`lmp` therefore prices a different program from the one `cl` minimised.** It builds a new
+expected-cost re-dispatch, $w=0$, holding the commitment and the storage mode of the
+risk-averse clearing, and reads that program's balance duals. This is a market design
+decision — settle a risk-averse commitment at the duals of its risk-neutral re-dispatch —
+and not an implementation detail of the same objective:
+
+| Field | What it names on `cl` | What it names on `lmp` |
+| --- | --- | --- |
+| `z` | the mean-CVaR objective that chose the commitment | the expected cost of the re-dispatch |
+| `cv` | CVaR of scenario cost at $\alpha$ | `nan`: that program fixes no tail |
+| `pi` | `nan`: `cl` prices nothing | the balance duals of the re-dispatch |
+
+On the instance in `tests/test_stoch.py` at $w=1$, $\alpha=0.5$, `cl` returns $z=2{,}320$
+with mean 1,960 and CVaR 2,320, and `lmp` returns $z=1{,}960$ with `cv` `nan`. The two $z$
+values are objectives of two programs and are not comparable as one number. Pricing the
+risk-averse clearing itself would need a normalisation of the epigraph multipliers that
+this module does not implement and no result here has been checked against.
 
 ## What the bounds say
 
@@ -87,5 +114,11 @@ shares no assembly with the module under test.
 
 The clearing is a single-stage commitment with per-scenario recourse, one branch deep. It
 is not a multi-stage tree, and it carries no ramping restriction between scenarios. Prices
-are the duals of the balance rows once the integers are pinned; no hull is taken over the
-joint feasible set, so a nonconvexity is left as make-whole rather than priced away.
+are the duals of the balance rows of the expected-cost re-dispatch that holds those pinned
+integers, as above; no hull is taken over the joint feasible set, so a nonconvexity is left
+as make-whole rather than priced away.
+
+Both clearings solve to a requested relative gap of zero and report the gap they achieved:
+`st` is `opt` only when the bound closed, and `gap` when the search returned an incumbent.
+A value tagged `gap` is a feasible cost, not a proved optimum, and the bounds above are
+claims about optima.

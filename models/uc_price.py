@@ -10,6 +10,8 @@
 #   Sol          : one solved outcome
 #   Mkt,Pay      : every price from one clearing, and the payment split
 #   mk,ck        : fill one unit's optional fields, validate a whole market
+#   _ix          : the whole number a discrete field names, refusing anything else
+#   _dg,_mi      : name why a solve failed; solve an integer program to a proved optimum
 #   _rw,_eq,_fx  : THE feasible set, written once: rows, equalities, bounds
 #   _pl          : those same rows with the binaries fixed -> one dispatch polytope
 #   _vw          : the start and stop flags an on/off row implies
@@ -137,6 +139,11 @@ class Sol(NamedTuple):
     asked for; raw, the payment stage itself failed; pay, past LIM[3] so payment only and
     the probe never reached; probe, the probe closed the face; part, the walk stopped on a
     failed step; walk, the walk completed. Only the last two are canonical to the walk.
+
+    A route that prices nothing has no such walk to report, so there st carries the
+    certificate of its own solve instead: opt, the search closed its bound; gap, it stopped
+    short of one and the value is an incumbent rather than a proved optimum; enum, the value
+    came from enumeration and no bound was involved.
     """
 
     z: float
@@ -166,9 +173,27 @@ class Pay(NamedTuple):
     up: np.ndarray
 
 
+def _ix(y, what):
+    """The whole number a discrete field names, refusing a value that is not one.
+
+    int() truncates. A minimum run time given as 1.9 periods silently becomes 1, a bus
+    given as 0.9 becomes bus 0, and the model then answers a question nobody asked while
+    reporting it as the one that was put. A discrete field is a whole number or an error.
+    """
+    q = float(y)
+    if not np.isfinite(q) or q != int(q):
+        raise ValueError(f"{what} must be a whole number")
+    return int(q)
+
+
 def mk(x):
-    """Return one unit with its ramp and initial-duration defaults filled in."""
+    """Return one unit with its ramp and initial-duration defaults filled in.
+
+    The discrete fields are checked before they are converted, so a fractional minimum run
+    time is refused rather than truncated into a different unit.
+    """
     hi = float(x.hi)
+    mu, md = _ix(x.mu, "a minimum run time"), _ix(x.md, "a minimum down time")
     return U(
         float(x.lo),
         hi,
@@ -179,11 +204,11 @@ def mk(x):
         hi if x.rd is None else float(x.rd),
         hi if x.sr is None else float(x.sr),
         hi if x.dr is None else float(x.dr),
-        int(x.mu),
-        int(x.md),
-        int(x.u0),
+        mu,
+        md,
+        _ix(x.u0, "an initial commitment"),
         float(x.p0),
-        max(int(x.mu), int(x.md)) if x.e0 is None else int(x.e0),
+        max(mu, md) if x.e0 is None else _ix(x.e0, "an initial duration"),
     )
 
 
@@ -198,8 +223,9 @@ def ck(g, d, net=None):
     if not g:
         raise ValueError("a market needs at least one unit")
     for x in g:
-        if not all(np.isfinite(y) for y in (x.lo, x.hi, x.c, x.nl, x.su, x.p0)):
-            raise ValueError("unit offers and limits must be finite")
+        if not all(np.isfinite(y) for y in (x.lo, x.hi, x.c, x.nl, x.su, x.p0,
+                                            x.ru, x.rd, x.sr, x.dr)):
+            raise ValueError("unit offers, limits and ramps must be finite")
         if x.hi <= 0 or x.lo < 0 or x.lo > x.hi:
             raise ValueError("require 0 <= lo <= hi with hi > 0")
         if x.nl < 0 or x.su < 0:
@@ -217,14 +243,18 @@ def ck(g, d, net=None):
     if net is None:
         net = Net(np.zeros(len(g), dtype=int), (), 1)
     else:
-        bus = np.asarray(net.bus, dtype=int)
-        if bus.shape != (len(g),) or bus.min() < 0 or bus.max() >= int(net.nb):
+        nb = _ix(net.nb, "a bus count")
+        bus = np.asarray(net.bus, dtype=float).ravel()
+        bus = np.array([_ix(y, "a unit's bus") for y in bus], dtype=int)
+        if bus.shape != (len(g),) or bus.min() < 0 or bus.max() >= nb:
             raise ValueError("every unit must sit at a bus of the network")
         if net.fm not in ("dc", "ntc"):
             raise ValueError("the line model must be dc or ntc")
+        ln = []
         for e in net.ln:
-            a, q = e[0], e[1]
-            if not (0 <= a < net.nb and 0 <= q < net.nb) or a == q:
+            a = _ix(e[0], "a line endpoint")
+            q = _ix(e[1], "a line endpoint")
+            if not (0 <= a < nb and 0 <= q < nb) or a == q:
                 raise ValueError("every line must join two different buses")
             if net.fm == "ntc":
                 if len(e) != 3 or np.ndim(e[2]) != 1 or np.size(e[2]) != 2:
@@ -238,10 +268,11 @@ def ck(g, d, net=None):
                     raise ValueError("a line is (bus, bus, reactance, limit)")
                 if not np.isfinite(e[2:]).all() or e[2] <= 0 or e[3] <= 0:
                     raise ValueError("every line needs a positive reactance and limit")
+            ln.append((a, q) + tuple(e[2:]))
         zn = tuple(net.zn)
-        if zn and (len(zn) != int(net.nb) or len(set(zn)) != len(zn)):
+        if zn and (len(zn) != nb or len(set(zn)) != len(zn)):
             raise ValueError("zone keys must be one per zone and distinct")
-        net = Net(bus, tuple(net.ln), int(net.nb), net.fm, zn)
+        net = Net(bus, tuple(ln), nb, net.fm, zn)
     if d.shape[0] != net.nb:
         raise ValueError("demand must have one row per bus and one column per period")
     if d.sum(0).max() > sum(x.hi for x in g):
@@ -490,29 +521,57 @@ def _out(g, T, y, o):
     return np.where(np.abs(p) < 1e-9, 0.0, p), u
 
 
-def uc(g, d, cap=None, net=None):
-    """Clear the market: unit commitment and economic dispatch as one integer program."""
-    g, d, net = ck(g, d, net)
-    c, A, b, Ae, be, lb, ub, it, o = _sy(g, d, net, cap, True)
+def _dg(res):
+    """Why a solve did not succeed, in the solver's own terms rather than "infeasible".
+
+    A malformed ramp and a demand no commitment can serve both end in a failed solve, and
+    calling either one infeasible names the second correctly and the first wrongly. The
+    status separates a proved infeasibility from a limit, an unbounded objective and a
+    numerical failure, and the message says which the solver reached.
+    """
+    k = {1: "limit", 2: "infeasible", 3: "unbounded", 4: "numerical"}
+    return f"{k.get(int(res.status), 'other')}: {res.message}"
+
+
+def _mi(c, it, lb, ub, A, b, Ae, be, why):
+    """Solve one integer program to a proved optimum, and report what was proved.
+
+    A requested tolerance is not a result. HiGHS stops at a relative gap of 1e-4 unless
+    told otherwise, so a reference routine that asks for nothing and returns "opt" is
+    reporting a tolerance it never read back. These routines carry claims of exactness, so
+    the gap asked for is zero and the gap achieved is read: "opt" means the bound closed,
+    "gap" means the search stopped at an incumbent, and the two are not the same object.
+    """
     res = milp(
         c,
         integrality=it,
         bounds=Bounds(lb, ub),
         constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
+        options={"mip_rel_gap": 0.0},
     )
     if not res.success:
-        raise ValueError("this demand has no feasible unit commitment")
+        raise ValueError(f"{why} [{_dg(res)}]")
+    ag = float(res.mip_gap) if np.any(it) else 0.0
+    return res, ag, "opt" if ag == 0.0 else "gap"
+
+
+def uc(g, d, cap=None, net=None):
+    """Clear the market: unit commitment and economic dispatch as one integer program."""
+    g, d, net = ck(g, d, net)
+    c, A, b, Ae, be, lb, ub, it, o = _sy(g, d, net, cap, True)
+    res, _ag, st = _mi(c, it, lb, ub, A, b, Ae, be, "this demand did not clear")
     p, u = _out(g, d.shape[1], res.x, o)
-    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan), "opt")
+    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan), st)
 
 
 def rx(g, d, cap=None, net=None):
     """Relax the same system's binaries; its balance dual is the relaxation's energy price."""
     g, d, net = ck(g, d, net)
     c, A, b, Ae, be, lb, ub, _, o = _sy(g, d, net, cap, False)
-    res = _px(c, A, b, Ae, be, lb, ub, d.size)
+    why = []
+    res = _px(c, A, b, Ae, be, lb, ub, d.size, why)
     if res is None:
-        raise ValueError("this demand has no feasible relaxed commitment")
+        raise ValueError(f"the relaxed commitment did not solve [{why[0]}]")
     p, u = _out(g, d.shape[1], res[1], o)
     return Sol(res[0], p, u, res[2][-d.size :].reshape(d.shape), res[3])
 
@@ -550,7 +609,7 @@ def _fp(D, c, R, rhs, bd, m, e, nt, pi):
     return float(np.max(np.abs(np.asarray(z.x[m + e - nt :], dtype=float) - pi[-nt:])))
 
 
-def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
+def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0, why=None):
     """Solve a priced program, then select one canonical vector from its optimal duals.
 
     A balance dual is a subgradient of cost in demand. At a kink, and wherever pc's ceilings
@@ -570,6 +629,11 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
     Dual feasibility is an equality. An inequality looks correct while every variable carries
     a bound row, whose multiplier absorbs the slack; a free variable such as a voltage angle
     has no such row, and the inequality then admits vectors that are not duals.
+
+    None still means the program did not solve, because one caller probes trajectories and
+    reads that as an ordinary answer. A caller that will raise passes why, a list this
+    appends the solver's own diagnosis to, so the failure is reported as what it was rather
+    than as infeasibility.
     """
     A = csc_array(A)
     Ae = csc_array(Ae)
@@ -588,6 +652,8 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
             b = np.r_[b, y]
     res = linprog(c, A_ub=A, b_ub=b, A_eq=Ae, b_eq=be, bounds=(None, None))
     if not res.success:
+        if why is not None:
+            why.append(_dg(res))
         return None
     m, e = A.shape[0], Ae.shape[0]
     if not nt:
@@ -618,7 +684,7 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0):
     return float(res.fun), res.x, np.asarray(pi, dtype=float), "walk"
 
 
-def _jt(g, d, net, C, j):
+def _jt(g, d, net, C, j, why=None):
     """Dispatch one chosen trajectory per unit against demand; return cost, output and duals."""
     G, T = len(g), d.shape[1]
     n = G * T
@@ -633,7 +699,7 @@ def _jt(g, d, net, C, j):
     for i in range(G):
         Ae[net.bus[i] * T : net.bus[i] * T + T, i * T : i * T + T] += np.eye(T)
     q = _nw(net, T, n, np.vstack(A), np.concatenate(b), Ae, c, np.full(n, -np.inf), None, None)
-    res = _px(q[3], q[0], q[1], q[2], d.ravel(), q[4], q[5], nt=d.size)
+    res = _px(q[3], q[0], q[1], q[2], d.ravel(), q[4], q[5], nt=d.size, why=why)
     if res is None:
         return None
     k = sum(C[i][j[i]][5] for i in range(G))
@@ -657,7 +723,7 @@ def en(g, d, cap=None, net=None):
             u = np.array([C[i][j[i]][0] for i in range(len(g))])
             best = (res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u)
     if best is None:
-        raise ValueError("this demand has no feasible unit commitment")
+        raise ValueError("this demand did not clear [infeasible: no trajectory serves it]")
     return Sol(best[0], best[1], best[2], np.full(d.shape, np.nan), "enum")
 
 
@@ -680,9 +746,10 @@ def lmp(g, d, s, cap=None, net=None):
     u = np.atleast_2d(np.asarray(s.u, dtype=float))
     if u.shape != (len(g), T) or not np.isin(u, [0.0, 1.0]).all():
         raise ValueError("the fixed commitment must be one binary value per unit and period")
-    res = _jt(g, d, net, _hold(g, T, u, cap), [0] * len(g))
+    why = []
+    res = _jt(g, d, net, _hold(g, T, u, cap), [0] * len(g), why)
     if res is None:
-        raise ValueError("this demand is infeasible for the fixed commitment")
+        raise ValueError(f"the fixed commitment did not re-dispatch [{why[0]}]")
     return Sol(res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u, res[2], res[3])
 
 
@@ -728,9 +795,10 @@ def hl(g, d, cap=None, net=None):
             ev.extend(np.ones(T))
     q = _nw(net, T, n, csc_array((va, (ri, ci)), shape=(m, n)), np.zeros(m),
             csc_array((ev, (ei, ec)), shape=(G + net.nb * T, n)), c, np.zeros(n), None, None)
-    res = _px(q[3], q[0], q[1], q[2], np.r_[np.ones(G), d.ravel()], q[4], q[5], d.size)
+    why = []
+    res = _px(q[3], q[0], q[1], q[2], np.r_[np.ones(G), d.ravel()], q[4], q[5], d.size, why)
     if res is None:
-        raise ValueError("this demand is infeasible for the convex hull program")
+        raise ValueError(f"the convex hull program did not solve [{why[0]}]")
     p, u = np.zeros((G, T)), np.zeros((G, T))
     for i in range(G):
         for j, (q, _, _, _, _, _) in enumerate(C[i]):
@@ -837,9 +905,10 @@ def hc(g, d, cap=None, net=None):
     be[G * w :] = d.ravel()
     q = _nw(net, T, n, csc_array((va, (ri, ci)), shape=(m, n)), np.zeros(m),
             csc_array((ev, (ei, ec)), shape=(G * w + d.size, n)), c, np.zeros(n), None, None)
-    res = _px(q[3], q[0], q[1], q[2], be, q[4], q[5], d.size)
+    why = []
+    res = _px(q[3], q[0], q[1], q[2], be, q[4], q[5], d.size, why)
     if res is None:
-        raise ValueError("this demand is infeasible for the convex hull program")
+        raise ValueError(f"the convex hull program did not solve [{why[0]}]")
     p, u = np.zeros((G, T)), np.zeros((G, T))
     for i in range(G):
         for j, (_, _, s, e, A, _, _) in enumerate(C[i]):
@@ -856,21 +925,24 @@ def _om(g, T, pi, net, cap=None):
     One integer program per unit over that unit's own rows. It reads the feasible set
     algebraically; hl reads it through the trajectory columns. The two agree only if both
     descriptions are correct.
+
+    What is returned is the solver's certified bound on that profit, not its incumbent. An
+    incumbent can understate the best profit available, and qd subtracts these values, so
+    an understated profit raises the reported dual above the true one and can carry it past
+    the primal, which is exactly the weak-duality bound of Beck's Theorem 12.3. The bound
+    errs the other way and is therefore the value a bound may be built on. At a closed gap
+    the two are the same number.
     """
     om = np.zeros(len(g))
     for i, x in enumerate(g):
         A, b = _rw(x, T, None if cap is None else cap[i])
         Ae, be = _eq(x, T)
         lb, ub = _fx(x, T)
-        res = milp(
+        res, _ag, _st = _mi(
             np.r_[x.c - pi[net.bus[i]], np.full(T, x.nl), np.full(T, x.su), np.zeros(T)],
-            integrality=np.r_[np.zeros(T), np.ones(3 * T)],
-            bounds=Bounds(lb, ub),
-            constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
-        )
-        if not res.success:
-            raise ValueError("a unit has no feasible self-schedule")
-        om[i] = -float(res.fun)
+            np.r_[np.zeros(T), np.ones(3 * T)],
+            lb, ub, A, b, Ae, be, "a unit has no self-schedule")
+        om[i] = -float(res.mip_dual_bound)
     return om
 
 
@@ -919,6 +991,10 @@ def qd(g, d, pi, cap=None, net=None):
 
     One best self-schedule problem per unit, plus the network subproblem the same
     relaxation leaves behind. Both are needed for the value to bound the clearing.
+
+    Each unit subproblem contributes its certified bound rather than its incumbent, so the
+    value returned is a valid lower bound on the integer clearing whatever the solver was
+    able to prove, and not merely when every subproblem closed.
     """
     g, d, net = ck(g, d, net)
     pi = np.atleast_2d(np.asarray(pi, dtype=float))

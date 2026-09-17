@@ -24,13 +24,13 @@
 #   C,D,E,M      : the charge, discharge, energy and mode offsets inside a block
 #   g,st,d,net   : units, resources, nodal demand, network
 #   f            : keep the binaries integer
+#   sq,why       : the clearing's own certificate, and why a solve failed
 #   x,y          : one resource, one solved vector
 
 import numpy as np
-from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import csc_array
 
-from models.uc_price import _eq, _fx, _nw, _px, _rw, ck as _ck
+from models.uc_price import _eq, _fx, _ix, _mi, _nw, _px, _rw, ck as _ck
 
 from typing import NamedTuple
 
@@ -58,8 +58,9 @@ class S(NamedTuple):
 class Jt(NamedTuple):
     """Cost, unit output and commitment, resource charge, discharge, energy and mode, price.
 
-    pi carries one price per bus per period. st is uc_price's price-selection tag: only
-    walk and probe are canonical, and cl leaves it at the integer solver's own vertex.
+    pi carries one price per bus per period. st is uc_price's price-selection tag on a
+    priced route: only walk and probe are canonical. cl prices nothing, so there st carries
+    that solve's own certificate instead, opt for a closed bound and gap for an incumbent.
     """
 
     z: float
@@ -155,7 +156,7 @@ def ck(g, st, d, net=None):
             raise ValueError("terminal energy must lie inside the battery")
         if x.k < 0:
             raise ValueError("throughput cost must be non-negative")
-        if not 0 <= int(x.bus) < net.nb:
+        if not 0 <= _ix(x.bus, "a resource's bus") < net.nb:
             raise ValueError("every storage resource must sit at a bus of the network")
     if d.sum(0).max() > sum(x.hi for x in g) + sum(x.d for x in st):
         raise ValueError("demand exceeds generating plus discharge capacity")
@@ -249,17 +250,10 @@ def cl(g, st, d, net=None):
     g, st, d, net = ck(g, st, d, net)
     G, R, T = len(g), len(st), d.shape[1]
     c, A, b, Ae, be, lb, ub, it, ou, os = _sy(g, st, d, net, True)
-    res = milp(
-        c,
-        integrality=it,
-        bounds=Bounds(lb, ub),
-        constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
-    )
-    if not res.success:
-        raise ValueError("this demand has no feasible joint clearing")
+    res, _ag, sq = _mi(c, it, lb, ub, A, b, Ae, be, "this demand did not clear jointly")
     p, u, q = _out(G, R, T, res.x, ou, os)
     return Jt(float(res.fun), p, np.rint(u), q[0], q[1], q[2], np.rint(q[3]),
-              np.full(d.shape, np.nan), "opt")
+              np.full(d.shape, np.nan), sq)
 
 
 def rx(g, st, d, net=None):
@@ -267,9 +261,10 @@ def rx(g, st, d, net=None):
     g, st, d, net = ck(g, st, d, net)
     G, R, T = len(g), len(st), d.shape[1]
     c, A, b, Ae, be, lb, ub, _, ou, os = _sy(g, st, d, net, False)
-    res = _px(c, A, b, Ae, be, lb, ub, d.size)
+    why = []
+    res = _px(c, A, b, Ae, be, lb, ub, d.size, why)
     if res is None:
-        raise ValueError("this demand has no feasible relaxed joint clearing")
+        raise ValueError(f"the relaxed joint clearing did not solve [{why[0]}]")
     p, u, q = _out(G, R, T, res[1], ou, os)
     return Jt(res[0], p, u, q[0], q[1], q[2], q[3],
               res[2][-d.size :].reshape(d.shape), res[3])
@@ -299,9 +294,10 @@ def lmp(g, st, d, s, net=None):
     for j in range(R):
         lb[os[j] + 3 * T : os[j] + 4 * T] = sm[j]
         ub[os[j] + 3 * T : os[j] + 4 * T] = sm[j]
-    res = _px(c, A, b, Ae, be, lb, ub, d.size)
+    why = []
+    res = _px(c, A, b, Ae, be, lb, ub, d.size, why)
     if res is None:
-        raise ValueError("the held commitment has no feasible re-dispatch")
+        raise ValueError(f"the held commitment did not re-dispatch [{why[0]}]")
     p, _u, q = _out(G, R, T, res[1], ou, os)
     return Jt(res[0], p, u, q[0], q[1], q[2], sm,
               res[2][-d.size :].reshape(d.shape), res[3])

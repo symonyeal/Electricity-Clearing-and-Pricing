@@ -30,13 +30,13 @@
 #   zt,xi        : the CVaR level and the per-scenario excess above it
 #   q            : scenario costs at the solution
 #   sm,md        : whether the storage mode is common across scenarios, and its held values
+#   sq,why       : the clearing's own certificate, and why a solve failed
 
 import numpy as np
-from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import block_diag, csc_array, csr_array, hstack, vstack
 
 from models.joint import _sy, ck as _jck
-from models.uc_price import _px
+from models.uc_price import _mi, _px
 
 from typing import NamedTuple
 
@@ -212,19 +212,13 @@ def cl(g, st, d, pr=None, net=None, w=0.0, al=0.95, sm=False):
     S, G, R, T = len(pr), len(g), len(st), d.shape[2]
     c, A, b, Ae, be, lb, ub, it, ou, os, ns, _es, _nb, cs = _sys(
         g, st, d, net, pr, w, al, True, sm)
-    res = milp(
-        c,
-        integrality=it,
-        bounds=Bounds(lb, ub),
-        constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
-    )
-    if not res.success:
-        raise ValueError("this demand has no feasible stochastic clearing")
+    res, _ag, sq = _mi(c, it, lb, ub, A, b, Ae, be,
+                       "this demand did not clear stochastically")
     y = np.asarray(res.x, dtype=float)
     p, u, q = _out(G, R, T, S, ns, y, ou, os)
     z = np.array([float(cs[s] @ y[s * ns : (s + 1) * ns]) for s in range(S)])
     return Sc(float(res.fun), float(pr @ z), _cv(z, pr, al), z, np.rint(u[0]), p,
-              q[0], q[1], q[2], np.rint(q[3]), np.full((S, net.nb, T), np.nan), "opt")
+              q[0], q[1], q[2], np.rint(q[3]), np.full((S, net.nb, T), np.nan), sq)
 
 
 def _cv(z, pr, al):
@@ -286,9 +280,10 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
             ub[o + 3 * T : o + 4 * T] = md[q, j]
     nna = Ae.shape[0] - (es * S)
     Ae, be = _order(Ae, be, nb, S, nna)
-    res = _px(c, A, b, Ae, be, lb, ub, S * nb)
+    why = []
+    res = _px(c, A, b, Ae, be, lb, ub, S * nb, why)
     if res is None:
-        raise ValueError("the held commitment has no feasible re-dispatch")
+        raise ValueError(f"the held commitment did not re-dispatch [{why[0]}]")
     y = np.asarray(res[1], dtype=float)
     p, _u, q = _out(G, R, T, S, ns, y, ou, os)
     pi = np.asarray(res[2], dtype=float)[-S * nb :].reshape(S, B, T)

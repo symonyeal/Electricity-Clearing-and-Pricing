@@ -28,7 +28,11 @@ git diff --check
 ```
 
 The pglib-uc MIP test is marked `slow`. Its acceptance criterion is the achieved bound and
-gap, not the requested stopping tolerance.
+gap, not the requested stopping tolerance. The same rule now holds for every reference
+clearing: `uc`, `joint.cl` and `stoch.cl` request a zero relative gap and report the gap
+they achieved, tagging a result `opt` only when the bound closed. Tests pin that tag
+against a solve made to return a positive gap, and pin that `qd` is built from the solver's
+certified bound rather than its incumbent.
 
 ## Pricing
 
@@ -58,6 +62,13 @@ full-delivery feasibility, fixed-position infeasibility, and `cap=None` regressi
 Analytical cases check efficiency loss, negative prices, terminal energy, two-settlement
 accounting, scenario-dependent day-ahead prices, nonanticipativity, and discrete CVaR.
 Failure tests cover invalid inputs, infeasibility, enumeration limits, and solver status.
+A test that accepts a missing result because the program was infeasible reads the solver's
+diagnosis, so a limit or a numerical failure is not counted as an infeasibility.
+
+Discrete fields are checked before they are converted. A fractional minimum run time, a
+fractional bus or line endpoint, a nan ramp, a fractional or nan offer-curve step count and
+a nan qualification threshold are each refused by name rather than truncated, silently
+disabled, or passed to a later routine that fails somewhere else.
 
 ## Joint and stochastic clearing
 
@@ -81,12 +92,39 @@ slices by hand. The load-bearing check is that the defaults change nothing: `bk 
 `tar = 0`, `qmin = 0` and `qdur = 0` reproduce the baseline replay's positions and flows
 exactly.
 
+`tar` is tested as what it is: a charge applied after the schedule was chosen. The tests
+assert that it raises the charge line and never raises settlement. They do not assert that
+the policy responds to it, because it does not; [Market interface](MARKET.md) states that
+boundary and [Decisions](DECISIONS.md) carries the repair as open work.
+
 ## Historical replay
 
 Committed NYISO fixtures cover ordinary and daylight-saving days. Tests check timestamp
 conversion, subhourly weighting, missing-data treatment, information cutoffs, fallback
 rules, settlement, energy conservation, figures, exports, and three-policy report
 generation. They run without network access.
+
+Analog alignment is tested on the convention and not on array length alone. A 24-hour
+analog put on the 25-hour autumn day serves local `01` twice and leaves every later hour on
+its own clock hour; on the 23-hour spring day it drops local `02`, which that day does not
+settle; and a 25-hour analog put on an ordinary day drops the second pass of `01`. The
+tests read the local labels from the zone, so they would fail if alignment reverted to
+elapsed position.
+
+The change is not cosmetic and its size is measured rather than asserted. Replaying the
+committed three-day fixture under both rules, with the 25-hour 2025-11-02 in the middle:
+
+| Policy | Net, elapsed position | Net, local clock | Change |
+| --- | ---: | ---: | ---: |
+| `neutral` | 139.872877 | 157.987043 | +18.114167 |
+| `cvar`, $w=0.5$ | 113.872361 | 131.986528 | +18.114167 |
+| `det` | 143.271929 | 161.386096 | +18.114167 |
+
+Every cent of that lands on 2025-11-02. The two ordinary days either side are identical to
+the bit under both rules, which is the check that the two alignments are the same map
+between days of equal length. Under the old rule the appended hour repeated one real-time
+quote twelve times, so it carried no spread to trade; under the new one it carries the
+prices local 01 actually settled at.
 
 The committed 2025 result bundles are evidence from the recorded revisions, not a result
 of the local test command. Their metrics, daily rows, configurations, and coverage report

@@ -40,6 +40,17 @@ def _w(cf, pol):
 
 
 def _bat(cf, e0, ef, dt):
+    """The battery the policy optimizes against.
+
+    Throughput cost is kd + fee and deliberately not cf.tar. The tariff is charged in
+    settle, after the schedule has been chosen, so a run at tar > 0 takes the schedule it
+    would have taken at tar = 0 and pays the charge afterwards: an ex-post stress test of
+    an existing policy rather than a policy that was told the rate. A large enough rate can
+    therefore make the selected trade lose money. That boundary is deliberate and is stated
+    in docs/MARKET.md; pricing the tariff into the objective is open work, item 2 of
+    docs/DECISIONS.md, because it changes which trades a policy takes and so changes every
+    result it touches.
+    """
     return B(cf.e, cf.c, cf.d, cf.ec, cf.ed, e0, ef, cf.kd + cf.fee, dt)
 
 
@@ -183,9 +194,14 @@ def run(fr, cf, pol, lo, hi, log=None):
     or its settlement, after a solve that can run for seconds, and a negative step count
     would not raise at all: accept reads any k below one as "take the position in full",
     which silently turns the curve off instead of refusing the configuration.
+
+    A step count is a count, so it is required to be a whole finite number. A nan compares
+    false against every threshold and passes a bare sign test, then turns the curve off or
+    fails deep inside curve's own array construction, neither of which names what was
+    wrong with the configuration.
     """
-    if cf.bk < 0:
-        raise ValueError("an offer curve cannot have a negative number of steps")
+    if not float(cf.bk).is_integer() or cf.bk < 0:
+        raise ValueError("an offer curve needs a whole, non-negative number of steps")
     if not np.isfinite(cf.bs) or cf.bs < 0:
         raise ValueError("the bid spread must be finite and non-negative")
     if not np.isfinite(cf.tar) or cf.tar < 0:

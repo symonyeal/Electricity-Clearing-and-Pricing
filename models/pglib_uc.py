@@ -361,9 +361,10 @@ def px(d, gap=0.0):
         Ae = vstack([Ae[T:, :], Ae[:T, :]])
     be = np.r_[be[T:], be[:T], br]
 
-    out = _px(c, A, b, Ae, be, lb, ub, T + nr)
+    why = []
+    out = _px(c, A, b, Ae, be, lb, ub, T + nr, why)
     if out is None:
-        raise ValueError("the cleared commitment has no feasible re-dispatch")
+        raise ValueError(f"the cleared commitment did not re-dispatch [{why[0]}]")
     pi = np.asarray(out[2], dtype=float)
     k = len(pi) - nr
     pe, pr = pi[k - T : k], np.zeros(T)

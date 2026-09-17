@@ -288,8 +288,33 @@ def test_scenarios_use_published_days_only(fr):
         assert r[:len(fr[j].da)] == pytest.approx(fr[j].da[:len(r)])
     with pytest.raises(ValueError, match="whole bins"):
         scen.ag(np.zeros(288), 5)
-    assert len(scen.al(np.arange(24), 25)) == 25
-    assert scen.al(np.arange(24), 25)[-1] == 23
+
+
+def test_analogs_align_on_the_local_clock(fr):
+    """An analog keeps each of its hours on the clock hour it was observed at.
+
+    This is the convention, and the transition days are where it has content. Aligning by
+    array position instead agrees on every ordinary pair of days and parts from it here: it
+    would slide every hour past the transition by one, then drop or repeat an end of the
+    day the transition never touched. The autumn target settles local 01 twice and an
+    ordinary analog holds that hour once, so the one observation serves both passes.
+    """
+    by = {str(d.d): d for d in fr}
+    src, fall = by["2025-10-26"], by["2025-11-02"]
+    assert (len(src.da), len(fall.da)) == (24, 25)
+    assert scen.hrs(fall).tolist() == [0, 2, 3] + list(range(4, 48, 2))
+    a = scen.al(src.da, src, fall)
+    assert len(a) == 25 and a[1] == a[2] == src.da[1]
+    assert a[3:] == pytest.approx(src.da[2:])
+    b = scen.al(src.rt, src, fall)
+    assert len(b) == 12 * 25 and b[12:24] == pytest.approx(b[24:36])
+    assert b[36:] == pytest.approx(src.rt[24:])
+    spring = frame(CF.zone, "2025-03-09", "2025-03-09", FX, cache=False)[0]
+    assert scen.hrs(spring).tolist() == [0, 2] + list(range(6, 48, 2))
+    c = scen.al(src.da, src, spring)
+    assert len(c) == 23 and c == pytest.approx(np.delete(src.da, 2))
+    d = scen.al(fall.da, fall, by["2025-11-03"])
+    assert len(d) == 24 and d == pytest.approx(np.delete(fall.da, 2))
 
 
 def test_idle_and_metric_identities(fr):

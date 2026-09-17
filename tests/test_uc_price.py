@@ -345,6 +345,16 @@ def test_bad():
         uc([U(0.0, 10.0, 5.0, ru=0.0)], [1.0])
     with pytest.raises(ValueError, match="minimum run and down"):
         uc([U(0.0, 10.0, 5.0, mu=0)], [1.0])
+    with pytest.raises(ValueError, match="limits and ramps must be finite"):
+        uc([U(0.0, 10.0, 5.0, ru=np.nan)], [1.0])
+    for q in (U(0.0, 10.0, 5.0, mu=1.9), U(0.0, 10.0, 5.0, md=2.9),
+              U(0.0, 10.0, 5.0, e0=3.9), U(0.0, 10.0, 5.0, u0=0.9)):
+        with pytest.raises(ValueError, match="must be a whole number"):
+            uc([q], [1.0])
+    with pytest.raises(ValueError, match="must be a whole number"):
+        uc(g, d, net=Net(np.array([0.9, 0.0]), (), 1))
+    with pytest.raises(ValueError, match="must be a whole number"):
+        uc(g, [[1.0], [1.0]], net=Net(np.array([0, 1]), ((0, 1.5, 1.0, 5.0),), 2))
     with pytest.raises(ValueError, match="initial commitment must be 0 or 1"):
         uc([U(0.0, 10.0, 5.0, u0=2)], [1.0])
     with pytest.raises(ValueError, match="starts offline must start at zero"):
@@ -353,7 +363,7 @@ def test_bad():
         uc([U(5.0, 10.0, 5.0, u0=1, p0=99.0)], [1.0])
     with pytest.raises(ValueError, match="exceeds total generating capacity"):
         uc(g, [500.0])
-    with pytest.raises(ValueError, match="no feasible unit commitment"):
+    with pytest.raises(ValueError, match=r"did not clear \[infeasible:"):
         uc([U(30.0, 40.0, 5.0)], [10.0])
     with pytest.raises(ValueError, match="one binary value"):
         lmp(g, d, Sol(0.0, np.zeros((2, 1)), np.full((2, 1), 0.5), np.zeros((1, 1))))
@@ -365,6 +375,54 @@ def test_bad():
         hl([U(0.0, 10.0, 5.0)], np.ones(17))
     with pytest.raises(ValueError, match="joint commitments"):
         en([U(0.0, 10.0, 5.0)] * 6, np.ones(4))
+
+
+def test_a_clearing_reports_the_gap_it_achieved(monkeypatch):
+    """opt names a closed bound, and a search that stopped short of one says gap instead.
+
+    HiGHS stops at a relative gap of 1e-4 unless it is told otherwise, so a route that asks
+    for nothing and returns opt is reporting a tolerance it never read back. The 12-by-10
+    synthetic market is the witness: at the default tolerance that same algebraic solve
+    returns an incumbent 23.4 above its own certified bound, which is a feasible cost and
+    not a proved optimum. The tag is now a statement about the solve that produced it.
+    """
+    g, d = M.mk_g(12, 10, 7)
+    s = uc(g, d)
+    assert s.st == "opt" and s.z == pytest.approx(394316.43975, rel=1e-12)
+    q = M.milp
+
+    def slack(*a, **k):
+        r = q(*a, **k)
+        r.mip_gap, r.mip_dual_bound = 1e-3, r.fun - 1.0
+        return r
+
+    monkeypatch.setattr(M, "milp", slack)
+    x = uc(g, d)
+    assert x.st == "gap" and x.z == pytest.approx(s.z, rel=1e-12)
+
+
+def test_the_dual_is_built_from_a_bound_not_an_incumbent(monkeypatch):
+    """qd subtracts self-schedule profits, so it must subtract certified ones.
+
+    An incumbent can understate the best profit a unit could take. Understating it lifts
+    the reported dual, and a dual above the primal is what Beck's Theorem 12.3 forbids.
+    Reading the solver's bound errs the other way, so weak duality survives a search that
+    did not close: the value can only fall, never climb past the clearing.
+    """
+    g, d = ex3()
+    s, pi = uc(g, d), hc(g, d).pi
+    a = qd(g, d, pi)
+    assert a <= s.z + 1e-6
+    q = M.milp
+
+    def loose(*args, **kw):
+        r = q(*args, **kw)
+        r.mip_dual_bound = r.fun - 10.0
+        return r
+
+    monkeypatch.setattr(M, "milp", loose)
+    b = qd(g, d, pi)
+    assert b == pytest.approx(a - 10.0 * len(g)) and b < a <= s.z + 1e-6
 
 
 def test_ck_fills_defaults():
@@ -392,11 +450,15 @@ def _rand(sd, lo=0.15, hi=0.6):
 
 
 def _hull(f, g, d):
-    """Return one hull result, accepting only the model's explicit infeasibility result."""
+    """Return one hull result, accepting only a proved infeasibility as the reason for none.
+
+    The diagnosis is read, not just the sentence: a limit or a numerical failure is a
+    different outcome from an infeasible program and must not be counted as one here.
+    """
     try:
         return f(g, d)
     except ValueError as e:
-        assert str(e) == "this demand is infeasible for the convex hull program"
+        assert str(e).startswith("the convex hull program did not solve [infeasible:")
         return None
 
 
@@ -435,7 +497,7 @@ def test_random_family_has_104_feasible_markets():
         try:
             uc(g, d)
         except ValueError as e:
-            assert str(e) == "this demand has no feasible unit commitment"
+            assert str(e).startswith("this demand did not clear [infeasible:")
         else:
             n += 1
     assert n == 104

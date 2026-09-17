@@ -6,7 +6,8 @@
 #   fr,i       : local-day frame and the index of the day being decided
 #   j0         : last analog day whose own data is complete before the decision
 #   cd,ix      : candidate analog days, and the scenarios chosen from them
-#   al,ag      : align an analog day to the target day's length; average bins into steps
+#   hrs        : the local clock hour and fold of each hour of one day, as 2*hour + fold
+#   al,ag      : put an analog day on the target day's clock hours; average bins into steps
 #   An         : per-day analog matrices: hourly day-ahead, hourly and step real time
 #   Sc         : scenarios: da, rt, probabilities, information labels, analog days
 #   h,br,mn    : information labels, branch offsets in periods, smallest node to split
@@ -19,7 +20,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from market.nyiso import BIN, full
+from market.nyiso import BIN, HR, TZ, full
 
 MRES = 3
 
@@ -48,9 +49,49 @@ class Ft(NamedTuple):
     hi: str
 
 
-def al(x, n):
-    """Align an analog day to a target of n periods; transition days differ in length."""
-    return x[:n] if len(x) >= n else np.r_[x, np.repeat(x[-1], n - len(x))]
+def hrs(d):
+    """The local clock hour and fold of each hour of one day, as 2*hour + fold.
+
+    On a normal day the local hour is the elapsed hour since midnight. On the two days a
+    year that are not normal it is not: the spring day has no local 02, and the autumn day
+    settles local 01 twice, once at each offset. The labels are read from the zone rather
+    than assumed, so a change to the rule carries into them.
+    """
+    n = (d.t1 - d.t0) // HR
+    if n == 24:
+        return np.arange(24) * 2
+    q = (dt.datetime.fromtimestamp(d.t0 + i * HR, TZ) for i in range(n))
+    return np.array([x.hour * 2 + x.fold for x in q])
+
+
+def al(x, s, t):
+    """Put an analog day's prices on the target day's local clock hours.
+
+    What an analog supplies is a shape that belongs to the clock: the morning ramp and the
+    evening peak happen at a local hour, not at an elapsed offset from midnight. Aligning
+    by array position agrees with that on every pair of ordinary days and parts from it on
+    the two transition days, where it slides every hour after the transition by one and
+    then drops or repeats an end the transition never touched. Matching the local label
+    instead leaves each of the analog's hours on the hour it was observed at.
+
+    The autumn target settles local 01 twice and an ordinary analog holds that hour once,
+    so the one observation serves both passes; the two differ in their offset from UTC and
+    not in where they sit in the local day. The spring target has no local 02 and does not
+    ask for one. An analog that is itself a transition day may lack an hour the target
+    wants, and then supplies its nearest, which is the adjacent hour.
+    """
+    hs, ht = hrs(s), hrs(t)
+    k = len(x) // max(len(hs), 1)
+    if len(hs) * k != len(x):
+        raise ValueError("an analog day's periods must divide evenly into its hours")
+    ix = {int(h): i for i, h in enumerate(hs)}
+    hk = np.array(sorted(ix))
+    j = []
+    for h in ht:
+        h = int(h)
+        q = ix.get(h, ix.get(h ^ 1))
+        j.append(ix[int(hk[np.argmin(np.abs(hk - h))])] if q is None else q)
+    return np.asarray(x).reshape(len(hs), k)[j].ravel()
 
 
 def ag(x, sp):
@@ -82,9 +123,8 @@ def analog(fr, i, cf, j0):
     ix = pick(fr, cand(fr, i, cf.L, j0), cf.S)
     if not len(ix):
         return None
-    nh, nb = len(fr[i].da), len(fr[i].rt)
-    da = np.array([al(fr[j].da, nh) for j in ix])
-    bn = np.array([al(fr[j].rt, nb) for j in ix])
+    da = np.array([al(fr[j].da, fr[j], fr[i]) for j in ix])
+    bn = np.array([al(fr[j].rt, fr[j], fr[i]) for j in ix])
     return An(ix, da, np.array([ag(x, 12) for x in bn]),
               np.array([ag(x, cf.sp) for x in bn]), bn)
 

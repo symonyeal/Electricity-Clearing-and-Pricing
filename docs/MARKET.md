@@ -59,6 +59,24 @@ day-ahead and real-time curves. One persistence coefficient shifts the intraday 
 from the latest observed residual. Information nodes partition the ensemble; a node is
 split only while both children contain at least two paths.
 
+An analog day is put on the target day's **local clock hours**, not on its elapsed offsets
+from midnight. The two agree on every pair of ordinary days and differ on the two days a
+year whose lengths differ, where a target of 23 or 25 hours must be filled from an analog
+of 24. What an analog supplies is a shape that belongs to the clock — the morning ramp and
+the evening peak happen at a local hour — so the analog's 18:00 is used as the target's
+18:00 whichever side of a transition it falls on. Concretely:
+
+| Target | Local hours it settles | What a 24-hour analog supplies |
+| --- | --- | --- |
+| Spring, 23 hours | `00, 01, 03, …, 23` | its own hours, less local `02`, which the day does not have |
+| Autumn, 25 hours | `00, 01, 01, 02, …, 23` | its own hours, with local `01` serving both passes |
+
+The two passes of the autumn `01` differ in their offset from UTC and not in where they
+sit in the local day, so one observation of that hour answers for both. An analog that is
+itself a transition day, and so lacks an hour the target asks for, supplies its nearest.
+The labels are read from `America/New_York` rather than assumed, so a change to the rule
+carries into them.
+
 | Policy | Price information | Objective |
 | --- | --- | --- |
 | `idle` | none | no trading |
@@ -164,6 +182,38 @@ perfect-foresight run with `bk > 1` is therefore no longer an upper reference on
 policies could earn; it is foresight bidding into its own price. Read the `fore` row with
 `bk = 0`, which is how the study above is run.
 
+### The tariff is charged after the decision, not inside it
+
+`tar` is a post-hoc charge. The optimizing battery is built with throughput cost
+`kd + fee`; both the day-ahead offer and the real-time dispatch read that record, and
+settlement then charges `tar` on metered charge and discharge on top of it. **A run with
+`tar > 0` therefore takes the same schedule it would have taken at `tar = 0` and subtracts
+the charge afterwards.** That is an ex-post stress test of an existing policy, not a policy
+that has been told what the energy costs.
+
+The consequence is that a large enough tariff makes the selected trade lose money. Two
+five-minute periods, $E=C=D=1$ MWh/MW, unit efficiencies, zero endpoints, `kd = fee = 0`,
+`tar = 2` and prices $[10, 12]$:
+
+| Quantity | Value |
+| --- | ---: |
+| Chosen schedule | charge $[1,0]$, discharge $[0,1]$ |
+| Profit the model optimized | $+0.166667$ |
+| Tariff settled | $0.333333$ |
+| Net actually settled | $-0.166667$ |
+| What pricing the tariff would choose | no trade, net $0$ |
+
+The reported decomposition inherits the same boundary. `arb` in `market/report.py` is
+defined against `kd + fee` only, so `arb + spread - net` reconciles at `tar = 0` and misses
+by exactly the metered tariff otherwise — on the committed three-day fixture at `tar = 5`,
+both sides are $149.143047259$.
+
+None of this moves a published result: every committed run uses `tar = 0`, which is the
+default, and the tests assert that the defaults reproduce the baseline to the cent. Pricing
+the tariff into the objective is a separate piece of work and is recorded as such in
+[Decisions](DECISIONS.md); it is not a bug being left unfixed but a scope line being drawn,
+and this section is the disclosure that it was drawn here.
+
 ## Reproduction
 
 ```text
@@ -183,6 +233,7 @@ uses the network. Tests use committed fixtures.
 ## Limits
 
 - Published prices are outputs of the market, not proof that modeled positions would clear.
+- `tar` is charged in settlement and not priced into the policy; see the section above.
 - The configured bid time, information lag, and settlement convention are study assumptions.
 - The daily terminal target excludes multi-day arbitrage.
 - Corrected archive prices may differ from prices available to a participant in real time.
