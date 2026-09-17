@@ -193,3 +193,22 @@ def test_priced_redispatch_refuses_a_fractional_mode():
     a = cl(G, st, D, PR)
     with pytest.raises(ValueError, match="commitment and mode must be binary"):
         lmp(G, st, D, a._replace(sm=np.full_like(a.sm, 0.5)), PR)
+
+
+@pytest.mark.parametrize("w,al", [(0.0, 0.95), (1.0, 0.5), (0.75, 0.99)])
+def test_priced_clearing_reports_no_tail_it_did_not_fix(w, al):
+    """lmp re-dispatches risk-neutrally, so it reports no CVaR rather than one at 0.95.
+
+    The confidence is not an argument of lmp. Returning a number computed at a fixed 0.95
+    put a tail in the result that the clearing had not used: cleared at al = 0.5 the CVaR
+    was 2,320 and the priced result claimed 5,200. The commitment and the mean survive
+    pricing; the tail does not.
+    """
+    r = cl(G, [], D, PR, w=w, al=al)
+    q = lmp(G, [], D, r, PR)
+    assert np.isfinite(r.cv)
+    assert np.isnan(q.cv)
+    assert q.mean == pytest.approx(r.mean, rel=1e-9)
+    assert q.u.ravel() == pytest.approx(r.u.ravel())
+    if w > 0.0:
+        assert r.z != pytest.approx(q.z, rel=1e-6)

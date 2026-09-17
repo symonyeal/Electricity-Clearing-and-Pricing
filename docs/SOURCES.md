@@ -14,8 +14,10 @@ Only sources used by a live formulation, dataset, or validation case are listed.
 | Knueven, B., Ostrowski, J. and Watson, J.-P. (2020), [“On Mixed-Integer Programming Formulations for the Unit Commitment Problem”](https://doi.org/10.1287/ijoc.2019.0944) | Unit-commitment rows and pglib-uc reference formulation |
 | Rajan, D. and Takriti, S. (2005), [“Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs”](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070) | Minimum up/down inequalities |
 | Stott, B., Jardim, J. and Alsac, O. (2009), [“DC Power Flow Revisited”](https://doi.org/10.1109/TPWRS.2009.2021235) | Lossless DC network model |
+| Beck, A. (2014), [*Introduction to Nonlinear Optimization: Theory, Algorithms, and Applications with MATLAB*](https://doi.org/10.1137/1.9781611973655), MOS-SIAM, ch. 12, pp. 237–240 | Definition of the Lagrangian dual and Theorem 12.3, weak duality, which fixes what `qd` must minimize over |
 
-The FERC talk is also stored locally as `Research PDF Files\electricity pricing.pdf`.
+The FERC talk is also stored locally as `Research PDF Files\electricity pricing.pdf`, and
+Beck as `Research PDF Files\beck.pdf`.
 
 ### Small cases
 

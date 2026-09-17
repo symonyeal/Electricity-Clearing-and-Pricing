@@ -46,7 +46,7 @@ opportunity.
 | `hc` | Interval-graph convex hull | Default CHP and AIC |
 | `hl` | Schedule-wise disjunctive hull | Independent small-case check |
 | `lmp` | Cleared commitment fixed | LMP |
-| `qd` | One best self-schedule problem per unit | Lagrangian dual and lost opportunity |
+| `qd` | One best self-schedule problem per unit, plus the network subproblem | Lagrangian dual and lost opportunity |
 
 `hl` applies Balas' union-of-polyhedra construction to feasible commitment trajectories and
 their dispatch polyhedra. `hc` represents each on-interval by an arc in an acyclic graph.
@@ -102,10 +102,39 @@ not publish the rows needed to resolve the difference.
 The talk also reports $1,161 for a three-binary relaxation without listing its valid
 inequalities. This formulation gives $218.31; it is not presented as a replication.
 
-The payment identities are tested directly:
+On one bus the payment identities are tested directly:
 
 $$
 U(\pi)=z_{UC}-L(\pi), \qquad z_{CHP}=\max_\pi L(\pi).
 $$
 
-Hence CHP minimizes total uplift over uniform prices.
+Hence CHP minimizes total uplift over uniform prices. The second identity holds with lines
+as it stands; the first gains two terms, below.
+
+### The dual on a network
+
+$L$ relaxes the nodal balance rows. That leaves the flow columns in the minimization, so
+
+$$
+L(\pi)=\pi^\top d+\sum_g\min_{x_g\in X_g}\left[c_g(x_g)-\pi_{b(g)}^\top p_g\right]
+       +\min_{v\in V}-\left(N^\top\pi\right)^\top v,
+$$
+
+where $N$ is the network block of the balance rows and $V$ the feasible flows. The third
+term is zero on one bus. Omitting it minimizes over a subset of the feasible set, which
+breaks the hypothesis of the weak duality theorem (Beck, Theorem 12.3): on `ex4` that
+returned $4{,}500$ against a clearing of $2{,}100$, and on `ex5` $489{,}999.999$ against
+$275{,}000$. With the term, both are bounds and both are tight.
+
+The uplift identity carries two further terms with lines. Uplift is measured at each unit's
+own bus, so the load payment and the unit revenue differ by the congestion rent
+$R(\pi)=\pi^\top d-\sum_g\pi_{b(g)}^\top p_g$ of the cleared flows, and the network
+subproblem is free to choose other flows. Writing $W(\pi)$ for its value,
+
+$$
+U(\pi)=z_{UC}-L(\pi)+W(\pi)+R(\pi),
+$$
+
+exact at every price to $9.3\times10^{-10}$ over 400 random prices on `ex4` and `ex5`. At a
+price that is a dual the cleared flows solve the subproblem, so $W(\pi)=-R(\pi)$ and the
+single-bus form returns. Both $W$ and $R$ vanish identically on one bus.

@@ -25,6 +25,7 @@
 #   _hold        : the columns that hold a given commitment fixed
 #   _bk,_pf      : a unit's commitment blocks, and one block's profit
 #   _om          : best profit each unit could earn by self-scheduling
+#   _nq          : the network subproblem the same relaxation leaves behind
 #   uc,rx        : integer clearing, and the same system relaxed
 #   en           : joint trajectory enumeration, the independent optimum
 #   hc,hl        : the convex hull from intervals, and the same hull from whole trajectories;
@@ -873,13 +874,58 @@ def _om(g, T, pi, net, cap=None):
     return om
 
 
+def _nq(net, T, pi):
+    """Value of the network subproblem in the Lagrangian dual at one price.
+
+    Relaxing the nodal balance rows leaves the flow columns behind. They carry no cost of
+    their own but they are part of the minimisation, so the dual value is not complete
+    without them. Dropping them minimises over a subset of the feasible set and returns a
+    value above the true dual, which is what Theorem 12.3 of Beck forbids: on a congested
+    network the reported bound then exceeds the primal optimum.
+
+    Under "ntc" each exchange separates and is read off its capacity pair. Under "dc" the
+    angles couple through the loop-flow condition and one linear program answers for them;
+    only angle differences enter, so bus 0 is held at zero as it is in _nw. At a
+    dual-optimal price this term is minus the congestion rent.
+    """
+    if not net.ln:
+        return 0.0
+    if net.fm == "ntc":
+        return float(sum(np.minimum((pi[a] - pi[q]) * xc[0], (pi[a] - pi[q]) * xc[1]).sum()
+                         for a, q, xc in net.ln))
+    B = net.nb
+    c = np.zeros(B * T)
+    ri, ci, va, b = [], [], [], []
+    for t in range(T):
+        for a, q, x, lim in net.ln:
+            c[a * T + t] -= (pi[q][t] - pi[a][t]) / x
+            c[q * T + t] -= (pi[a][t] - pi[q][t]) / x
+            for y in (1.0, -1.0):
+                ri.extend([len(b)] * 2)
+                ci.extend((a * T + t, q * T + t))
+                va.extend([y / x, -y / x])
+                b.append(float(lim))
+    lo, hi = np.full(B * T, -np.inf), np.full(B * T, np.inf)
+    lo[:T] = hi[:T] = 0.0
+    res = linprog(c, A_ub=csc_array((va, (ri, ci)), shape=(len(b), B * T)),
+                  b_ub=np.array(b), bounds=np.column_stack((lo, hi)))
+    if not res.success:
+        raise ValueError("the network admits no flow at this price")
+    return float(res.fun)
+
+
 def qd(g, d, pi, cap=None, net=None):
-    """The unit-commitment Lagrangian dual value at one price, computed unit by unit."""
+    """The unit-commitment Lagrangian dual value at one price.
+
+    One best self-schedule problem per unit, plus the network subproblem the same
+    relaxation leaves behind. Both are needed for the value to bound the clearing.
+    """
     g, d, net = ck(g, d, net)
     pi = np.atleast_2d(np.asarray(pi, dtype=float))
     if pi.shape != d.shape or not np.isfinite(pi).all():
         raise ValueError("pi must hold one finite price per bus and period")
-    return float((pi * d).sum() - _om(g, d.shape[1], pi, net, cap).sum())
+    T = d.shape[1]
+    return float((pi * d).sum() - _om(g, T, pi, net, cap).sum() + _nq(net, T, pi))
 
 
 def _bk(x, u):

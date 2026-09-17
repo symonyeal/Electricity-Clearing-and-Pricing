@@ -19,6 +19,7 @@
 #   k         : the name of one price            a,b : a seeded generator, a best value
 #   f,n       : saved linear-program function and its call count
 #   sz,_kp    : deterministic hull-size report helper, and its path count
+#   nw        : the network under test           rent : congestion rent of the cleared flows
 #   AIC3,LMP3 : the talk's reported period-3 AIC and LMP prices
 
 import numpy as np
@@ -639,3 +640,66 @@ def test_ntc_exchange_record_is_checked():
         uc(g, d, net=Net([0, 1], ((0, 1, (-5.0, 5.0)),), 2, "ntc", ("NO-NO1", "NO-NO1")))
     with pytest.raises(ValueError, match="a line is"):
         uc(g, d, net=Net([0, 1], ((0, 1, (-5.0, 5.0)),), 2))
+
+
+@pytest.mark.parametrize("q", [ex4, ex5])
+def test_dual_bounds_the_clearing_on_a_network(q):
+    """Beck Theorem 12.3: the dual value never exceeds the clearing, congestion or not.
+
+    The flow columns are part of the relaxed program. Reading the dual from the unit
+    subproblems alone minimises over a subset of the feasible set, and on both of these
+    markets that returned a bound above the primal optimum.
+    """
+    g, d, nw = q()
+    g, d, nw = ck(g, d, nw)
+    s = uc(g, d, net=nw)
+    for pi in (lmp(g, d, s, net=nw).pi, hc(g, d, net=nw).pi):
+        assert qd(g, d, pi, net=nw) <= s.z + CENT
+    a = np.random.default_rng(11)
+    for _ in range(25):
+        assert qd(g, d, a.uniform(-30, 300, d.shape), net=nw) <= s.z + CENT
+
+
+@pytest.mark.parametrize("q", [ex4, ex5])
+def test_hull_value_is_the_dual_maximum_on_a_network(q):
+    """Gribik-Hogan-Pope holds with lines: the hull's value is still the dual maximum."""
+    g, d, nw = q()
+    x = hc(g, d, net=nw)
+    assert qd(g, d, x.pi, net=nw) == pytest.approx(x.z, rel=1e-8)
+
+
+@pytest.mark.parametrize("q", [ex4, ex5])
+def test_uplift_is_the_duality_gap_on_a_network(q):
+    """With lines the gap carries two more terms, and the identity is exact at any price.
+
+    Uplift is measured at each unit's own bus, so what the load pays and what the units
+    are paid differ by the congestion rent of the cleared flows. The dual's network
+    subproblem is free to choose other flows, and does at a price that is not a dual, so
+    both terms appear separately rather than cancelling.
+    """
+    g, d, nw = q()
+    g, d, nw = ck(g, d, nw)
+    s = uc(g, d, net=nw)
+    a = np.random.default_rng(11)
+    px = [lmp(g, d, s, net=nw).pi, hc(g, d, net=nw).pi]
+    px += [a.uniform(-30, 300, d.shape) for _ in range(15)]
+    for pi in px:
+        rent = (pi * d).sum() - sum(pi[nw.bus[i]] @ s.p[i] for i in range(len(g)))
+        assert pay(g, s, pi, net=nw).up.sum() == pytest.approx(
+            s.z - qd(g, d, pi, net=nw) + M._nq(nw, d.shape[1], pi) + rent, abs=CENT)
+
+
+def test_network_subproblem_is_minus_the_congestion_rent_at_a_dual_price():
+    """At a price that is a dual, the cleared flows solve the network subproblem.
+
+    That is why the two extra terms of the identity above cancel at LMP and at CHP, and
+    why the single-bus form of the identity survived without them.
+    """
+    g, d, nw = ex4()
+    g, d, nw = ck(g, d, nw)
+    s = uc(g, d, net=nw)
+    pi = lmp(g, d, s, net=nw).pi
+    rent = (pi * d).sum() - sum(pi[nw.bus[i]] @ s.p[i] for i in range(len(g)))
+    assert rent == pytest.approx(2400.0, abs=CENT)
+    assert M._nq(nw, d.shape[1], pi) == pytest.approx(-rent, abs=CENT)
+    assert qd(g, d, pi, net=nw) == pytest.approx(s.z, abs=CENT)

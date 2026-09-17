@@ -44,10 +44,16 @@ from typing import NamedTuple
 class Sc(NamedTuple):
     """One stochastic clearing.
 
-    z is the objective actually minimised, mean the probability-weighted cost and cv the
-    CVaR of cost at al; with w = 0 the objective is the mean. q carries each scenario's own
-    cost. p, sc, sd, se and sm are indexed by scenario first. pi is (S, B, T), each
-    scenario's own price with its probability weight divided out.
+    z is the objective of the program that produced this result, mean the
+    probability-weighted cost and cv the CVaR of cost at al; with w = 0 the objective is the
+    mean. q carries each scenario's own cost. p, sc, sd, se and sm are indexed by scenario
+    first. pi is (S, B, T), each scenario's own price with its probability weight divided
+    out.
+
+    A field a route does not compute is nan, not a stand-in value: cl prices nothing and
+    returns pi as nan, and lmp fixes no risk tail and returns cv as nan. z therefore names
+    different programs on the two routes, which is why the risk weight belongs with the
+    result that was minimised under it and not with the one that was priced.
     """
 
     z: float
@@ -248,6 +254,15 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     Scenario s's balance row carries the weight p_s, so its dual is p_s times that
     scenario's price; the weight is divided back out here. The commitment is common, so a
     price is still one price per bus and period in each scenario.
+
+    The re-dispatch is risk-neutral whatever risk chose the commitment. Under a CVaR tail
+    the cost block is scaled by 1 - w and the epigraph rows couple each scenario's cost
+    back into its own dispatch, so a balance dual carries (1 - w) p_s plus that row's own
+    multiplier rather than p_s, and dividing by p_s alone would not return a price. Pricing
+    the tail therefore needs a normalisation this module does not implement and no result
+    here has been checked against. Settling a risk-averse commitment at the duals of its
+    expected-cost re-dispatch is the market design; z is that program's objective, not the
+    one cl minimised, and cv is returned as nan because no confidence applies to it.
     """
     g, st, d, net, pr, _w, _al = ck(g, st, d, pr, net, 0.0, 0.95)
     S, G, R, T, B = len(pr), len(g), len(st), d.shape[2], net.nb
@@ -279,5 +294,5 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     pi = np.asarray(res[2], dtype=float)[-S * nb :].reshape(S, B, T)
     pi = pi / pr[:, None, None]
     z = np.array([float(cs[k] @ y[k * ns : (k + 1) * ns]) for k in range(S)])
-    return Sc(res[0], float(pr @ z), _cv(z, pr, 0.95), z, u, p,
+    return Sc(res[0], float(pr @ z), np.nan, z, u, p,
               q[0], q[1], q[2], md, pi, res[3])
