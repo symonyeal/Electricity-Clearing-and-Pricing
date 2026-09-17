@@ -17,6 +17,62 @@ formulations and data. [Validation](docs/VALIDATION.md) records executed checks.
 [Decomposition](docs/DW.md) compares the direct hull formulations with an extreme-point
 master and states when column generation becomes a candidate.
 
+## Background
+
+### The source
+
+A generator cannot be switched on for an hour at a time: it carries a start-up cost, a
+minimum output once running, and a minimum number of hours it must then stay on. Those
+integer decisions make the market's cost function nonconvex. The consequence is a theorem,
+not an inconvenience: in general **no single price per megawatt-hour supports the schedule
+the market just selected.** Somebody is always instructed to do what loses money at that
+price, and the market covers the difference with a side payment: uplift, or make-whole.
+
+How much uplift is paid depends on which price is posted, and more than one answer is
+defensible. Locational marginal pricing holds the commitment and prices the dispatch that
+remains. Convex hull pricing replaces each generator by the hull of everything it could have
+done, and provably minimizes uplift. Average incremental cost prices that hull after
+restricting the blocks that failed to cover their own cost.
+
+### The task
+
+Compute all three exactly on small systems, and measure what each leaves behind.
+
+Exactness is the point and also the difficulty. Production markets approximate the hull
+because computing it is expensive: MISO's Extended LMP relaxes the binary on a narrow set of
+fast-start units and, from Phase III, drops ramp-down from the pricing run. An approximation
+cannot measure its own error; built exactly, these rules become the instrument it is held
+against.
+
+### The method
+
+Formulations come from the literature, never from invention: Gribik, Hogan and Pope for the
+rule, Hua–Baldick and the Chen–O'Neill–Whitman FERC talk for worked cases, Balas and
+Yu–Guan–Chen for the two hulls, Beck for the duality that settles what a dual must minimize
+over. Data is public — NYISO zonal archives, pglib-uc's RTS-GMLC instance.
+
+One unit's feasible set is written once and every route reads that copy; a separate pglib-uc
+model writes its own rows and exists in order to disagree. Prices are duals, and a dual
+optimum can be a face rather than a point, so the price is chosen by a stated rule, not by
+whichever vertex the solver reached. Any claim of exactness asks for a zero gap and reads
+back the gap achieved. SciPy and HiGHS do the solving; no commercial licence is required.
+
+### The result
+
+The two hull constructions agree on all 104 feasible markets among 141 seeds, to 2.55e-16
+relative. Case `ex3`'s exact average incremental cost is $422; the talk's $146.33 is
+recovered only by deleting a feasible schedule the source does not exclude. Both are pinned.
+On a network the Lagrangian dual needs a transmission term, identically zero on one bus and
+decisive on several; omitting it reported a dual of 4,500 against a clearing of 2,100, which
+weak duality forbids. A 1 MW, 4 MWh battery replayed against 2025 NYISO prices nets $33,131
+risk-neutral, against a $190,720 perfect-foresight ceiling it cannot reach.
+
+### The context
+
+A research and verification instrument, not a clearing engine: no contingencies, no losses,
+no ISO-scale network, no ancillary co-optimization. Where it departs from a production
+market, the documentation names which of the two is right.
+
 ## Run
 
 ```text
