@@ -637,6 +637,20 @@ def test_network_bad():
         uc(g, [[0.0], [10.0]], net=Net([0, 1], ((0, 1, 1.0, 5.0),), 2, "flow"))
 
 
+def test_a_short_line_is_refused_by_name():
+    """A line too short to hold two endpoints is a malformed line, not an index error.
+
+    ck read e[0] and e[1] before it counted them, so a zero- or one-element line left the
+    validator through IndexError while every other wrong length was named. A caller cannot
+    tell "tuple index out of range" from a bug in the market model.
+    """
+    g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 50.0)]
+    for fm, msg in (("dc", "a line is"), ("ntc", "an exchange is")):
+        for e in ((), (0,)):
+            with pytest.raises(ValueError, match=msg):
+                uc(g, [[0.0], [10.0]], net=Net([0, 1], (e,), 2, fm))
+
+
 def test_ntc_matches_dc_on_a_tree():
     """A tree has no cycle, so the balances fix the flows and both line models agree."""
     g = [U(0.0, 100.0, 10.0), U(0.0, 100.0, 40.0)]

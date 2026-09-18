@@ -251,21 +251,26 @@ def ck(g, d, net=None):
         if net.fm not in ("dc", "ntc"):
             raise ValueError("the line model must be dc or ntc")
         ln = []
+        # The shape is counted before anything is read out of it. Reading e[0] first left a
+        # line too short to hold two endpoints raising IndexError, so a malformed offer
+        # reached the caller as "tuple index out of range" rather than as its own shape.
+        sh = ("an exchange is (zone, zone, (min, max))" if net.fm == "ntc"
+              else "a line is (bus, bus, reactance, limit)")
         for e in net.ln:
+            if len(e) != (3 if net.fm == "ntc" else 4):
+                raise ValueError(sh)
             a = _ix(e[0], "a line endpoint")
             q = _ix(e[1], "a line endpoint")
             if not (0 <= a < nb and 0 <= q < nb) or a == q:
                 raise ValueError("every line must join two different buses")
             if net.fm == "ntc":
-                if len(e) != 3 or np.ndim(e[2]) != 1 or np.size(e[2]) != 2:
-                    raise ValueError("an exchange is (zone, zone, (min, max))")
+                if np.ndim(e[2]) != 1 or np.size(e[2]) != 2:
+                    raise ValueError(sh)
                 if a > q:
                     raise ValueError("an exchange must name its zones in ascending order")
                 if not np.isfinite(e[2]).all() or e[2][0] >= 0 or e[2][1] <= 0:
                     raise ValueError("an exchange capacity must run from negative to positive")
             else:
-                if len(e) != 4:
-                    raise ValueError("a line is (bus, bus, reactance, limit)")
                 if not np.isfinite(e[2:]).all() or e[2] <= 0 or e[3] <= 0:
                     raise ValueError("every line needs a positive reactance and limit")
             ln.append((a, q) + tuple(e[2:]))
