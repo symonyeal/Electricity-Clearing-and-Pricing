@@ -114,6 +114,12 @@ most $0.0013; CVaR was not reconciled from exports. The
 | CVaR | 31,983 | [6,365, 64,947] | -4,274 | 361.7 |
 | Perfect foresight | 190,720 | [138,858, 256,192] | 0 | 442.2 |
 
+These are archived outputs from revision `88d244d`, before analog days were aligned by
+local clock hour. They are not a rerun of the current revision. The committed
+[provenance note](results/README.md#provenance-note-analog-alignment) bounds the change's
+reach at 18 of 365 days, only two of them certain; its annual financial effect has not been
+measured because the NYISO archives are not committed.
+
 The forecast-based intervals overlap; the year does not separate their expected
 performance. The deterministic policy obtains 67% of annual net settlement on its ten
 best days and 53% in July. Its mean expected and realized daily scores are $285 and $113,

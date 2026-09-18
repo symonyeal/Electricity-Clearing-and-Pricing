@@ -96,6 +96,11 @@ two-settlement against its real-time deviations nets, through 2025 in N.Y.C., $4
 deterministic forecast and $33,131 risk-neutral — 22% and 17% of the $190,720 a trader who
 knew every price in advance would have captured.
 
+Those are archived outputs from revision `88d244d`, before analog days were aligned by
+local clock hour. A full-year rerun has not been measured: the committed
+[provenance note](docs/results/README.md#provenance-note-analog-alignment) bounds the reach
+at 18 of 365 days, of which only the two clock-transition days are certain to move.
+
 ### Where it stops
 
 Small systems. No contingencies, no losses, no ancillary co-optimization, no ISO-scale
