@@ -30,6 +30,7 @@
 #   zt,xi        : the CVaR level and the per-scenario excess above it
 #   q            : scenario costs at the solution
 #   sm,md        : whether the storage mode is common across scenarios, and its held values
+#   gap,lb       : achieved relative gap and certified cost lower bound
 #   sq,why       : the clearing's own certificate, and why a solve failed
 
 import numpy as np
@@ -54,6 +55,10 @@ class Sc(NamedTuple):
     returns pi as nan, and lmp fixes no risk tail and returns cv as nan. z therefore names
     different programs on the two routes, which is why the risk weight belongs with the
     result that was minimised under it and not with the one that was priced.
+
+    gap and lb carry the solve certificate as numbers. On the integer clearing they are
+    the achieved relative gap and certified cost lower bound. On the linear re-dispatch
+    gap is zero and lb is its determined objective.
     """
 
     z: float
@@ -68,6 +73,8 @@ class Sc(NamedTuple):
     sm: np.ndarray
     pi: np.ndarray
     st: str = ""
+    gap: float = 0.0
+    lb: float = float("nan")
 
 
 def ck(g, st, d, pr=None, net=None, w=0.0, al=0.95):
@@ -212,13 +219,14 @@ def cl(g, st, d, pr=None, net=None, w=0.0, al=0.95, sm=False):
     S, G, R, T = len(pr), len(g), len(st), d.shape[2]
     c, A, b, Ae, be, lb, ub, it, ou, os, ns, _es, _nb, cs = _sys(
         g, st, d, net, pr, w, al, True, sm)
-    res, _ag, sq = _mi(c, it, lb, ub, A, b, Ae, be,
-                       "this demand did not clear stochastically")
+    res, ag, bd, sq = _mi(c, it, lb, ub, A, b, Ae, be,
+                          "this demand did not clear stochastically")
     y = np.asarray(res.x, dtype=float)
     p, u, q = _out(G, R, T, S, ns, y, ou, os)
     z = np.array([float(cs[s] @ y[s * ns : (s + 1) * ns]) for s in range(S)])
     return Sc(float(res.fun), float(pr @ z), _cv(z, pr, al), z, np.rint(u[0]), p,
-              q[0], q[1], q[2], np.rint(q[3]), np.full((S, net.nb, T), np.nan), sq)
+              q[0], q[1], q[2], np.rint(q[3]), np.full((S, net.nb, T), np.nan), sq,
+              ag, bd)
 
 
 def _cv(z, pr, al):
@@ -290,4 +298,4 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     pi = pi / pr[:, None, None]
     z = np.array([float(cs[k] @ y[k * ns : (k + 1) * ns]) for k in range(S)])
     return Sc(res[0], float(pr @ z), np.nan, z, u, p,
-              q[0], q[1], q[2], md, pi, res[3])
+              q[0], q[1], q[2], md, pi, res[3], 0.0, res[0])

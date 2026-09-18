@@ -61,6 +61,8 @@ def test_identical_scenarios_change_nothing():
 def test_commitment_is_common():
     """One commitment serves every scenario; only the dispatch answers the scenario."""
     r = cl(G, [], D, PR)
+    assert r.st == "opt" and r.gap == 0.0
+    assert r.lb == pytest.approx(r.z)
     assert r.u.shape == (3, 2)
     assert np.isin(r.u, [0.0, 1.0]).all()
     assert r.p.shape == (2, 3, 2)
@@ -103,6 +105,7 @@ def test_scenario_prices_are_unweighted():
     pr = np.array([0.3, 0.4, 0.3])
     r = cl(g, [], d, pr)
     q = lmp(g, [], d, r, pr)
+    assert q.gap == 0.0 and q.lb == pytest.approx(q.z)
     for s in range(3):
         assert q.pi[s].ravel() == pytest.approx([20.0, 20.0, 80.0, 20.0], abs=1e-4)
 

@@ -389,6 +389,7 @@ def test_a_clearing_reports_the_gap_it_achieved(monkeypatch):
     g, d = M.mk_g(12, 10, 7)
     s = uc(g, d)
     assert s.st == "opt" and s.z == pytest.approx(394316.43975, rel=1e-12)
+    assert s.gap == 0.0 and s.lb == pytest.approx(s.z, rel=1e-12)
     q = M.milp
 
     def slack(*a, **k):
@@ -399,6 +400,8 @@ def test_a_clearing_reports_the_gap_it_achieved(monkeypatch):
     monkeypatch.setattr(M, "milp", slack)
     x = uc(g, d)
     assert x.st == "gap" and x.z == pytest.approx(s.z, rel=1e-12)
+    assert x.gap == pytest.approx(1e-3)
+    assert x.lb == pytest.approx(x.z - 1.0)
 
 
 def test_the_dual_is_built_from_a_bound_not_an_incumbent(monkeypatch):

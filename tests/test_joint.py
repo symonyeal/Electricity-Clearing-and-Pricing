@@ -42,6 +42,8 @@ def test_no_resource_is_uc_price(sd):
     g, d = mk_g(6, 8, sd)
     a, b = uc(g, d), cl(g, [], d)
     assert b.z == pytest.approx(a.z, rel=1e-9)
+    assert b.gap == a.gap == 0.0
+    assert b.lb == pytest.approx(b.z, rel=1e-9)
     assert b.p == pytest.approx(a.p, abs=1e-6)
     assert b.u == pytest.approx(a.u)
     assert b.sc.shape == (0, 8) and b.sd.shape == (0, 8)
@@ -114,6 +116,9 @@ def test_relaxation_bounds_the_clearing():
     """Relaxing every binary cannot cost more than clearing with them."""
     a, b = cl(G, [R], D), rx(G, [R], D)
     assert b.z <= a.z + 1e-6
+    assert a.gap == b.gap == 0.0
+    assert a.lb == pytest.approx(a.z)
+    assert b.lb == pytest.approx(b.z)
     assert b.pi.shape == (1, 4)
 
 
@@ -122,6 +127,7 @@ def test_held_commitment_reproduces_the_clearing():
     y = cl(G, [R], D)
     z = lmp(G, [R], D, y)
     assert z.z == pytest.approx(y.z, rel=1e-9)
+    assert z.gap == 0.0 and z.lb == pytest.approx(z.z)
     assert z.u == pytest.approx(y.u)
     assert z.sm == pytest.approx(y.sm)
 

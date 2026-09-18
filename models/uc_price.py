@@ -65,6 +65,8 @@
 #   o            : variable offsets                tol : feasibility tolerance
 #   ptol         : smallest price difference retained by the lexicographic walk
 #   st           : how far price selection got: dual, raw, pay, probe, part, walk
+#   gap,lb       : the relative gap a search achieved, and the cost lower bound it certified
+#   ag           : the achieved gap _mi read back off its own result
 #   vr           : versions of the solvers behind a result
 #   LIM          : ceilings: enumerated periods, hull variables, joint commitments,
 #                  and balance rows the price refinement will walk one at a time
@@ -144,6 +146,12 @@ class Sol(NamedTuple):
     certificate of its own solve instead: opt, the search closed its bound; gap, it stopped
     short of one and the value is an incumbent rather than a proved optimum; enum, the value
     came from enumeration and no bound was involved.
+
+    gap and lb carry the same certificate as numbers, because a tag cannot tell 5e-5 from
+    1e-1 and Decisions requires the gap achieved and the bound to be reported. On an integer
+    clearing gap is the relative gap the search achieved and lb the cost lower bound it
+    certified. On a linear or enumerated route the optimum is determined, so gap is zero and
+    lb is z itself.
     """
 
     z: float
@@ -151,6 +159,8 @@ class Sol(NamedTuple):
     u: np.ndarray
     pi: np.ndarray
     st: str = ""
+    gap: float = 0.0
+    lb: float = float("nan")
 
 
 class Mkt(NamedTuple):
@@ -546,6 +556,10 @@ def _mi(c, it, lb, ub, A, b, Ae, be, why):
     reporting a tolerance it never read back. These routines carry claims of exactness, so
     the gap asked for is zero and the gap achieved is read: "opt" means the bound closed,
     "gap" means the search stopped at an incumbent, and the two are not the same object.
+
+    The certified bound is returned beside the gap, from mip_dual_bound and never from the
+    incumbent, so every caller that needs a bound reads the same one. A program with no
+    integer column has a determined optimum, and there the bound is the objective.
     """
     res = milp(
         c,
@@ -557,16 +571,17 @@ def _mi(c, it, lb, ub, A, b, Ae, be, why):
     if not res.success:
         raise ValueError(f"{why} [{_dg(res)}]")
     ag = float(res.mip_gap) if np.any(it) else 0.0
-    return res, ag, "opt" if ag == 0.0 else "gap"
+    lb = float(res.mip_dual_bound) if np.any(it) else float(res.fun)
+    return res, ag, lb, "opt" if ag == 0.0 else "gap"
 
 
 def uc(g, d, cap=None, net=None):
     """Clear the market: unit commitment and economic dispatch as one integer program."""
     g, d, net = ck(g, d, net)
     c, A, b, Ae, be, lb, ub, it, o = _sy(g, d, net, cap, True)
-    res, _ag, st = _mi(c, it, lb, ub, A, b, Ae, be, "this demand did not clear")
+    res, ag, bd, st = _mi(c, it, lb, ub, A, b, Ae, be, "this demand did not clear")
     p, u = _out(g, d.shape[1], res.x, o)
-    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan), st)
+    return Sol(float(res.fun), p, np.rint(u), np.full(d.shape, np.nan), st, ag, bd)
 
 
 def rx(g, d, cap=None, net=None):
@@ -578,7 +593,7 @@ def rx(g, d, cap=None, net=None):
     if res is None:
         raise ValueError(f"the relaxed commitment did not solve [{why[0]}]")
     p, u = _out(g, d.shape[1], res[1], o)
-    return Sol(res[0], p, u, res[2][-d.size :].reshape(d.shape), res[3])
+    return Sol(res[0], p, u, res[2][-d.size :].reshape(d.shape), res[3], 0.0, res[0])
 
 
 def _ce(v):
@@ -729,7 +744,7 @@ def en(g, d, cap=None, net=None):
             best = (res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u)
     if best is None:
         raise ValueError("this demand did not clear [infeasible: no trajectory serves it]")
-    return Sol(best[0], best[1], best[2], np.full(d.shape, np.nan), "enum")
+    return Sol(best[0], best[1], best[2], np.full(d.shape, np.nan), "enum", 0.0, best[0])
 
 
 def _hold(g, T, u, cap=None):
@@ -755,7 +770,8 @@ def lmp(g, d, s, cap=None, net=None):
     res = _jt(g, d, net, _hold(g, T, u, cap), [0] * len(g), why)
     if res is None:
         raise ValueError(f"the fixed commitment did not re-dispatch [{why[0]}]")
-    return Sol(res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u, res[2], res[3])
+    return Sol(res[0], np.where(np.abs(res[1]) < 1e-9, 0.0, res[1]), u, res[2], res[3],
+               0.0, res[0])
 
 
 def hl(g, d, cap=None, net=None):
@@ -810,7 +826,7 @@ def hl(g, d, cap=None, net=None):
             p[i] += res[1][o[i][j] : o[i][j] + T]
             u[i] += res[1][o[i][j] + T] * q
     p = np.where(np.abs(p) < 1e-9, 0.0, p)
-    return Sol(res[0], p, u, res[2][G:].reshape(d.shape), res[3])
+    return Sol(res[0], p, u, res[2][G:].reshape(d.shape), res[3], 0.0, res[0])
 
 
 def _iv(x, T, s, e, cap=None):
@@ -921,7 +937,7 @@ def hc(g, d, cap=None, net=None):
                 p[i, s : e + 1] += res[1][o[i][j] : o[i][j] + e - s + 1]
                 u[i, s : e + 1] += res[1][o[i][j] + e - s + 1]
     return Sol(res[0], np.where(np.abs(p) < 1e-9, 0.0, p), u,
-               res[2][G * w :].reshape(d.shape), res[3])
+               res[2][G * w :].reshape(d.shape), res[3], 0.0, res[0])
 
 
 def _om(g, T, pi, net, cap=None):
@@ -943,11 +959,11 @@ def _om(g, T, pi, net, cap=None):
         A, b = _rw(x, T, None if cap is None else cap[i])
         Ae, be = _eq(x, T)
         lb, ub = _fx(x, T)
-        res, _ag, _st = _mi(
+        _res, _ag, bd, _st = _mi(
             np.r_[x.c - pi[net.bus[i]], np.full(T, x.nl), np.full(T, x.su), np.zeros(T)],
             np.r_[np.zeros(T), np.ones(3 * T)],
             lb, ub, A, b, Ae, be, "a unit has no self-schedule")
-        om[i] = -float(res.mip_dual_bound)
+        om[i] = -bd
     return om
 
 

@@ -24,6 +24,7 @@
 #   C,D,E,M      : the charge, discharge, energy and mode offsets inside a block
 #   g,st,d,net   : units, resources, nodal demand, network
 #   f            : keep the binaries integer
+#   gap,lb       : achieved relative gap and certified cost lower bound
 #   sq,why       : the clearing's own certificate, and why a solve failed
 #   x,y          : one resource, one solved vector
 
@@ -61,6 +62,8 @@ class Jt(NamedTuple):
     pi carries one price per bus per period. st is uc_price's price-selection tag on a
     priced route: only walk and probe are canonical. cl prices nothing, so there st carries
     that solve's own certificate instead, opt for a closed bound and gap for an incumbent.
+    gap and lb carry that certificate as numbers. On a linear re-dispatch gap is zero and
+    lb is its determined objective.
     """
 
     z: float
@@ -72,6 +75,8 @@ class Jt(NamedTuple):
     sm: np.ndarray
     pi: np.ndarray
     st: str = ""
+    gap: float = 0.0
+    lb: float = float("nan")
 
 
 def _sr(x, T):
@@ -250,10 +255,11 @@ def cl(g, st, d, net=None):
     g, st, d, net = ck(g, st, d, net)
     G, R, T = len(g), len(st), d.shape[1]
     c, A, b, Ae, be, lb, ub, it, ou, os = _sy(g, st, d, net, True)
-    res, _ag, sq = _mi(c, it, lb, ub, A, b, Ae, be, "this demand did not clear jointly")
+    res, ag, bd, sq = _mi(c, it, lb, ub, A, b, Ae, be,
+                          "this demand did not clear jointly")
     p, u, q = _out(G, R, T, res.x, ou, os)
     return Jt(float(res.fun), p, np.rint(u), q[0], q[1], q[2], np.rint(q[3]),
-              np.full(d.shape, np.nan), sq)
+              np.full(d.shape, np.nan), sq, ag, bd)
 
 
 def rx(g, st, d, net=None):
@@ -267,7 +273,7 @@ def rx(g, st, d, net=None):
         raise ValueError(f"the relaxed joint clearing did not solve [{why[0]}]")
     p, u, q = _out(G, R, T, res[1], ou, os)
     return Jt(res[0], p, u, q[0], q[1], q[2], q[3],
-              res[2][-d.size :].reshape(d.shape), res[3])
+              res[2][-d.size :].reshape(d.shape), res[3], 0.0, res[0])
 
 
 def lmp(g, st, d, s, net=None):
@@ -300,4 +306,4 @@ def lmp(g, st, d, s, net=None):
         raise ValueError(f"the held commitment did not re-dispatch [{why[0]}]")
     p, _u, q = _out(G, R, T, res[1], ou, os)
     return Jt(res[0], p, u, q[0], q[1], q[2], sm,
-              res[2][-d.size :].reshape(d.shape), res[3])
+              res[2][-d.size :].reshape(d.shape), res[3], 0.0, res[0])

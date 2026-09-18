@@ -65,6 +65,11 @@ feasible cost and not a proved optimum. A requested tolerance is not a result: H
 at $10^{-4}$ unless told otherwise, and on the 12-by-10 synthetic market that default
 returns an incumbent 23.4 above its own certified bound.
 
+`Sol.gap` is the achieved relative gap and `Sol.lb` is the solver's certified lower bound
+on cost. On a linear or enumerated route the optimum is determined, so `gap` is zero and
+`lb` equals `z`. The categorical tag and the numeric certificate therefore describe the
+same solve rather than asking a reader to infer how far a search closed.
+
 `qd` subtracts each unit's best self-schedule profit, so it takes the solver's certified
 bound on that profit rather than its incumbent. An incumbent can understate the profit a
 unit could take; understating it lifts the reported dual, and a dual above the primal is
