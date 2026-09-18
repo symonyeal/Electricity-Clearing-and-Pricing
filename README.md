@@ -46,7 +46,7 @@ there is more than one defensible choice:
 | Rule | What it prices | Standing |
 | --- | --- | --- |
 | LMP | the dispatch, commitment held as cleared | what markets settle on today |
-| Convex hull | what each unit could have offered to do, not only what it was told to do | the benchmark that provably minimizes total uplift |
+| Convex hull | what each unit could have offered to do, not only what it was told to do | minimizes total uplift over uniform linear prices for the fixed cleared allocation |
 | Average incremental cost | that benchmark, after screening blocks that did not cover their own cost | the FERC staff variant |
 
 Real markets approximate the benchmark, because computing it at ISO scale is expensive.
