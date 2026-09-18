@@ -205,8 +205,9 @@ five-minute periods, $E=C=D=1$ MWh/MW, unit efficiencies, zero endpoints, `kd = 
 
 The reported decomposition inherits the same boundary. `arb` in `market/report.py` is
 defined against `kd + fee` only, so `arb + spread - net` reconciles at `tar = 0` and misses
-by exactly the metered tariff otherwise — on the committed three-day fixture at `tar = 5`,
-both sides are $149.143047259$.
+by exactly the metered tariff otherwise — on the committed three-day fixture under the
+risk-neutral policy at `tar = 5`, both sides are $162.650737240$. The superseded
+array-position analog alignment gave $149.143047259$ on that same fixture.
 
 None of this moves a published result: every committed run uses `tar = 0`, which is the
 default, and the tests assert that the defaults reproduce the baseline to the cent. Pricing
