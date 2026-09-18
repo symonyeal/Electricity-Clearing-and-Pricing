@@ -73,10 +73,12 @@ LMP posts $90/MWh in the tight period, then writes $1,690 of make-whole. The hul
 $276/MWh and writes none: uplift falls 78%, and what remains is lost opportunity cost rather
 than cost recovery. Higher posted price, less out-of-market money, same dispatch.
 
-**The published benchmark is off.** The talk reports $146.33/MWh for the AIC price above.
-Computed exactly it is $422/MWh. The $146.33 is reachable only by deleting a schedule the
-unit could genuinely have run. An implementation calibrated to $146.33 is calibrated to the
-wrong number, so both are pinned in the tests.
+**The AIC number depends on the restriction.** The talk reports $146.33/MWh for the AIC
+price above; the exact p-cut hull over this repository's full schedule set gives $422/MWh.
+Restricting unit 2 to the cleared and off schedules gives $146.33. The talk later describes
+binary cuts for its AIC34 variant that induce that same restriction on this case, but does
+not say those cuts produced the earlier AIC row. The two numbers therefore belong to
+different stated feasible sets, and both are pinned in the tests.
 
 **Congestion breaks a shortcut.** On a three-bus loop with 90 MW of load behind a 40 MW
 constraint, the clearing costs $2,100 — 60 MW cheap, 30 MW expensive — and hull prices

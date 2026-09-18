@@ -46,7 +46,7 @@ publisher's own deposit gives 3308–3310, which is what is recorded above.
 | --- | --- |
 | `ex1` | Hua–Baldick Table 1; one period |
 | `ex2` | Hua–Baldick Table 3; start-up and shut-down ramps are set equal to normal ramps to recover the published period-2 commitment |
-| `ex3` | Chen–O'Neill–Whitman slide 13; both exact hulls give AIC price $(10,10,422)$ rather than the reported $(10,10,146.33)$ |
+| `ex3` | Chen–O'Neill–Whitman slides 13–15; both exact hulls give $(10,10,422)$ on the repository's full p-cut schedule set, while the cleared/off restriction induced here by the deck's later AIC34 binary cuts gives its reported $(10,10,146.33)$ |
 | `ex4` | Synthetic three-bus DC loop |
 | `ex5` | Synthetic offers and demand with the directional `NO-NO1_NO-NO2` capacity from [electricitymaps](https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/exchanges/NO-NO1_NO-NO2.yaml) |
 

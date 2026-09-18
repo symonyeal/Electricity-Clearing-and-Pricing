@@ -41,7 +41,7 @@ repository rests on. Change the rows in one place, or state why a route needs it
 
 | Observation | Status |
 | --- | --- |
-| `ex3` exact AIC is $422, not the FERC talk's $146.33. | Correct. Two independent hulls give 422; 146.33 follows only after removing a feasible schedule the source does not exclude. Do not tune 422 toward it. |
+| `ex3`'s full p-cut hull is $422 while the FERC talk reports $146.33. | Both are reproducible under different restrictions. The cleared/off restriction gives $146.33, and the talk's later AIC34 binary cuts induce it here. Do not tune the unrestricted hull toward the restricted value. |
 | `stoch.lmp` returns `cv` as `nan` and a `z` unequal to `cl`'s. | Correct. `lmp` prices a new expected-cost re-dispatch; [Joint](docs/JOINT.md) says so. |
 | `market/bid.py` charges `tar` in settlement but the policy optimizes `kd + fee`. | Deliberate. `arb + spread - net` therefore misses by exactly the metered tariff when `tar > 0`. [Market interface](docs/MARKET.md) states the boundary; the repair is open work item 2. |
 | The storage mode cut `c/C + d/D <= 1` is not the hull of the resource. | Correct as documented. The state-of-charge rows couple periods the cut treats separately. Do not upgrade the claim. |

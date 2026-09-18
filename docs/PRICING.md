@@ -123,10 +123,14 @@ checks required by a column-generation implementation.
 | Chen, O'Neill, and Whitman (2020) | Dispatch; LMP (10, 10, 90); unit-2 profits (-1,830, -1,030, 1,170); make-whole and uplift 1,690 |
 
 At the talk's AIC price $(10,10,146.33)$, unit 2 has profit 13,633, best self-schedule
-profit 14,771, uplift 1,138, and zero make-whole. The full restricted hull gives
-$(10,10,422)$. Restricting unit 2 to the cleared and off schedules gives $146.33$; the
-full hull also permits a start in period 2. Both `hc` and `hl` give $422$. The talk does
-not publish the rows needed to resolve the difference.
+profit 14,771, uplift 1,138, and zero make-whole. The repository's p-cut hull over its full
+schedule set gives $(10,10,422)$; both `hc` and `hl` agree. Restricting unit 2 to the
+cleared and off schedules gives $146.33$, while the full set also permits a start in period
+2. The talk later describes binary cuts against the cleared commitment, start-up and
+shut-down indicators for its AIC34 variant. Applied to this case they induce the same
+cleared/off restriction and recover $146.33$. The deck does not state that its AIC34 cuts
+produced the earlier AIC row, so the two values are recorded under their respective
+feasible sets rather than treating either as a failed replication.
 
 The talk also reports $1,161 for a three-binary relaxation without listing its valid
 inequalities. This formulation gives $218.31; it is not presented as a replication.

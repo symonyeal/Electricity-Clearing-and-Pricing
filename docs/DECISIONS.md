@@ -26,7 +26,7 @@
 | Impose dual feasibility as equality. | An inequality admits false prices when a primal variable is free. |
 | Minimize demand payment, probe the optimal face, then walk prices if needed. | The rule selects a reproducible point without walking a numerically closed face. |
 | Compare hull value, demand payment, and uplift before price coordinates. | Distinct price vectors may lie on the same optimal face. |
-| Retain the exact AIC value $422 for `ex3`. | Both exact hulls give $422; $146.33 follows only after removing a feasible schedule not excluded by the source. |
+| Retain $422 for `ex3`'s full p-cut hull and pin the restricted $146.33 separately. | Both exact hulls give $422 on the repository's full schedule set. The cleared/off set gives $146.33, and the talk's later AIC34 binary cuts induce that restriction here; the deck does not connect those cuts to its earlier AIC row. |
 | Keep DC and NTC networks distinct. | DC flow uses reactance; zonal transport uses directional exchange bounds. |
 
 ## Joint and stochastic clearing
