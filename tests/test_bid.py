@@ -53,6 +53,23 @@ def test_curve_degenerates():
             curve(1.0, 40.0, k, sp)
 
 
+def test_curve_refuses_a_step_count_or_spread_that_is_not_a_number():
+    """A nan passes a bare sign test, so curve has to test what the value is.
+
+    k < 1 and sp < 0 are both false for a nan. The step count then failed inside np.full
+    with a TypeError about sequences of integers, and the spread returned a curve of nan
+    reservation prices that clear accepts nothing from at any price -- an offer switched off
+    rather than refused. run guards cf.bk and cf.bs already; this is curve's own guard.
+    """
+    for k in (float("nan"), float("inf"), 2.5):
+        with pytest.raises(ValueError, match="whole number of steps"):
+            curve(1.0, 40.0, k, 0.1)
+    for sp in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            curve(1.0, 40.0, 4, sp)
+    assert curve(1.0, 40.0, 4.0, 0.2).shape == (4, 2)
+
+
 def test_clear_takes_the_supported_slices():
     """A seller is taken where the price covers the reservation, a buyer where it does not."""
     cv = curve(6.0, 100.0, 3, 0.2)

@@ -43,11 +43,20 @@ def curve(q, ref, k, sp):
     sp is a bidding stance, not a derivation. sp = 0 collapses the curve to one block at
     ref and reproduces full acceptance whenever the cleared price is on the right side of
     ref; k = 0 is refused, because a curve with no steps is not a curve.
+
+    A step count is a count and a spread is a fraction, so both are tested for what they are
+    and not only for their sign. Every comparison with a nan is false, so k < 1 and sp < 0
+    let one through: the count then died inside np.full naming sequences of integers, and the
+    spread returned a curve of nan reservation prices that clear accepts nothing from at any
+    price, which switches the offer off instead of refusing it.
     """
+    if not np.isfinite(k) or float(k) != int(k):
+        raise ValueError("an offer curve needs a whole number of steps")
     if k < 1:
         raise ValueError("an offer curve needs at least one step")
-    if sp < 0:
-        raise ValueError("the bid spread must be non-negative")
+    if not np.isfinite(sp) or sp < 0:
+        raise ValueError("the bid spread must be finite and non-negative")
+    k = int(k)
     q = float(q)
     if q == 0.0:
         return np.zeros((0, 2))
