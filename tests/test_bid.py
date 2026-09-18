@@ -118,6 +118,9 @@ def test_charge_is_metered_both_ways():
     assert charge(c, d, 0.0) == pytest.approx([0.0, 0.0])
     with pytest.raises(ValueError, match="non-negative"):
         charge(c, d, -1.0)
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            charge(c, d, bad)
 
 
 def test_qual_screens():

@@ -99,10 +99,12 @@ def accept(q, ref, p, k, sp):
 def charge(c, d, tar):
     """The per-MWh charge on metered energy, applied to both directions.
 
-    Charged on energy at the meter, so a round trip pays twice. tar = 0 is no charge.
+    Charged on energy at the meter, so a round trip pays twice. tar = 0 is no charge. A
+    non-finite rate is refused here rather than allowed to turn every settled charge into
+    nan; replay validates its configuration before this function, but charge is public.
     """
-    if tar < 0:
-        raise ValueError("a tariff rate must be non-negative")
+    if not np.isfinite(tar) or tar < 0:
+        raise ValueError("a tariff rate must be finite and non-negative")
     return float(tar) * (np.asarray(c, dtype=float) + np.asarray(d, dtype=float))
 
 
