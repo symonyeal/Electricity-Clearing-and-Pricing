@@ -118,9 +118,7 @@ are the duals of the balance rows of the expected-cost re-dispatch that holds th
 integers, as above; no hull is taken over the joint feasible set, so a nonconvexity is left
 as make-whole rather than priced away.
 
-Both clearings solve to a requested relative gap of zero and report the certificate they
-achieved. `Jt.gap` and `Sc.gap` carry the achieved relative gap, while `lb` carries the
-solver's certified lower bound on cost. `st` is `opt` only when the bound closed, and `gap`
-when the search returned an incumbent. A value tagged `gap` is a feasible cost, not a
-proved optimum, and the bounds above are claims about optima. On the linear relaxation and
-fixed-integer re-dispatch routes, `gap` is zero and `lb` equals `z`.
+Both clearings carry `st`, `gap` and `lb` on the rule [Pricing](PRICING.md) states. It
+matters here because the bounds above are claims about optima: the three values compared by
+$\text{WS}\le\text{SP}\le\text{EEV}$ must each be certified, and a value tagged `gap` is a
+feasible cost that does not support the comparison.

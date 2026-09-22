@@ -65,6 +65,5 @@ stage and the tag is `pay`: these prices are canonical to the demand payment onl
 ## Result fields
 
 `cl(d, gap=0.0)` returns cost `z`, status `st`, achieved relative gap `gap`, and the
-solver's certified cost lower bound `lb`. A positive achieved gap gives status `gap`; a
-zero gap gives `opt`. The reported gap is achieved, not requested. This module does not
-compute settlement prices.
+solver's certified cost lower bound `lb`, read back as [Pricing](PRICING.md) describes.
+`cl` reports a clearing and no price; `px` reads the prices from it.

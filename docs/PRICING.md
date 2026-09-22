@@ -54,7 +54,7 @@ their dispatch polyhedra. `hc` represents each on-interval by an arc in an acycl
 It requires $O(T^2)$ arcs instead of up to $2^T$ commitment trajectories; its interval
 dispatch variables make the implemented LP $O(T^3)$ in the worst case. The two formulations
 agree on every published case and all 104 feasible markets among seeds 0 through 140:
-relative objective tolerance $10^{-9}$, price tolerance $0.0001/MWh.
+relative objective tolerance $10^{-9}$, price tolerance $10^{-4}$/MWh.
 
 ## What a clearing certifies
 
@@ -67,8 +67,8 @@ returns an incumbent 23.4 above its own certified bound.
 
 `Sol.gap` is the achieved relative gap and `Sol.lb` is the solver's certified lower bound
 on cost. On a linear or enumerated route the optimum is determined, so `gap` is zero and
-`lb` equals `z`. The categorical tag and the numeric certificate therefore describe the
-same solve rather than asking a reader to infer how far a search closed.
+`lb` equals `z`. `joint`, `stoch` and `pglib_uc` report the same three fields from the
+same read-back.
 
 `qd` subtracts each unit's best self-schedule profit, so it takes the solver's certified
 bound on that profit rather than its incumbent. An incumbent can understate the profit a

@@ -26,7 +26,7 @@
 | Impose dual feasibility as equality. | An inequality admits false prices when a primal variable is free. |
 | Minimize demand payment, probe the optimal face, then walk prices if needed. | The rule selects a reproducible point without walking a numerically closed face. |
 | Compare hull value, demand payment, and uplift before price coordinates. | Distinct price vectors may lie on the same optimal face. |
-| Retain $422 for `ex3`'s full p-cut hull and pin the restricted $146.33 separately. | Both exact hulls give $422 on the repository's full schedule set. The cleared/off set gives $146.33, and the talk's later AIC34 binary cuts induce that restriction here; the deck does not connect those cuts to its earlier AIC row. |
+| Pin `ex3`'s two AIC values under their own feasible sets. | Each is exact for the set it is taken over, and the deck does not say which set produced its own figure. [Pricing](PRICING.md) records both. |
 | Keep DC and NTC networks distinct. | DC flow uses reactance; zonal transport uses directional exchange bounds. |
 
 ## Joint and stochastic clearing
@@ -81,15 +81,12 @@
 
 1. Calibrate `market/bid.py` to one market's published tariff and qualification manual.
    The mechanism is implemented; the parameters are not anyone's.
-2. Price `tar` inside the policy rather than after it. Today the optimizing battery carries
-   throughput cost `kd + fee`, so a run at `tar > 0` takes the schedule it would have taken
-   at `tar = 0` and pays the charge afterwards; a large enough rate therefore makes the
-   selected trade lose money, and `arb` in `market/report.py` reconciles only at `tar = 0`.
-   The work is to put `tar` into `_bat(...).k`, give the report identity its own tariff
-   component, and add a high-rate no-trade regression. It is deliberately not bundled with
-   item 1: moving a cost into the objective changes which trades a policy takes, so it
-   changes every result it touches and belongs with the calibration that gives the rate a
-   number, not before it. [Market interface](MARKET.md) states the current boundary.
+2. Price `tar` inside the policy rather than after it: put it into `_bat(...).k`, give the
+   report identity its own tariff component, and add a high-rate no-trade regression.
+   [Market interface](MARKET.md) states the boundary this leaves. It is not bundled with
+   item 1 because moving a cost into the objective changes which trades a policy takes, so
+   it changes every result it touches and belongs with the calibration that gives the rate
+   a number.
 3. A convex hull price for the joint feasible set. Today the joint and stochastic clearings
    pin the integers, so the nonconvexity is left as make-whole.
 4. A multi-stage scenario tree. The stochastic clearing branches once.

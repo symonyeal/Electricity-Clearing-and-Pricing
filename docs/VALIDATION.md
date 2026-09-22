@@ -27,12 +27,9 @@ python run_storage.py
 git diff --check
 ```
 
-The pglib-uc MIP test is marked `slow`. Its acceptance criterion is the achieved bound and
-gap, not the requested stopping tolerance. The same rule now holds for every reference
-clearing: `uc`, `joint.cl` and `stoch.cl` request a zero relative gap and report the gap
-they achieved, tagging a result `opt` only when the bound closed. Tests pin that tag
-against a solve made to return a positive gap, and pin that `qd` is built from the solver's
-certified bound rather than its incumbent.
+The pglib-uc MIP test is marked `slow`. Tests pin the `opt` tag against a solve made to
+return a positive gap, and pin that `qd` is built from the solver's certified bound rather
+than its incumbent.
 
 ## Pricing
 

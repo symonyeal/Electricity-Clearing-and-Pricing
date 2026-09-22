@@ -114,8 +114,8 @@ most $0.0013; CVaR was not reconciled from exports. The
 | CVaR | 31,983 | [6,365, 64,947] | -4,274 | 361.7 |
 | Perfect foresight | 190,720 | [138,858, 256,192] | 0 | 442.2 |
 
-These are archived outputs from revision `88d244d`, before analog days were aligned by
-local clock hour. They are not a rerun of the current revision. The committed
+These are archived outputs from revision `88d244d`, before analog days were aligned by local
+clock hour. The committed
 [provenance note](results/README.md#provenance-note-analog-alignment) bounds the change's
 reach at 18 of 365 days, only two of them certain; its annual financial effect has not been
 measured because the NYISO archives are not committed.
@@ -241,7 +241,7 @@ uses the network. Tests use committed fixtures.
 ## Limits
 
 - Published prices are outputs of the market, not proof that modeled positions would clear.
-- `tar` is charged in settlement and not priced into the policy; see the section above.
+- `tar` is charged in settlement and not priced into the policy.
 - The configured bid time, information lag, and settlement convention are study assumptions.
 - The daily terminal target excludes multi-day arbitrage.
 - Corrected archive prices may differ from prices available to a participant in real time.

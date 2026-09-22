@@ -96,8 +96,8 @@ two-settlement against its real-time deviations nets, through 2025 in N.Y.C., $4
 deterministic forecast and $33,131 risk-neutral — 22% and 17% of the $190,720 a trader who
 knew every price in advance would have captured.
 
-Those are archived outputs from revision `88d244d`, before analog days were aligned by
-local clock hour. A full-year rerun has not been measured: the committed
+Those are archived outputs from revision `88d244d`, taken before analog days were aligned
+by local clock hour, and no full-year rerun has been measured. The committed
 [provenance note](docs/results/README.md#provenance-note-analog-alignment) bounds the reach
 at 18 of 365 days, of which only the two clock-transition days are certain to move.
 
@@ -120,18 +120,9 @@ python run_face_scan.py
 
 The pglib-uc MIP is marked `slow`. Use `pytest -m 'not slow'` for the smaller suite.
 
-The historical replay requires one network fetch; all tests use committed fixtures.
-
-```text
-python run_market.py fetch
-python run_market.py validate --out results/coverage.json
-python run_market.py smoke
-python run_market.py tune --out results/tune
-python run_market.py select --dir results/tune
-python run_market.py run --period test --pol all --out results/test
-python run_market.py report --dir results/test
-python run_delivery.py audit
-```
+The historical replay needs the NYISO archives, which are not committed. Its fetch and the
+seven commands after it are in [NYISO replay](docs/MARKET.md#reproduction). Every test
+runs on committed fixtures.
 
 ## Scope
 

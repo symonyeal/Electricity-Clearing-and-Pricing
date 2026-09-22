@@ -112,11 +112,10 @@ refuses horizons beyond `LIM[0]=16`. The last three `hl` sizes are exact path co
 constructed LPs. At 96 × 24, `hc` has 30,074 arcs and 278,526 LP variables and is solved
 as a full formulation by `run_face_scan.py`; no restricted-master iteration is used.
 
-The formulations have equal objectives to relative tolerance $10^{-9}$ and equal selected
-prices to $10^{-4}$/MWh on the published cases and all 104 feasible markets among seeds 0
-through 140. This is an implementation check on sampled instances. Exactness follows from
-the two formulations, not from the sample. The table compares the direct formulations; it
-does not report a column-generation benchmark.
+The two agree to the tolerances [Validation](VALIDATION.md) records, which is an
+implementation check on sampled instances: exactness follows from the formulations, not
+from the sample. The table compares the direct formulations; it does not report a
+column-generation benchmark.
 
 A practical compact exact formulation removes the present need for decomposition. Its
 absence is a reason to evaluate Dantzig–Wolfe when the pricing problems remain tractable
@@ -135,11 +134,10 @@ Dantzig–Wolfe is a candidate because a column can include one unit's energy an
 schedule and the pricing problem remains separable by unit. No column-generation runtime
 has been measured.
 
-**The storage resource set.** [Joint clearing](JOINT.md) uses the per-period inequality
-$c/C+d/D\le1$, which is the hull of the charge/discharge mode restriction for that period.
-It is not the hull of the full resource set because state of charge couples periods. A
-resource can form one Dantzig–Wolfe block if its self-scheduling MILP or dynamic
-optimization is a practical pricing oracle. No such master or benchmark is implemented.
+**The storage resource set.** The per-period mode cut [Joint clearing](JOINT.md) carries is
+not the hull of the full resource set. A resource can form one Dantzig–Wolfe block if its
+self-scheduling MILP or dynamic optimization is a practical pricing oracle. No such master
+or benchmark is implemented.
 
 These are candidate applications, not evidence that column generation is faster than a
 direct formulation not yet constructed, nor than another decomposition of the same dual.
