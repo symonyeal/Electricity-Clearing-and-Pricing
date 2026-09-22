@@ -211,15 +211,15 @@ five-minute periods, $E=C=D=1$ MWh/MW, unit efficiencies, zero endpoints, `kd = 
 
 The reported decomposition inherits the same boundary. `arb` in `market/report.py` is
 defined against `kd + fee` only, so `arb + spread - net` reconciles at `tar = 0` and misses
-by exactly the metered tariff otherwise — on the committed three-day fixture under the
-risk-neutral policy at `tar = 5`, both sides are $162.650737240$. The superseded
-array-position analog alignment gave $149.143047259$ on that same fixture.
+by exactly the metered tariff otherwise — replaying `config/ci.toml` at $\rho=0.5$ and
+`tar = 5` under the risk-neutral policy, both sides are $162.650737240$. The superseded
+array-position analog alignment gave $149.143047259$ on that same run. The two sides agree
+at every coefficient and only the amount moves: the file's own $\rho=0$ gives
+$134.884930057$ on both.
 
 None of this moves a published result: every committed run uses `tar = 0`, which is the
 default, and the tests assert that the defaults reproduce the baseline to the cent. Pricing
-the tariff into the objective is a separate piece of work and is recorded as such in
-[Decisions](DECISIONS.md); it is not a bug being left unfixed but a scope line being drawn,
-and this section is the disclosure that it was drawn here.
+the tariff into the objective is open work item 2 of [Decisions](DECISIONS.md).
 
 ## Reproduction
 

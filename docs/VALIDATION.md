@@ -111,8 +111,9 @@ settle; and a 25-hour analog put on an ordinary day drops the second pass of `01
 tests read the local labels from the zone, so they would fail if alignment reverted to
 elapsed position.
 
-The change is not cosmetic and its size is measured rather than asserted. Replaying the
-committed three-day fixture under both rules, with the 25-hour 2025-11-02 in the middle:
+The change is not cosmetic and its size is measured rather than asserted. Replaying
+`config/ci.toml` at $\rho=0.5$ over 2025-11-01 to 2025-11-03 under both rules, with the
+25-hour 2025-11-02 in the middle:
 
 | Policy | Net, elapsed position | Net, local clock | Change |
 | --- | ---: | ---: | ---: |
@@ -125,6 +126,12 @@ the bit under both rules, which is the check that the two alignments are the sam
 between days of equal length. Under the old rule the appended hour repeated one real-time
 quote twelve times, so it carried no spread to trade; under the new one it carries the
 prices local 01 actually settled at.
+
+The persistence coefficient sets how large that is and not where it lands: the file's own
+$\rho=0$ moves the same three policies by +0.842533 and the $\rho=0.75$ that
+`run_market.py smoke` imposes by +10.978352, each time the whole of it on 2025-11-02 and
+each time identical across the three. A figure from this fixture is reported with the
+coefficient that produced it.
 
 The committed 2025 result bundles are evidence from the recorded revisions, not a result
 of the local test command. Their metrics, daily rows, configurations, and coverage report
