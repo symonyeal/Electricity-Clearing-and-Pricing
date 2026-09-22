@@ -28,59 +28,37 @@ depend on the cap.
 
 TOML has no null, so a configuration file omits `cap` for the unbounded case. On the
 command line the equivalent is `--set cap=None`; finite examples are `--set cap=0.25` and
-`--set cap=0.0`. These are the commands the runs recorded, from the repository root:
+`--set cap=0.0`. Each run is this command, from the repository root; `audit.json` holds the
+argument vector as executed:
 
 ```bash
-.venv/bin/python -u run_market.py run --period test --pol <policy> \
+python -u run_market.py run --period test --pol <policy> \
     --out results/delivery/nyc/2025/cap-<cap> \
     --set zone=N.Y.C. --set 'te=["2025-01-01", "2025-12-31"]' \
     --set cap=<cap> --set L=<L> --set S=<S> --set w=0.0 --set al=0.95
 ```
 
 over `<cap>` in `None 1.0 0.25 0.0` and `<policy>` in `det neutral fore`, with `L` and `S`
-as above. Each was launched detached, with its own log, its own `<policy>.launch.json`
-recording the command, the process id and the source hashes, and a wrapper that writes the
-child's status to `<policy>.exit`:
+as above. Each ran detached and wrote three files beside its output: `<policy>.log`,
+`<policy>.launch.json` with the command, the process id and the source hashes, and
+`<policy>.exit` with the child's status. `audit` reads the log and the exit status, so a
+replacement launcher must write both. The one used is in the
+[archive](../../../_archive/20260922-delivery-launcher/README.md).
 
-```bash
-.venv/bin/python - <<'PY'
-import subprocess
-from pathlib import Path
-
-PY_ = '.venv/bin/python'
-MARK = ('import pathlib,subprocess,sys; r=subprocess.run(sys.argv[2:]); '
-        'pathlib.Path(sys.argv[1]).write_text(str(r.returncode)+"\n"); '
-        'sys.exit(r.returncode)')
-SET = {'det': ('30', '16'), 'neutral': ('30', '8'), 'fore': ('60', '8')}
-for cap in ('None', '1.0', '0.25', '0.0'):
-    out = Path(f'results/delivery/nyc/2025/cap-{cap}')
-    out.mkdir(parents=True, exist_ok=True)
-    for pol, (L, S) in SET.items():
-        cmd = [PY_, '-u', 'run_market.py', 'run', '--period', 'test', '--pol', pol,
-               '--out', str(out), '--set', 'zone=N.Y.C.',
-               '--set', 'te=["2025-01-01", "2025-12-31"]', '--set', f'cap={cap}',
-               '--set', f'L={L}', '--set', f'S={S}', '--set', 'w=0.0', '--set', 'al=0.95']
-        log = (out / f'{pol}.log').open('w')
-        subprocess.Popen([PY_, '-c', MARK, str(out / f'{pol}.exit'), *cmd],
-                         stdout=log, stderr=subprocess.STDOUT,
-                         stdin=subprocess.DEVNULL, start_new_session=True)
-PY
-```
-
-Launch from a persistent shell: an execution sandbox that destroys its process namespace
-on exit also destroys detached children. Check the twelve `.exit` files, each containing
-zero, and the corresponding `metrics.json` and `config.toml`, before reading any result. A
-process-name search is not a completion check, and neither is the tail of a log. Before
-relaunching a run, delete its output directory, its log and its `.exit` file, and confirm
-no earlier process is still writing there: a stale `.exit` file, or two processes sharing
-one output directory, will otherwise be read as a finished result.
+Check the twelve `.exit` files, each containing zero, and the corresponding `metrics.json`
+and `config.toml`, before reading any result. A process-name search is not a completion
+check, and neither is the tail of a log. Before relaunching a run, delete its output
+directory, its log and its `.exit` file, and confirm no earlier process is still writing
+there: a stale `.exit` file, or two processes sharing one output directory, will otherwise
+be read as a finished result.
 
 ## Checking the runs
 
 `audit.json` is rebuilt from the exported results by the script below. Every setting must
 have finished: either it exported and exited zero, or it exited nonzero having stopped on
-an infeasible capped dispatch, which is decision 52's specified outcome and is recorded
-as `completed: false` with the date, step and solver message. Any other nonzero exit is
+an infeasible capped dispatch, which [Decisions](../../DECISIONS.md) records as the
+specified outcome for a fixed position under a finite band, and which is recorded here as
+`completed: false` with the date, step and solver message. Any other nonzero exit is
 refused. For each completed run it rebuilds net settlement
 and stored energy from the six-decimal interval export alone, by a path that shares no
 arithmetic with the replay; re-derives the largest excess over the cap; re-derives July,
@@ -98,8 +76,8 @@ absolute difference between the full score and its bound is below $0.0000001. No
 setting is changed, and no reported ratio is replaced.
 
 ```bash
-.venv/bin/python run_delivery.py audit    # verifies, publishes and writes audit.json
-.venv/bin/python run_delivery.py tables   # prints the tables used in docs/MARKET.md
+python run_delivery.py audit    # verifies, publishes and writes audit.json
+python run_delivery.py tables   # prints the tables used in docs/MARKET.md
 ```
 
 `audit` copies each verified run's `metrics.json`, `config.toml`, `daily.csv` and

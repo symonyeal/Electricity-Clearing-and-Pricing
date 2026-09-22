@@ -125,9 +125,10 @@ def probe(cf, pol, day, e0):
 def exported(cap, pol):
     """One finished run: its directory, or why the replay stopped without one.
 
-    A replay that a finite cap made infeasible has no result to read. That is the
-    outcome decision 52 specifies, so it is recorded rather than treated as a
-    missing file; any other nonzero exit is refused.
+    A replay that a finite cap made infeasible has no result to read. A fixed position
+    under a finite band may be infeasible, which docs/DECISIONS.md carries as a decision,
+    so that outcome is recorded rather than treated as a missing file; any other nonzero
+    exit is refused.
     """
     d, mark = RUNS / f"cap-{cap}" / pol, RUNS / f"cap-{cap}" / f"{pol}.exit"
     if not mark.exists():
