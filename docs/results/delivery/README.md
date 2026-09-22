@@ -10,6 +10,13 @@ commands. Each run's own `metrics.json` also records the base revision and wheth
 working tree was dirty. The hashes identify the executed source even when the measurement
 precedes the commit that publishes it.
 
+All eleven runs are revision `bdb96ea` with a dirty tree, which is after the `88d244d` of
+the annual bundles and before the local-clock analog alignment of `b213d4d`. The
+[provenance note](../README.md#provenance-note-analog-alignment) on those bundles
+therefore covers these runs as well, and its 18-of-365 reach bound is the same bound: the
+unbounded runs here reproduce the annual study to the cent, so they are the same replay
+under the same rule.
+
 Settings come from `../selected.json`, with no selection or fitting based on the cap:
 `L=30, S=16` for `det` and `L=30, S=8` for `neutral`. Foresight has no forecast
 hyperparameters, so its original `config/nyiso.toml` values, `L=60, S=8`, are retained.

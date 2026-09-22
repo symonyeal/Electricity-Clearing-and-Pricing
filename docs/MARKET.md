@@ -162,7 +162,8 @@ The band reuses the evaluation year, so it is a sensitivity and not a second hel
 Eleven completed runs passed independent settlement, energy, and band checks. A capped run can
 report a large raw relative gap, because the contract's constant profit leaves a near-zero
 variable objective; the audit re-solves those days and requires the full score to lie within
-$10^{-7}$ of its certified bound. Results and the audit record are in
+$10^{-7}$ of its certified bound. These runs are revision `bdb96ea` and carry the same
+pre-alignment provenance as the table above. Results and the audit record are in
 [`docs/results/delivery/`](results/delivery/README.md).
 
 ## Market interface
