@@ -37,6 +37,19 @@ Make-whole is computed by commitment block. Total uplift equals make-whole plus 
 opportunity. All three rules hold the allocation fixed and choose a price for it; Liberopoulos
 and Andrianesis survey that family and the alternatives to it.
 
+The AIC's $\epsilon=10^{-6}$ MW is part of the rule, and its prices move with it. Against
+$10^{-6}$, over the 208 capped `hc` and `hl` routes of the seeded family
+(`python run_face_scan.py aic`):
+
+| $\epsilon$ | Largest value change | Largest price change, $/MWh | Largest uplift change | Routes whose price moves by more than $10^{-4}$ |
+| ---: | ---: | ---: | ---: | ---: |
+| $10^{-5}$ | 0.0023 | 4.04 | 150.9 | 20 |
+| $10^{-4}$ | 0.0253 | 4.74 | 153.6 | 50 |
+| $10^{-3}$ | 0.255 | 5.16 | 153.8 | 114 |
+
+A larger $\epsilon$ widens the thin ranges that defeated presolve (below) but changes
+settlement, so every AIC figure here is at $10^{-6}$.
+
 ## Solve routes
 
 | Function | Method | Role |
@@ -48,6 +61,7 @@ and Andrianesis survey that family and the alternatives to it.
 | `hl` | Schedule-wise disjunctive hull | Independent small-case check |
 | `lmp` | Cleared commitment fixed | LMP |
 | `qd` | One best self-schedule problem per unit, plus the network subproblem | Lagrangian dual and lost opportunity |
+| `dw.cg` | Generated extreme-point master, the reported price repriced exactly | CHP and AIC with a Lagrangian certificate; [Decomposition](DW.md) |
 
 `hl` applies Balas' union-of-polyhedra construction to feasible commitment trajectories and
 their dispatch polyhedra. `hc` represents each on-interval by an arc in an acyclic graph.
@@ -63,26 +77,44 @@ the solver for a relative gap of zero and read back the gap it achieved. `Sol.st
 only when the bound closed and `gap` when the search returned an incumbent, which is a
 feasible cost and not a proved optimum. A requested tolerance is not a result: HiGHS stops
 at $10^{-4}$ unless told otherwise, and on the 12-by-10 synthetic market that default
-returns an incumbent 23.4 above its own certified bound.
+returns an incumbent 23.4 above its own bound.
 
-`Sol.gap` is the achieved relative gap and `Sol.lb` is the solver's certified lower bound
-on cost. On a linear or enumerated route the optimum is determined, so `gap` is zero and
-`lb` equals `z`. `joint`, `stoch` and `pglib_uc` report the same three fields from the
-same read-back.
+`Sol.gap` is the achieved relative gap and `Sol.lb` is the solver's lower bound on cost,
+exact to its tolerances. On a linear or enumerated route the optimum is determined, so
+`gap` is zero and `lb` equals `z`. `joint`, `stoch` and `pglib_uc` report the same three
+fields from the same read-back.
 
-`qd` subtracts each unit's best self-schedule profit, so it takes the solver's certified
-bound on that profit rather than its incumbent. An incumbent can understate the profit a
+`qd` subtracts each unit's best self-schedule profit, so it takes the solver's bound on
+that profit rather than its incumbent. An incumbent can understate the profit a
 unit could take; understating it lifts the reported dual, and a dual above the primal is
 what weak duality forbids. The bound errs the other way, so
 
 $$q(\pi)\le z_{\rm UC}$$
 
-holds whatever the search was able to prove, and not only when every subproblem closed. At
-a closed gap the bound and the incumbent are the same number.
+holds, to the solver's tolerances, whatever the search was able to prove, and not only when
+every subproblem closed. At a closed gap the bound and the incumbent are the same number.
 
 A solve that fails is named by the solver's own status — infeasible, limit, unbounded or
 numerical — and not called infeasible by default. Malformed data and a demand no commitment
 can serve both end in a failed solve, and only the second of them is an infeasibility.
+
+The status and the bound themselves needed checking. The AIC ceiling $\epsilon=10^{-6}$
+leaves output ranges at the solver's own resolution, and HiGHS failed on them three ways.
+
+1. Presolve called feasible programs infeasible: the capped hulls of seeds 36, 116 and
+   129, whose capped clearing solves, and one restricted master of `dw.cg`, seed 41
+   capped. With presolve off, `hc` and `hl` solve the hull to the same value.
+2. Presolve fixed a dispatch at the wrong end of a range and returned that incumbent's
+   value as `mip_dual_bound`, $3.1\times10^{-4}$ above a unit's exact self-schedule
+   minimum (capped seed 88), which carries `qd` past the value it bounds.
+3. With presolve off, the default feasibility tolerances, $10^{-7}$ and $10^{-6}$, still
+   left the bound up to $5.5\times10^{-6}$ above the exact minimum.
+
+`_px` therefore reads an infeasibility back from a second solve with presolve off; a
+program that solved before is unchanged, bit for bit. Every bound route, `_om` (and so
+`qd` and `pay`), the oracles of `dw` and `settle._ub`, runs as `_mi(..., bd=True)`:
+presolve off, feasibility tolerances $10^{-9}$. [Decomposition](DW.md#tolerances) measures
+the result. The clearing keeps the defaults.
 
 ## Price selection
 
@@ -101,18 +133,19 @@ for capped and uncapped models.
 | 48 x 24 | $0.00000226/MWh | Skip |
 | 96 x 24 | $0.15225/MWh | Retain |
 
-A forced-walk scan covered 410 capped and uncapped `hc` and `hl` routes. The screen
-skipped 391; the largest omitted change was $0.00000444/MWh. `LIM[3]` bounds the number
-of balance rows in the lexicographic walk. In the capped seed-61 case, `hc` and `hl`
-return different prices but the same objective and demand payment.
+A forced-walk scan covered all 416 capped and uncapped `hc` and `hl` routes. The screen
+skipped 391 and walked 25, among them the six capped routes of seeds 36, 116 and 129 that
+presolve had called infeasible; the largest omitted change was $0.00000444/MWh. `LIM[3]`
+bounds the number of balance rows in the lexicographic walk. In the capped seed-61 case,
+`hc` and `hl` return different prices but the same objective and demand payment.
 
 ## Decomposition
 
 `hl` is a trajectory-wise Balas formulation of the same hull as the Dantzig–Wolfe
 extreme-point master; it is not that master written in full. `hc` is a direct interval
-extended formulation. Neither generates extreme-point columns. [Decomposition](DW.md)
-compares their sizes with the master representation and states the pricing and termination
-checks required by a column-generation implementation.
+extended formulation. `dw.cg` generates the master's columns and prices each vector it
+reports against every unit exactly. [Decomposition](DW.md) states its certificate,
+compares it with both, and measures where it wins.
 
 ## Published cases
 

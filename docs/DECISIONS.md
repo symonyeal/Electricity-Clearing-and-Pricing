@@ -13,6 +13,8 @@
 | Name a failed solve by the solver's own status. | Bad data and an infeasible program both end in a failure; calling both infeasible is right once. |
 | Label synthetic data and its tested property. | A synthetic result has no empirical interpretation without one. |
 | Add dependencies only after measurement. | The live models require no framework layer. |
+| Read a reported infeasibility back from a second solve with presolve off. | HiGHS presolve called feasible programs infeasible ([Pricing](PRICING.md#what-a-clearing-certifies)). A program that solves is untouched. |
+| Solve every program whose bound enters a Lagrangian value as a bound route, presolve off and feasibility tolerances $10^{-9}$. | Presolve, and then the default tolerances, returned a bound above the exact minimum ([Pricing](PRICING.md#what-a-clearing-certifies)). |
 
 ## Unit commitment and pricing
 
@@ -28,6 +30,12 @@
 | Compare hull value, demand payment, and uplift before price coordinates. | Distinct price vectors may lie on the same optimal face. |
 | Pin `ex3`'s two AIC values under their own feasible sets. | Each is exact for the set it is taken over, and the deck does not say which set produced its own figure. [Pricing](PRICING.md) records both. |
 | Keep DC and NTC networks distinct. | DC flow uses reactance; zonal transport uses directional exchange bounds. |
+| Generate the hull by column generation in `models/dw.py`, beside `hc` and `hl`. | It needs only a per-unit oracle, so it reaches pglib-uc, which has no direct hull here; `hc` and `hl` check it on the small class. |
+| Report a generated price only after that vector has been priced exactly against every unit. | A restricted master's dual face holds vectors that are not hull prices, and the face rule can select one; the master objective certifies nothing about the price. |
+| Take the certificate from the Lagrangian value at the reported price. | BT's $z+\sum\rho$ assumes the dual cost equals $z$, which the selected dual meets only within `_ce`. |
+| Set the reduced-cost tolerance to $\max(\varepsilon|z|/G,\ 10^{-5}+r)$. | $10^{-5}$ covers the oracle's measured resolution and $r$ is the master's own residual; below either, a column already present reads as violated. |
+| Seed the master with a feasible clearing. | No artificial penalty to state, and the certificate does not depend on the seed. |
+| Compare AIC value and payment across routes, not AIC uplift. | Uplift is measured against the unrestricted self-schedule and is not constant on the AIC face. |
 
 ## Joint and stochastic clearing
 
@@ -40,6 +48,11 @@
 | Make the commitment common and the dispatch per scenario. | That is the decision the day-ahead market takes. |
 | Divide the scenario probability out of the balance dual. | A weighted row has a weighted dual, which is not a price. |
 | Check the stochastic optimum against WS and EEV. | Both bounds are theorems, and both are computed by another module. |
+| Measure the mode cut against the resource's exact hull, built by Balas from joint's rows. | The hull is exact for small horizons and uses no second copy of the rows; it measures the cut rather than replacing it. |
+| Price every storage variant by holding its integers, as `joint.lmp` does. | The variants then differ in the resource and the design, not in the pricing rule. |
+| Normalise a CVaR balance dual by $\omega_s=(1-w)p_s+\mu_s$, not $p_s$. | KKT gives $y_s=\omega_s\lambda_s$; dividing by $p_s$ multiplies the price by $\omega_s/p_s$. |
+| Report the expected-cost re-dispatch price by default, with expected make-whole beside it. | It lies on the same scenario dual face as the CVaR program's normalised dual, and equals it where that face is a point; the cost of committing for risk is paid as make-whole. |
+| Leave the price nan where $\omega_s=0$. | The program puts no weight on that scenario and carries no price for it. |
 
 ## Market interface
 
@@ -77,20 +90,5 @@
 | Permit a zero-power fallback only when `cap=None`. | Zero power can violate a finite delivery band. |
 | Report the delivery band as a sensitivity, not a second evaluation. | It reuses 2025; only the assumption changes. |
 
-## Open work
-
-1. Calibrate `market/bid.py` to one market's published tariff and qualification manual.
-   The mechanism is implemented; the parameters are not anyone's.
-2. Price `tar` inside the policy rather than after it: put it into `_bat(...).k`, give the
-   report identity its own tariff component, and add a high-rate no-trade regression.
-   [Market interface](MARKET.md) states the boundary this leaves. It is not bundled with
-   item 1 because moving a cost into the objective changes which trades a policy takes, so
-   it changes every result it touches and belongs with the calibration that gives the rate
-   a number.
-3. A convex hull price for the joint feasible set. Today the joint and stochastic clearings
-   pin the integers, so the nonconvexity is left as make-whole.
-4. A multi-stage scenario tree. The stochastic clearing branches once.
-5. Ramping and reserve carried between scenarios, and a reserve product in `uc_price`.
-
-Superseded decisions and the out-of-scope pit model are in the
-[dated archive](../_archive/20260916-focus-reset/README.md).
+Open work is listed in [Open issues](ISSUES.md). Superseded decisions and the out-of-scope
+pit model are in the [dated archive](../_archive/20260916-focus-reset/README.md).

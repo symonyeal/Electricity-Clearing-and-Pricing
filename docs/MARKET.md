@@ -220,7 +220,7 @@ $134.884930057$ on both.
 
 None of this moves a published result: every committed run uses `tar = 0`, which is the
 default, and the tests assert that the defaults reproduce the baseline to the cent. Pricing
-the tariff into the objective is open work item 2 of [Decisions](DECISIONS.md).
+the tariff into the objective is item 2 of [Open issues](ISSUES.md).
 
 ## Reproduction
 

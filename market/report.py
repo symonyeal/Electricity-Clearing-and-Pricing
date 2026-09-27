@@ -83,7 +83,7 @@ def metrics(rn, cf, seed=0, B=10000):
           # arb carries kd + fee and not cf.tar, matching the cost the policy optimized
           # against. arb + spread - net therefore reconciles at tar = 0 and misses by
           # exactly the metered tariff otherwise; docs/MARKET.md states that boundary and
-          # docs/DECISIONS.md carries the repair as open work.
+          # docs/ISSUES.md carries the repair as open work.
           "arb": float((g * np.nan_to_num(rn.iv["prt"])
                         - (cf.kd + cf.fee) * (rn.iv["c"] + rn.iv["d"])).sum() * DTB),
           "spread": float((rn.iv["q"] * (np.nan_to_num(rn.iv["pda"])

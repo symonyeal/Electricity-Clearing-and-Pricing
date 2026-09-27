@@ -1,9 +1,10 @@
-# Forced-walk scan of the price face. Source of the screen tables in docs/PRICING.md.
+# Forced-walk scan of the price face. Source of the screen tables in docs/PRICING.md, and,
+# with the argument aic, of its AIC-ceiling table.
 #
 # LEGEND
 #   SEED,BIG : the seeded market family and the two large timing markets
 #   EP       : the AIC output relaxation
-#   _rand    : the seeded market generator, shared with the parity test
+#   _clear   : one seeded market and its clearing, None where uc proves it infeasible
 #   tm       : timer helper
 #   rp,fw    : record the probe reading; force the walk by reporting movement
 #   rt,sc,bg : one route, the whole seeded scan, one large market
@@ -16,15 +17,17 @@
 #   o,R      : the recorded readings, and one tuple per route
 #   sk,wk    : the routes the screen skipped and the routes it walked
 #   t1,t2    : screened and forced seconds
+#   aic,E    : the AIC's sensitivity to its ceiling ep, and the ceilings tried
 
+import sys
 import time
 from contextlib import contextmanager
 
 import numpy as np
 
 import models.uc_price as m
-from models.uc_price import hc, hl, mk_g, pc, ptol, uc
-from tests.test_uc_price import _rand
+from models.uc_price import hc, hl, mk_g, pay, pc, ptol
+from tests.test_uc_price import _clear
 
 SEED, BIG, EP = range(141), [(48, 24), (96, 24)], 1e-6
 
@@ -78,20 +81,41 @@ def sc():
     """Every capped and uncapped hl and hc route over the seeded family."""
     R = []
     for sd in SEED:
-        g, d = _rand(sd)
-        try:
-            s = uc(g, d)
-        except ValueError:
+        q = _clear(sd)
+        if q is None:
             continue
+        g, d, s = q
         cap = pc(g, d, s, EP)
         for f in (hl, hc):
             for c in (None, cap):
-                try:
-                    v, dv = rt(f, g, d, c)
-                except ValueError:
-                    continue
-                R.append((sd, f.__name__, c is not None, v, dv))
+                R.append((sd, f.__name__, c is not None, *rt(f, g, d, c)))
     return R
+
+
+def aic():
+    """Both hulls' AIC on every feasible market at four ceilings, against ep = 1e-6."""
+    E, R = (1e-6, 1e-5, 1e-4, 1e-3), {}
+    for sd in SEED:
+        q = _clear(sd)
+        if q is None:
+            continue
+        g, d, s = q
+        for ep in E:
+            cap = pc(g, d, s, ep)
+            for f in (hc, hl):
+                x = f(g, d, cap)
+                R[sd, ep, f] = x.z, x.pi, float(pay(g, s, x.pi).up.sum())
+    print("| ep | Routes | Largest value change | Largest price change, $/MWh | "
+          "Largest uplift change | Routes whose price moves > 1e-4 |")
+    print("| ---: | ---: | ---: | ---: | ---: | ---: |")
+    for ep in E:
+        k = [(sd, f) for sd, e, f in R if e == ep]
+        dv = [[abs(R[sd, ep, f][0] - R[sd, E[0], f][0]),
+               float(np.abs(R[sd, ep, f][1] - R[sd, E[0], f][1]).max()),
+               abs(R[sd, ep, f][2] - R[sd, E[0], f][2])] for sd, f in k]
+        m = np.max(dv, axis=0)
+        print(f"| {ep:g} | {len(k)} | {m[0]:.4g} | {m[1]:.4g} | {m[2]:.4g} | "
+              f"{sum(r[1] > 1e-4 for r in dv)} |")
 
 
 def bg(G, T):
@@ -104,6 +128,9 @@ def bg(G, T):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["aic"]:
+        aic()
+        raise SystemExit
     R = sc()
     sk = [r for r in R if r[3] is not None and r[3] <= ptol]
     wk = [r for r in R if r[3] is not None and r[3] > ptol]

@@ -13,6 +13,9 @@ is not treated as an independent check.
 | Joint clearing | Seeded markets and arithmetic cases | The same markets cleared by `uc_price` |
 | Stochastic clearing | Seeded scenarios | The wait-and-see and mean-value bounds, from `joint` |
 | Market interface | Curve arithmetic by hand | The baseline replay, which its defaults must reproduce |
+| Generated master | A Lagrangian bound at every reported price | `hc` and `hl` on 208 routes; pglib-uc records against `hc`; oracle bounds against enumeration |
+| Storage in the clearing | Settlement identity; congestion complementarity; load prices on the optimal face | The no-resource clearing of `joint`; the resource's exact hull |
+| Risk-averse prices | KKT identities of the held CVaR program | `stoch.lmp`; CVaR's dual weights in closed form |
 
 ## Commands
 
@@ -24,12 +27,15 @@ python -m ruff check .
 python -m pip check
 python run_bench.py sizes
 python run_storage.py
+python run_dw.py
+python run_settle.py
+python run_risk.py
 git diff --check
 ```
 
 The pglib-uc MIP test is marked `slow`. Tests pin the `opt` tag against a solve made to
-return a positive gap, and pin that `qd` is built from the solver's certified bound rather
-than its incumbent.
+return a positive gap, and pin that `qd` is built from the solver's bound rather than its
+incumbent.
 
 ## Pricing
 
@@ -82,6 +88,63 @@ both bounds computed with `models/joint.py`; on the instance in the tests the ex
 of perfect information is 900 and the value of the stochastic solution is 2,680. The
 reported CVaR is checked against an independently weighted tail of the scenario costs.
 
+## Generated master
+
+`dw.cg` is checked against both direct hulls, which write the same hull in full. On the
+five published cases and on all 104 feasible markets of seeds 0 through 140, uncapped and
+capped, its value lies in the bracket $[L(\hat\lambda),z]$ it reports, and the convex hull
+price and uplift agree with `hc`; where the AIC face is wide, value, payment and dual
+optimality are asserted instead. The oracle's bound is checked against enumeration of
+every trajectory at every call, at four offer-cost scales. [Decomposition](DW.md#tolerances)
+tabulates each tolerance and what it measured. The tests run every third seed;
+`run_dw.py` runs all. A seed excluded from the family must be a proved infeasibility; a
+numerical failure is raised, and joint enumeration confirms all 37 exclusions. Three
+stopping tests are
+asserted to fail where they should. A master whose value equals the hull's prices at 8
+where the hull prices at 12. A pricing step restricted to two of a unit's schedules
+certifies its own price, 146.33, which the exact oracle refutes by 1,137.5. A seed
+schedule outside its unit is refused.
+
+`dw.cgp` shares no row builder with `cg`. Given ex1 and ex2 written as pglib records, it
+reaches `hc`'s values and prices. On pglib's two-unit case with reserve, its value lies
+between pglib's LP relaxation and its clearing, and meets the relaxation; with wind added it
+still does, which fails if the renewable term is left out of $L$. A market of renewables
+alone clears at value and price zero. On RTS-GMLC it lies in
+[2,501,406.3307, 2,501,406.3332], between the relaxation and the 1% incumbent.
+
+## Storage in the clearing
+
+`models/settle.py` reads joint's rows and is checked by identities that hold at any price.
+The settlement identity, load payment less cost equals units' profit plus storage profit
+plus rent, holds to $10^{-12}$ on all seven cases under X, H and R. The rent from line
+flows, congestion complementarity on every line and period, and each load-bus price's place
+on the optimal face are checked as [Storage in the clearing](SETTLE.md) derives them. With
+the resource removed, each case clears and prices exactly as
+`joint` does. The three descriptions nest, $z_X\ge z_H\ge z_R$, on every case, with equality
+in s6 and $6{,}000=6{,}000>2{,}270$ in s7. The storage hull is Balas' union of the $2^T$
+mode-pattern polytopes built from joint's own rows.
+
+Two theorems are tested rather than assumed. At the held-integer price, the resource's
+profit equals its best over its held-mode polytope, on every case. On six seeded
+resources, the cut's best profit equals the binary model's at prices above
+$-k(1+\eta_c\eta_d)/(1-\eta_c\eta_d)$, and exceeds it below that threshold with a full store.
+Each case's own numbers are arithmetic in its docstring and are asserted to a tenth of a
+cent.
+
+## Risk-averse prices
+
+`stoch.cvd` reads the duals of the risk-averse program with its integers held. On the five
+examples: its value equals the clearing's; $\sum\mu=w$ and $0\le\mu\le wp/(1-\alpha)$;
+$\mu/w$ attains CVaR, checked against the maximiser computed in closed form from the
+scenario costs, and equals it where the costs are distinct; and $y=\omega\lambda$ with
+$\lambda$ the price `stoch.lmp` reads from the expected-cost re-dispatch, to
+$10^{-4}$/MWh. That price is unique on every example: a unit runs strictly inside its
+range in each scenario and period, and complementary slackness fixes the price at its
+cost. A sixth example with two equal scenarios, where the costs determine no single
+multiplier, passes the same checks. The chains $\mathrm{WS}\le\mathrm{SP}\le\mathrm{EEV}$
+hold under the expectation and under $\rho$. The one scenario with $\omega=0$ is asserted
+to carry no price, and the program is asserted not to determine its cost.
+
 ## Market interface
 
 Offer curves, the metered charge and the qualification screens are checked against the
@@ -92,7 +155,7 @@ exactly.
 `tar` is tested as what it is: a charge applied after the schedule was chosen. The tests
 assert that it raises the charge line and never raises settlement. They do not assert that
 the policy responds to it, because it does not; [Market interface](MARKET.md) states that
-boundary and [Decisions](DECISIONS.md) carries the repair as open work.
+boundary and [Open issues](ISSUES.md) carries the repair.
 
 ## Historical replay
 

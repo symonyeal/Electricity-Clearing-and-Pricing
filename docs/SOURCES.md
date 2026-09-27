@@ -12,12 +12,12 @@ Only sources used by a live formulation, dataset, or validation case are listed.
 | O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017), [“Dual Pricing Algorithm in ISO Markets”](https://doi.org/10.1109/TPWRS.2016.2614891), *IEEE Transactions on Power Systems* 32(4), 3308–3310 | Axiomatic dual pricing; reference [4] of the FERC talk the AIC case rests on |
 | Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [“A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing”](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf) | AIC, payments, and `ex3` |
 | Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [Optimization Online version](https://optimization-online.org/2020/09/8004/) | Restricted-block result used to interpret AIC make-whole payments |
-| Balas, E. (1998), [“Disjunctive Programming: Properties of the Convex Hull of Feasible Points”](https://doi.org/10.1016/S0166-218X(98)00136-X) | Schedule-wise union-of-polyhedra formulation `hl` |
+| Balas, E. (1998), [“Disjunctive Programming: Properties of the Convex Hull of Feasible Points”](https://doi.org/10.1016/S0166-218X(98)00136-X) | Schedule-wise union-of-polyhedra formulation `hl`; the storage hull $H$ of `models/settle.py`, over the resource's mode patterns |
 | Yu, Y., Guan, Y. and Chen, Y. (2020), [“An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing”](https://arxiv.org/abs/1910.12994) | Interval-graph unit hull `hc` |
 | Knueven, B., Ostrowski, J. and Watson, J.-P. (2020), [“On Mixed-Integer Programming Formulations for the Unit Commitment Problem”](https://doi.org/10.1287/ijoc.2019.0944) | Unit-commitment rows and pglib-uc reference formulation |
 | Rajan, D. and Takriti, S. (2005), [“Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs”](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070) | Minimum up/down inequalities |
 | Stott, B., Jardim, J. and Alsac, O. (2009), [“DC Power Flow Revisited”](https://doi.org/10.1109/TPWRS.2009.2021235) | Lossless DC network model |
-| Beck, A. (2014), [*Introduction to Nonlinear Optimization: Theory, Algorithms, and Applications with MATLAB*](https://doi.org/10.1137/1.9781611973655), MOS-SIAM, ch. 12, pp. 237–240 | Definition of the Lagrangian dual and Theorem 12.3, weak duality, which fixes what `qd` must minimize over |
+| Beck, A. (2014), [*Introduction to Nonlinear Optimization: Theory, Algorithms, and Applications with MATLAB*](https://doi.org/10.1137/1.9781611973655), MOS-SIAM, ch. 12, pp. 237–240; Theorem 10.7 | Definition of the Lagrangian dual and Theorem 12.3, weak duality, which fixes what `qd` must minimize over and bounds `dw`'s certificate; Theorem 10.7, the KKT conditions for linearly constrained problems, from which [Risk-averse prices](RISK.md) reads the CVaR duals |
 
 The FERC talk is also stored locally as `Research PDF Files\electricity pricing.pdf`, and
 Beck as `Research PDF Files\beck.pdf`.
@@ -67,7 +67,7 @@ independent formulation gives `2480427.0411103913`.
 
 | Source | Use |
 | --- | --- |
-| Rockafellar, R. T. and Uryasev, S. (2000), [“Optimization of Conditional Value-at-Risk”](https://sites.math.washington.edu/~rtr/papers/rtr179-CVaR1.pdf) | Scenario epigraph for loss CVaR |
+| Rockafellar, R. T. and Uryasev, S. (2000), [“Optimization of Conditional Value-at-Risk”](https://sites.math.washington.edu/~rtr/papers/rtr179-CVaR1.pdf) | Scenario epigraph for loss CVaR, and for the risk-averse clearing whose duals `stoch.cvd` reads |
 | Rockafellar, R. T. and Uryasev, S. (2002), [“Conditional Value-at-Risk for General Loss Distributions”](https://sites.math.washington.edu/~rtr/papers/rtr187-CVaR2.pdf) | Discrete tails and probability atoms |
 | [HydroBoost `a7bea5e`](https://github.com/idaholab/HydroBoost/tree/a7bea5eb05ae) | Storage balance and mutually exclusive operating modes, restricted here to one battery and energy trading |
 | [LOGOS `5a09f88`](https://github.com/idaholab/LOGOS/tree/5a09f888535a) | Independent precedent for the mean/CVaR objective |
@@ -93,11 +93,30 @@ explicit study assumptions; they are not attributed to NYISO manuals.
 
 ## Decomposition
 
-[Decomposition](DW.md) relates the two direct hull formulations to the Dantzig–Wolfe
-extreme-point master and states the requirements for column generation. It cites
-Andrianesis et al. (2020) §§II–III, Wolsey (2021) chapters 10–11 with page pinpoints, and
-Dantzig and Wolfe (1960), DOI 10.1287/opre.8.1.101. No column-generation implementation or
-benchmark is reported, so those sources are listed there rather than here.
+[Decomposition](DW.md) implements the Dantzig–Wolfe extreme-point master in
+`models/dw.py` and measures it against the direct hulls.
+
+| Source | Use |
+| --- | --- |
+| Andrianesis, P., Bertsimas, D., Caramanis, M. C. and Hogan, W. W. (2020), [“Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition”](https://arxiv.org/abs/2012.13331), §II–III, pp. 3–5 | The master, the reduced cost, the self-scheduling oracle and finite convergence that `dw.cg` implements |
+| Wolsey, L. A. (2021), *Integer Programming*, 2nd ed., Wiley, ch. 10, pp. 195–209; §§11.2–11.3, pp. 215–217; p. 226 | Lagrangian duality, the reformulation, initialization from a feasible solution, and exact final pricing |
+| Dantzig, G. B. and Wolfe, P. (1960), [“Decomposition Principle for Linear Programs”](https://doi.org/10.1287/opre.8.1.101), *Operations Research* 8(1), 101–111 | Original decomposition |
+| Bertsimas, D. and Tsitsiklis, J. N. (1997), *Introduction to Linear Optimization*, Athena Scientific, §4.3, Theorems 4.3–4.5; §5.3, Theorem 5.2, pp. 215–216; §6.1; §6.3; §6.4, Theorem 6.1, pp. 252–253; §6.5, p. 259 | Weak and strong duality and complementary slackness; the optimal duals as the subgradients of the value in the right-hand side, which bounds a price on its face; delayed column generation and its cutting-plane dual; the decomposition bound; Benders as Dantzig–Wolfe on the dual |
+| Nemirovski, A. (2024), *Introduction to Linear Optimization*, World Scientific, §3.1.3, pp. 176–179, Proposition 3.2 | Certificates of optimality in linear optimization |
+| Knueven, B., Ostrowski, J., Castillo, A. and Watson, J.-P. (2022), [“A computationally efficient algorithm for computing convex hull prices”](https://doi.org/10.1016/j.cie.2021.107806), *Computers & Industrial Engineering* 163, 107806 | The Benders alternative, named and not implemented |
+
+The local copies of Bertsimas–Tsitsiklis and Nemirovski were read for the section and
+theorem numbers above.
+
+## Risk-averse prices
+
+[Risk-averse prices](RISK.md) derives the duals of the CVaR clearing from its KKT
+conditions, Beck Theorem 10.7 and Bertsimas–Tsitsiklis §4.3 above, and the epigraph of
+Rockafellar and Uryasev under Storage.
+
+| Source | Use |
+| --- | --- |
+| Birge, J. R. and Louveaux, F. (2011), *Introduction to Stochastic Programming*, 2nd ed., Springer, ch. 4 | WS, RP, EEV, EVPI and VSS, and the chain WS ≤ RP ≤ EEV that `models/risk.py` evaluates under the expectation and under the risk measure |
 
 ## Solver contracts
 

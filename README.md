@@ -11,11 +11,15 @@ Each model has an independent formulation or external benchmark.
 | [NYISO replay](docs/MARKET.md) | Chronological storage valuation under published zonal prices | Leakage tests and independent settlement reconstruction |
 | [Joint clearing](docs/JOINT.md) | Generation and storage in one program, on a network | The same market without storage, cleared by the pricing model |
 | [Stochastic clearing](docs/JOINT.md) | One commitment against many demands, with a CVaR tail | The wait-and-see and mean-value bounds |
+| [Decomposition](docs/DW.md) | Convex hull prices by column generation, including pglib-uc energy and reserve | Both direct hulls on 208 routes; a Lagrangian bound at every reported price |
+| [Storage in the clearing](docs/SETTLE.md) | Value, settlement, congestion and the mode cut, on seven small cases | Settlement identity, congestion priced only on full lines, the exact storage hull |
+| [Risk-averse prices](docs/RISK.md) | Which dual of a CVaR clearing is a price | The expected-cost re-dispatch and CVaR's closed-form dual weights |
 
 SciPy/HiGHS solves all live optimization models. [Sources](docs/SOURCES.md) records the
-formulations and data. [Validation](docs/VALIDATION.md) records executed checks.
-[Decomposition](docs/DW.md) compares the direct hull formulations with an extreme-point
-master and states when column generation becomes a candidate.
+formulations and data. [Validation](docs/VALIDATION.md) records executed checks, and [Open issues](docs/ISSUES.md) what remains.
+[Decomposition](docs/DW.md) generates the extreme-point master, brackets the hull value at
+each price it reports, to the solver's tolerances, and measures it against the direct hull
+formulations.
 
 ## Background
 
@@ -116,6 +120,9 @@ python -m pip check
 python run_storage.py
 python run_bench.py
 python run_face_scan.py
+python run_dw.py
+python run_settle.py
+python run_risk.py
 ```
 
 The pglib-uc MIP is marked `slow`. Use `pytest -m 'not slow'` for the smaller suite.
@@ -131,9 +138,10 @@ prices as inputs and assumes a price-taking participant. The NYISO replay values
 positions; it does not reproduce bid acceptance, ISO dispatch, tariffs, or market impact.
 
 The small pricing model omits piecewise offers, start-up tiers, and reserve. The separate
-pglib-uc model includes those features and prices energy and reserve, but takes no hull.
-The joint and stochastic clearings price by pinning the integers, so a nonconvexity is
-left as make-whole rather than priced away.
+pglib-uc model includes those features and prices energy and reserve with its integers
+held; `models/dw.py` takes its convex hull by column generation. The joint and stochastic
+clearings price by pinning the integers, so a nonconvexity is left as make-whole rather
+than priced away.
 
 The market interface in `market/bid.py` supplies offer curves, a metered charge and
 qualification screens as parameters. It is not any market's rule set, and its defaults

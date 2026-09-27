@@ -48,7 +48,7 @@ def _bat(cf, e0, ef, dt):
     an existing policy rather than a policy that was told the rate. A large enough rate can
     therefore make the selected trade lose money. That boundary is deliberate and is stated
     in docs/MARKET.md; pricing the tariff into the objective is open work, item 2 of
-    docs/DECISIONS.md, because it changes which trades a policy takes and so changes every
+    docs/ISSUES.md, because it changes which trades a policy takes and so changes every
     result it touches.
     """
     return B(cf.e, cf.c, cf.d, cf.ec, cf.ed, e0, ef, cf.kd + cf.fee, dt)

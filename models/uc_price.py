@@ -65,8 +65,10 @@
 #   o            : variable offsets                tol : feasibility tolerance
 #   ptol         : smallest price difference retained by the lexicographic walk
 #   st           : how far price selection got: dual, raw, pay, probe, part, walk
-#   gap,lb       : the relative gap a search achieved, and the cost lower bound it certified
+#   gap,lb       : the relative gap a search achieved, and the cost lower bound it proved,
+#                  to the solver's tolerances
 #   ag           : the achieved gap _mi read back off its own result
+#   bd,BD        : whether _mi solves a bound route, and the HiGHS options it then uses
 #   vr           : versions of the solvers behind a result
 #   LIM          : ceilings: enumerated periods, hull variables, joint commitments,
 #                  and balance rows the price refinement will walk one at a time
@@ -84,6 +86,8 @@ from scipy.sparse import csc_array, hstack, vstack
 LIM = (16, 100000, 20000, 24)
 tol = 1e-7
 ptol = 1e-3
+BD = {"presolve": False, "primal_feasibility_tolerance": 1e-9,
+      "dual_feasibility_tolerance": 1e-9, "mip_feasibility_tolerance": 1e-9}
 
 
 class U(NamedTuple):
@@ -548,7 +552,7 @@ def _dg(res):
     return f"{k.get(int(res.status), 'other')}: {res.message}"
 
 
-def _mi(c, it, lb, ub, A, b, Ae, be, why):
+def _mi(c, it, lb, ub, A, b, Ae, be, why, bd=False):
     """Solve one integer program to a proved optimum, and report what was proved.
 
     A requested tolerance is not a result. HiGHS stops at a relative gap of 1e-4 unless
@@ -557,17 +561,28 @@ def _mi(c, it, lb, ub, A, b, Ae, be, why):
     the gap asked for is zero and the gap achieved is read: "opt" means the bound closed,
     "gap" means the search stopped at an incumbent, and the two are not the same object.
 
-    The certified bound is returned beside the gap, from mip_dual_bound and never from the
-    incumbent, so every caller that needs a bound reads the same one. A program with no
-    integer column has a determined optimum, and there the bound is the objective.
+    The bound is returned beside the gap, from mip_dual_bound and never from the incumbent,
+    so every caller that needs a bound reads the same one. It is exact only to the solver's
+    tolerances. A program with no integer column has a determined optimum, and there the
+    bound is the objective.
+
+    bd marks a bound route: a per-resource program whose bound enters a Lagrangian value.
+    It runs with BD, presolve off and feasibility tolerances 1e-9. With presolve, the AIC's
+    1e-6-wide output ranges were fixed at the wrong end and the bound was 3.1e-4 above the
+    exact minimum (capped seed 88). At the default tolerances, 1e-7 and 1e-6, it exceeded
+    the enumerated minimum by up to 5.5e-6 over the seeded family and put lb above the
+    master value on 6 of 208 routes. With BD the excess is at most 5.5e-9 for offer costs
+    scaled from 1e-3 to 1e3; see Validation. The clearing keeps the defaults.
     """
-    res = milp(
-        c,
-        integrality=it,
-        bounds=Bounds(lb, ub),
-        constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
-        options={"mip_rel_gap": 0.0},
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Unrecognized options", RuntimeWarning)
+        res = milp(
+            c,
+            integrality=it,
+            bounds=Bounds(lb, ub),
+            constraints=[LinearConstraint(A, -np.inf, b), LinearConstraint(Ae, be, be)],
+            options={"mip_rel_gap": 0.0} | (BD if bd else {}),
+        )
     if not res.success:
         raise ValueError(f"{why} [{_dg(res)}]")
     ag = float(res.mip_gap) if np.any(it) else 0.0
@@ -654,6 +669,11 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0, why=None):
     reads that as an ordinary answer. A caller that will raise passes why, a list this
     appends the solver's own diagnosis to, so the failure is reported as what it was rather
     than as infeasibility.
+
+    An infeasibility is read back from a second solve with presolve off. HiGHS presolve
+    declared feasible programs infeasible: the AIC hull of seeds 36, 116 and 129 at
+    ep = 1e-6, whose capped clearing solves, and which both hulls solve without presolve to
+    the same value. Only a program the first solve called infeasible is solved twice.
     """
     A = csc_array(A)
     Ae = csc_array(Ae)
@@ -671,6 +691,9 @@ def _px(c, A, b, Ae, be, lb=None, ub=None, nt=0, why=None):
             A = csc_array(vstack([A, csc_array((va, (ri, ci)), shape=(len(y), n))]))
             b = np.r_[b, y]
     res = linprog(c, A_ub=A, b_ub=b, A_eq=Ae, b_eq=be, bounds=(None, None))
+    if res.status == 2:
+        res = linprog(c, A_ub=A, b_ub=b, A_eq=Ae, b_eq=be, bounds=(None, None),
+                      options={"presolve": False})
     if not res.success:
         if why is not None:
             why.append(_dg(res))
@@ -962,7 +985,7 @@ def _om(g, T, pi, net, cap=None):
         _res, _ag, bd, _st = _mi(
             np.r_[x.c - pi[net.bus[i]], np.full(T, x.nl), np.full(T, x.su), np.zeros(T)],
             np.r_[np.zeros(T), np.ones(3 * T)],
-            lb, ub, A, b, Ae, be, "a unit has no self-schedule")
+            lb, ub, A, b, Ae, be, "a unit has no self-schedule", True)
         om[i] = -bd
     return om
 

@@ -452,6 +452,20 @@ def _rand(sd, lo=0.15, hi=0.6):
     return g, a.uniform(lo, hi, T) * sum(x.hi for x in g)
 
 
+def _clear(sd):
+    """Seed sd's market and its clearing, or None where uc proves it infeasible.
+
+    Only a proved infeasibility excludes a seed: a limit or a numerical failure is raised.
+    """
+    g, d = _rand(sd)
+    try:
+        return g, d, uc(g, d)
+    except ValueError as e:
+        if not str(e).startswith("this demand did not clear [infeasible:"):
+            raise
+        return None
+
+
 def _hull(f, g, d):
     """Return one hull result, accepting only a proved infeasibility as the reason for none.
 
@@ -504,6 +518,16 @@ def test_random_family_has_104_feasible_markets():
         else:
             n += 1
     assert n == 104
+
+
+def test_a_numerical_failure_does_not_exclude_a_seed(monkeypatch):
+    """_clear skips a seed only on a proved infeasibility; any other failure reaches the caller."""
+    def fail(g, d):
+        raise ValueError("this demand did not clear [numerical: injected]")
+
+    monkeypatch.setitem(globals(), "uc", fail)
+    with pytest.raises(ValueError, match="numerical"):
+        _clear(0)
 
 
 def test_hull_size_report_counts_actual_variables():

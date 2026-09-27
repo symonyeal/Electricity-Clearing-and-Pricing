@@ -62,8 +62,18 @@ accounting identity and the sign, not a value.
 There are 96 balance rows against `LIM[3]` of 24, so price selection stops at the payment
 stage and the tag is `pay`: these prices are canonical to the demand payment only.
 
+## Convex hull prices
+
+`models/dw.py`'s `cgp` prices energy and reserve on this formulation's hull by column
+generation. Its oracle solves one unit's rows, built by this module's own `_sy` with that
+unit alone. On the committed instance the hull value lies in
+[2,501,406.3307, 2,501,406.3332]. Energy prices run from 0 to 115.37/MWh, and reserve is
+positive in 3 of 48 periods. The bracket certifies the 1% incumbent to within 0.74% of
+optimal. [Decomposition](DW.md) gives the run, and checks `cgp` against `hc` on cases
+written as pglib records.
+
 ## Result fields
 
 `cl(d, gap=0.0)` returns cost `z`, status `st`, achieved relative gap `gap`, and the
-solver's certified cost lower bound `lb`, read back as [Pricing](PRICING.md) describes.
+solver's cost lower bound `lb`, read back as [Pricing](PRICING.md) describes.
 `cl` reports a clearing and no price; `px` reads the prices from it.

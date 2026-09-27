@@ -45,6 +45,10 @@ The 400 is the cost of the energy that cannot be delivered. With no resource the
 program is the program of [Pricing](PRICING.md): cost, dispatch and locational price agree
 unit for unit on seeded markets, the price to $10^{-4}$/MWh.
 
+[Storage in the clearing](SETTLE.md) settles seven small cases of this program: who is
+paid what the resource saves, where congestion puts it, and how much the cut overstates a
+full store against the resource's exact hull.
+
 ## One commitment, many demands
 
 `models/stoch.py` takes $S$ demands with probabilities $p_s$. The commitment $u,v,w$ is
@@ -87,9 +91,15 @@ and not an implementation detail of the same objective:
 
 On the instance in `tests/test_stoch.py` at $w=1$, $\alpha=0.5$, `cl` returns $z=2{,}320$
 with mean 1,960 and CVaR 2,320, and `lmp` returns $z=1{,}960$ with `cv` `nan`. The two $z$
-values are objectives of two programs and are not comparable as one number. Pricing the
-risk-averse clearing itself would need a normalisation of the epigraph multipliers that
-this module does not implement and no result here has been checked against.
+values are objectives of two programs and are not comparable as one number.
+
+`cvd` reads the risk-averse program's own duals. Its balance dual is
+$y_s=\omega_s\lambda_s$ with $\omega_s=(1-w)p_s+\mu_s$, where $\mu_s$ is the epigraph
+multiplier and $\lambda_s$ scenario $s$'s own marginal cost. The normalisation is by
+$\omega_s$, not $p_s$, and it returns the price `lmp` reads wherever $\omega_s>0$. Where
+$\omega_s=0$, which needs $w=1$, the program prices the scenario not at all.
+[Risk-averse prices](RISK.md) derives this, tests it, and states the settlement it
+implies.
 
 ## What the bounds say
 

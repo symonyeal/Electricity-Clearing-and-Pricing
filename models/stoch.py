@@ -22,12 +22,17 @@
 #   _rk          : the CVaR epigraph columns and rows
 #   ck           : validate a stochastic market
 #   cl           : clear it as one integer program
+#   _held        : the program under (w, al) with the cleared integers held by bounds
 #   lmp          : hold the commitment, re-dispatch every scenario, read the balance duals
+#   Cv,cvd       : the duals of the risk-averse program itself, integers held
+#   _te          : CVaR's dual weights in closed form: the risk envelope's maximiser
 #   S,G,R,T,B    : scenarios, units, resources, periods, buses
 #   pr,w,al      : scenario probabilities, risk weight, CVaR confidence
 #   ns,es,ms     : columns, equality rows and inequality rows in one scenario block
 #   cs           : scenario s's own cost vector over its own columns
 #   zt,xi        : the CVaR level and the per-scenario excess above it
+#   y,mu,om      : raw balance duals; epigraph multipliers; om = (1 - w) pr + mu
+#   lam,th       : y / om, the scenario price where om > 0; the envelope's weights
 #   q            : scenario costs at the solution
 #   sm,md        : whether the storage mode is common across scenarios, and its held values
 #   gap,lb       : achieved relative gap and certified cost lower bound
@@ -244,36 +249,20 @@ def _cv(z, pr, al):
     return float((q @ y[j:]) / m)
 
 
-def lmp(g, st, d, s, pr=None, net=None, sm=False):
-    """Hold the cleared commitment, re-dispatch every scenario, and read the balance duals.
+def _held(g, st, d, s, pr, net, w, al, sm):
+    """The program under (w, al) with every integer the clearing s fixed held by its bounds.
 
-    Every integer column is pinned by its own bounds, the commitment and the storage mode
-    alike, so what remains is a linear program over dispatch, storage flows and the
-    network. The mode is pinned whether or not sm tied it across scenarios: leaving any
-    integer free would price a relaxation of the program that cleared rather than that
-    program, and its objective could fall below the clearing it is meant to price.
-
-    Scenario s's balance row carries the weight p_s, so its dual is p_s times that
-    scenario's price; the weight is divided back out here. The commitment is common, so a
-    price is still one price per bus and period in each scenario.
-
-    The re-dispatch is risk-neutral whatever risk chose the commitment. Under a CVaR tail
-    the cost block is scaled by 1 - w and the epigraph rows couple each scenario's cost
-    back into its own dispatch, so a balance dual carries (1 - w) p_s plus that row's own
-    multiplier rather than p_s, and dividing by p_s alone would not return a price. Pricing
-    the tail therefore needs a normalisation this module does not implement and no result
-    here has been checked against. Settling a risk-averse commitment at the duals of its
-    expected-cost re-dispatch is the market design; z is that program's objective, not the
-    one cl minimised, and cv is returned as nan because no confidence applies to it.
+    The commitment is held in every scenario block, and so is the storage mode, whether or
+    not sm tied it across scenarios: leaving an integer free would price a relaxation of
+    the program that cleared rather than that program. The balance rows are moved last.
     """
-    g, st, d, net, pr, _w, _al = ck(g, st, d, pr, net, 0.0, 0.95)
-    S, G, R, T, B = len(pr), len(g), len(st), d.shape[2], net.nb
+    S, G, R, T = len(pr), len(g), len(st), d.shape[2]
     u = np.atleast_2d(np.asarray(s.u, dtype=float)).reshape(G, T)
     md = np.asarray(s.sm, dtype=float).reshape(S, R, T) if R else np.zeros((S, 0, T))
     if not np.isin(u, [0.0, 1.0]).all() or not np.isin(md, [0.0, 1.0]).all():
         raise ValueError("the held commitment and mode must be binary")
     c, A, b, Ae, be, lb, ub, _it, ou, os, ns, es, nb, cs = _sys(
-        g, st, d, net, pr, 0.0, 0.95, False, sm)
+        g, st, d, net, pr, w, al, False, sm)
     lb, ub = np.array(lb, dtype=float), np.array(ub, dtype=float)
     for q in range(S):
         for i in range(G):
@@ -288,6 +277,35 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
             ub[o + 3 * T : o + 4 * T] = md[q, j]
     nna = Ae.shape[0] - (es * S)
     Ae, be = _order(Ae, be, nb, S, nna)
+    return c, A, b, Ae, be, lb, ub, ou, os, ns, nb, cs, u, md
+
+
+def lmp(g, st, d, s, pr=None, net=None, sm=False):
+    """Hold the cleared commitment, re-dispatch every scenario, and read the balance duals.
+
+    Every integer column is pinned by its own bounds, the commitment and the storage mode
+    alike, so what remains is a linear program over dispatch, storage flows and the
+    network. The mode is pinned whether or not sm tied it across scenarios: leaving any
+    integer free would price a relaxation of the program that cleared rather than that
+    program, and its objective could fall below the clearing it is meant to price.
+
+    Scenario s's balance row carries the weight p_s, so its dual is p_s times that
+    scenario's price; the weight is divided back out here. The commitment is common, so a
+    price is still one price per bus and period in each scenario.
+
+    The re-dispatch is risk-neutral whatever risk chose the commitment. Under a CVaR tail
+    the balance dual of the program cl minimised carries om_s = (1 - w) p_s + mu_s, mu_s
+    being scenario s's epigraph multiplier, and cvd reads it from that program. With the
+    integers held, both programs minimise each scenario's cost wherever om_s > 0, so
+    y_s / om_s and this price lie on the same scenario dual face: docs/RISK.md derives it
+    and the tests check it. Settling a risk-averse commitment at the duals of its
+    expected-cost re-dispatch is the market design; z is that program's objective, not the
+    one cl minimised, and cv is returned as nan because no confidence applies to it.
+    """
+    g, st, d, net, pr, _w, _al = ck(g, st, d, pr, net, 0.0, 0.95)
+    S, G, R, T, B = len(pr), len(g), len(st), d.shape[2], net.nb
+    c, A, b, Ae, be, lb, ub, ou, os, ns, nb, cs, u, md = _held(
+        g, st, d, s, pr, net, 0.0, 0.95, sm)
     why = []
     res = _px(c, A, b, Ae, be, lb, ub, S * nb, why)
     if res is None:
@@ -299,3 +317,81 @@ def lmp(g, st, d, s, pr=None, net=None, sm=False):
     z = np.array([float(cs[k] @ y[k * ns : (k + 1) * ns]) for k in range(S)])
     return Sc(res[0], float(pr @ z), np.nan, z, u, p,
               q[0], q[1], q[2], md, pi, res[3], 0.0, res[0])
+
+
+class Cv(NamedTuple):
+    """The risk-averse clearing's own program with its integers held: primal and duals.
+
+    z is that program's objective, (1 - w) E[C] + w (zt + E[xi] / (1 - al)); q the
+    scenario costs of its dispatch p; zt and xi the CVaR level and the excesses. y is the
+    raw dual of each scenario's balance rows, (S, B, T): the derivative of z in that
+    scenario's demand, no probability divided out. mu is each epigraph row's multiplier and
+    om = (1 - w) pr + mu the weight the program puts on each scenario's cost; om sums to
+    one. lam = y / om is the scenario price wherever om > 0 and nan where om = 0: there the
+    program puts no weight on the scenario's cost, its balance dual is zero, and no
+    normalisation recovers a price from it.
+    """
+
+    z: float
+    q: np.ndarray
+    p: np.ndarray
+    zt: float
+    xi: np.ndarray
+    y: np.ndarray
+    mu: np.ndarray
+    om: np.ndarray
+    lam: np.ndarray
+    st: str
+
+
+def cvd(g, st, d, s, pr=None, net=None, w=0.0, al=0.95, sm=False):
+    """The duals of the program cl minimised under (w, al), its integers held at s.
+
+    The epigraph rows C_s - zt - xi_s <= 0 are written as equalities with a surplus column
+    each, so their multipliers come out of _px's one selected dual vector together with
+    the balance duals, and mu_s = -dual >= 0. KKT then gives, per scenario block, that the
+    block's own cost weighted by om_s is priced by y_s. Stationarity in zt gives
+    sum_s mu_s = w, and in xi_s, mu_s <= w p_s / (1 - al). lam = y / om is nan where
+    om_s <= 1e-9, a weight read as zero.
+    """
+    g, st, d, net, pr, w, al = ck(g, st, d, pr, net, w, al)
+    S, G, R, T, B = len(pr), len(g), len(st), d.shape[2], net.nb
+    c, A, b, Ae, be, lb, ub, ou, os, ns, nb, cs, _u, _md = _held(
+        g, st, d, s, pr, net, w, al, sm)
+    n, k = S * ns, Ae.shape[0] - S * nb
+    if w > 0.0:
+        m = len(c) + S
+        E = csr_array(hstack([csr_array(A)[-S:], csc_array(np.eye(S))]))
+        A, b = _pad(csr_array(A)[:-S], m), b[:-S]
+        Ae = csr_array(Ae)
+        Ae = vstack([_pad(Ae[:k], m), E, _pad(Ae[k:], m)], format="csc")
+        be = np.r_[be[:k], np.zeros(S), be[k:]]
+        c, lb, ub = np.r_[c, np.zeros(S)], np.r_[lb, np.zeros(S)], np.r_[ub, np.full(S, np.inf)]
+    why = []
+    res = _px(c, A, b, Ae, be, lb, ub, S * nb, why)
+    if res is None:
+        raise ValueError(f"the held risk-averse program did not solve [{why[0]}]")
+    x, e = np.asarray(res[1], dtype=float), np.asarray(res[2], dtype=float)
+    y = e[-S * nb :].reshape(S, B, T)
+    mu = -e[k : k + S] if w > 0.0 else np.zeros(S)
+    om = (1.0 - w) * pr + mu
+    lam = np.full(y.shape, np.nan)
+    h = om > 1e-9
+    lam[h] = y[h] / om[h, None, None]
+    p, _u, _q = _out(G, R, T, S, ns, x, ou, os)
+    q = np.array([float(cs[j] @ x[j * ns : (j + 1) * ns]) for j in range(S)])
+    return Cv(res[0], q, p, float(x[n]) if w > 0.0 else np.nan,
+              x[n + 1 : n + 1 + S] if w > 0.0 else np.zeros(S), y, mu, om, lam, res[3])
+
+
+def _te(q, pr, al):
+    """CVaR's dual weights at the costs q: the maximiser of th'q over the risk envelope
+    0 <= th_s <= p_s / (1 - al), sum th = 1. It fills the envelope from the dearest
+    scenario down, so th'q is the weighted upper tail _cv computes; mu = w th wherever the
+    tail's boundary does not fall on a tie.
+    """
+    th, m = np.zeros(len(q)), 1.0 - al
+    for j in np.argsort(-np.asarray(q, dtype=float), kind="stable"):
+        th[j] = min(pr[j], m)
+        m -= th[j]
+    return th / (1.0 - al)
