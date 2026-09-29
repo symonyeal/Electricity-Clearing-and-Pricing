@@ -1,5 +1,8 @@
 # Storage trading
 
+This price-taking model values a battery's day-ahead position and real-time exposure; it
+does not represent the participant's price impact or an ISO dispatch decision.
+
 `models/storage.py` gives a price-taking battery with day-ahead settlement, real-time
 recourse, nonanticipativity, and loss CVaR.
 

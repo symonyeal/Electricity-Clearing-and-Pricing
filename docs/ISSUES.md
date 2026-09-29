@@ -1,5 +1,7 @@
 # Open issues
 
+This is the single register of unresolved model scope, numerical, and verification work.
+
 Everything that remains, in one place. Items 1–7 are modelling work; items 8–13 are what
 the [audit](AUDIT.md) of the decomposition, settlement and risk studies left open.
 

@@ -1,14 +1,16 @@
 # Electricity Market Model
 
-Exact models for nonconvex electricity clearing, price formation, and price-taking storage.
-Each model has an independent formulation or external benchmark.
+Reproducible small-system models for nonconvex electricity-market clearing, price
+formation, and price-taking storage. Each model is checked against an independent
+formulation or external benchmark, so the reported result identifies both the
+market rule being studied and the evidence behind it.
 
 | Component | Model | Check |
 | --- | --- | --- |
-| [Pricing](docs/PRICING.md) | Unit commitment; LMP, CHP, and AIC | Enumeration, two exact hulls, published cases |
-| [pglib-uc](docs/PGLIB.md) | Piecewise cost, start-up tiers, reserve, thermal and renewable units | Independent rows and the reference relaxation |
-| [Storage](docs/TRADING.md) | Day-ahead position, real-time recourse, information tree, CVaR | Signed-flow enumeration and analytical cases |
-| [NYISO replay](docs/MARKET.md) | Chronological storage valuation under published zonal prices | Leakage tests and independent settlement reconstruction |
+| [Pricing](docs/PRICING.md) | Security-constrained unit commitment; LMP, CHP, and AIC price runs | Enumeration, two exact hulls, published cases |
+| [pglib-uc](docs/PGLIB.md) | Thermal and renewable commitment with piecewise offers, start-up tiers, and reserve | Independent rows and the reference relaxation |
+| [Storage](docs/TRADING.md) | Day-ahead position, real-time recourse, information tree, and loss CVaR | Signed-flow enumeration and analytical cases |
+| [NYISO replay](docs/MARKET.md) | Chronological storage valuation against published zonal prices | Leakage tests and independent settlement reconstruction |
 | [Joint clearing](docs/JOINT.md) | Generation and storage in one program, on a network | The same market without storage, cleared by the pricing model |
 | [Stochastic clearing](docs/JOINT.md) | One commitment against many demands, with a CVaR tail | The wait-and-see and mean-value bounds |
 | [Decomposition](docs/DW.md) | Convex hull prices by column generation, including pglib-uc energy and reserve | Both direct hulls on 208 routes; a Lagrangian bound at every reported price |
@@ -24,6 +26,10 @@ formulations.
 ## Background
 
 ### The problem: price formation
+
+Day-ahead clearing produces two linked outputs: a least-cost commitment and dispatch, and
+the nodal price used to settle energy. This repository examines where nonconvex resource
+constraints separate those two outcomes.
 
 An ISO clears its day-ahead market with a security-constrained unit commitment — which
 units start, when, and how much each produces — then posts a locational marginal price at

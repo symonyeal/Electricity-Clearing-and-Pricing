@@ -1,5 +1,8 @@
 # Joint and stochastic clearing
 
+These models examine how a storage resource changes dispatch and prices when it is cleared
+inside the market, rather than valued as a price-taking participant.
+
 `models/joint.py` clears generation and storage in one program on a network.
 `models/stoch.py` clears one commitment against many demands. Both reuse the unit rows,
 the network rows and the price selection of [Pricing](PRICING.md); neither rewrites them.

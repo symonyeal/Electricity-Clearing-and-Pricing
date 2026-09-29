@@ -1,5 +1,9 @@
 # Audit of the decomposition, settlement and risk studies
 
+This audit separates model defects, unsupported claims, and weak verification from the
+findings that remain open. It is the evidence record for the published decomposition,
+settlement, and risk results.
+
 **Subject.** The uncommitted tree on `8f2e74c` that adds `models/dw.py`, `models/settle.py`
 and `models/risk.py`, with their runners, tests and documents.
 **Dates.** Audited 2026-09-24 and 25; findings resolved 2026-09-26.

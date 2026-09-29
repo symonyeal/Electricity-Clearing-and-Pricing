@@ -1,5 +1,8 @@
 # Historical storage replay
 
+This is a chronological valuation of a price-taking battery against published New York City
+zonal prices; it is not a reconstruction of NYISO dispatch or settlement operations.
+
 One 1 MW, 4 MWh battery is replayed chronologically against published N.Y.C. zonal prices.
 The battery follows the model of [Storage trading](TRADING.md). The replay does not
 reproduce NYISO bid acceptance, dispatch, or settlement rules.

@@ -1,5 +1,8 @@
 # Prices under a risk-averse commitment
 
+This study distinguishes the duals of a risk-averse commitment from the prices that settle
+an expected-cost re-dispatch of that commitment.
+
 `stoch.cl` chooses one commitment against $S$ demands by minimising
 $\rho(C)=(1-w)\,\mathbb E[C]+w\,\mathrm{CVaR}_\alpha(C)$. `stoch.lmp` prices that commitment
 by re-dispatching it at expected cost. This note names every dual by the program it comes

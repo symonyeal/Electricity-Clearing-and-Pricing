@@ -1,5 +1,8 @@
 # pglib-uc benchmark
 
+This benchmark tests the independent unit-commitment implementation against a system with
+thermal and renewable resources, reserve requirements, and operational commitment limits.
+
 `models/pglib_uc.py` implements equations (1)–(24) of the IEEE PES Task Force
 [pglib-uc](https://github.com/power-grid-lib/pglib-uc) `MODEL.pdf` with an independent
 row construction. The formulation has global demand and reserve requirements; convex

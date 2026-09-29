@@ -1,5 +1,8 @@
 # Storage in the clearing: value, settlement, and the mode cut
 
+This study measures how cleared storage changes dispatch, congestion, prices, make-whole
+payments, and settlement allocation under the repository's stated pricing rule.
+
 [Joint clearing](JOINT.md) puts storage inside the market program; [Storage trading](TRADING.md)
 values it against prices it does not move. `models/settle.py` asks what clearing it
 changes: dispatch, price, congestion, make-whole, and who is paid. It reads joint's rows

@@ -1,5 +1,7 @@
 # Validation
 
+This page records the independent evidence supporting each formulation and market use case.
+
 Validation is divided by formulation. Agreement between two calls to the same row builder
 is not treated as an independent check.
 

@@ -1,5 +1,8 @@
 # Design decisions
 
+This register records the modelling, pricing, and validation choices that define each
+reported result. Each row gives the choice and the operational or numerical reason for it.
+
 ## Standards
 
 | Decision | Reason |

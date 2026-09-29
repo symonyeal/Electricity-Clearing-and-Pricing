@@ -1,5 +1,8 @@
 # Dantzig–Wolfe decomposition
 
+This study evaluates column generation as a route to convex-hull prices, including the
+certificate required before a candidate price is reported to a market-design reader.
+
 `models/dw.py` computes convex hull prices by column generation. `cg` prices the unit class
 of [Pricing](PRICING.md), and `hc` and `hl` check it. `cgp` prices the
 [pglib-uc](PGLIB.md) class, energy and reserve together; no direct hull of that class

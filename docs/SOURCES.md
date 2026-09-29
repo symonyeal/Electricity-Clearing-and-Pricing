@@ -1,5 +1,8 @@
 # Sources
 
+This register separates the market-practice references from the mathematical and data
+sources used by the live formulations and validation cases.
+
 Only sources used by a live formulation, dataset, or validation case are listed.
 
 ## Unit commitment and prices
