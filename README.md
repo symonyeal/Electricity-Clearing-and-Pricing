@@ -7,8 +7,8 @@ market rule being studied and the evidence behind it.
 
 | Component | Model | Check |
 | --- | --- | --- |
-| [Pricing](docs/PRICING.md) | Security-constrained unit commitment; LMP, CHP, and AIC price runs | Enumeration, two exact hulls, published cases |
-| [pglib-uc](docs/PGLIB.md) | Thermal and renewable commitment with piecewise offers, start-up tiers, and reserve | Independent rows and the reference relaxation |
+| [Pricing](docs/PRICING.md) | Base-case network-constrained unit commitment; LMP, CHP, and AIC price runs | Enumeration, two exact hulls, published cases |
+| [pglib-uc](docs/PGLIB.md) | Thermal commitment and renewable dispatch with piecewise offers, start-up tiers, and reserve | Independent rows and the reference relaxation |
 | [Storage](docs/TRADING.md) | Day-ahead position, real-time recourse, information tree, and loss CVaR | Signed-flow enumeration and analytical cases |
 | [NYISO replay](docs/MARKET.md) | Chronological storage valuation against published zonal prices | Leakage tests and independent settlement reconstruction |
 | [Joint clearing](docs/JOINT.md) | Generation and storage in one program, on a network | The same market without storage, cleared by the pricing model |

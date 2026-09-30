@@ -1,7 +1,8 @@
 # Unit commitment and pricing
 
-This page defines the small-system security-constrained unit-commitment model and the LMP,
-convex-hull, and average-incremental-cost price rules evaluated against its cleared schedule.
+This page defines the small-system unit-commitment model under base-case DC or transport
+network limits, and the LMP, convex-hull, and average-incremental-cost price rules evaluated
+against its cleared schedule.
 
 For generator $g$ and period $t$, let $p_{gt}$ be output, $u_{gt}$ commitment,
 $v_{gt}$ start-up, and $w_{gt}$ shut-down. Let $X_g$ be the feasible set of unit $g$.
