@@ -1,4 +1,4 @@
-# Electricity Market Model
+# Electricity Clearing and Pricing
 
 Reproducible small-system models for nonconvex electricity-market clearing, price
 formation, and price-taking storage. Each model is checked against an independent
