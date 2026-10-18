@@ -15,7 +15,7 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
         include:
           - python: "3.12"
-            pins: numpy==1.26.4 scipy==1.17.0
+            pins: numpy==1.26.4 scipy==1.17.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
