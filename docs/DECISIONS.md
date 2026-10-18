@@ -16,6 +16,7 @@ reported result. Each row gives the choice and the operational or numerical reas
 | Name a failed solve by the solver's own status. | Bad data and an infeasible program both end in a failure; calling both infeasible is right once. |
 | Label synthetic data and its tested property. | A synthetic result has no empirical interpretation without one. |
 | Add dependencies only after measurement. | The live models require no framework layer. |
+| Do not adopt NVIDIA cuOpt. | It needs an NVIDIA GPU under Linux, so it cannot be measured on this machine. Its LP defaults, PDLP $10^{-4}$ relative, barrier $10^{-8}$, dual simplex $10^{-6}$ absolute, are coarser than the $10^{-9}$ a bound route needs; its MIP (beta) puts the GPU on primal heuristics and proves bounds on the CPU, as HiGHS does; and the per-unit programs have at most 96 columns. Its one candidate, `hc` at 48 × 24, fails by formulation ([Open issues](ISSUES.md), item 9). |
 | Read a reported infeasibility back from a second solve with presolve off. | HiGHS presolve called feasible programs infeasible ([Pricing](PRICING.md#what-a-clearing-certifies)). A program that solves is untouched. |
 | Solve every program whose bound enters a Lagrangian value as a bound route, presolve off and feasibility tolerances $10^{-9}$. | Presolve, and then the default tolerances, returned a bound above the exact minimum ([Pricing](PRICING.md#what-a-clearing-certifies)). |
 
