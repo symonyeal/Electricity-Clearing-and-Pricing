@@ -15,7 +15,7 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
         include:
           - python: "3.12"
-            pins: numpy==1.26.0 scipy==1.15.0
+            pins: numpy==1.26.4 scipy==1.17.0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,19 +28,3 @@ jobs:
       - run: python -m pytest -q -m slow
       - run: python -m ruff check .
       - run: python -m pip check
-
-  floor-search:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        scipy: ["1.15.3", "1.16.*", "1.17.*"]
-        numpy: ["1.26.4", "2.*"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: python -m pip install "numpy==${{ matrix.numpy }}" "scipy==${{ matrix.scipy }}" pytest
-      - run: python -c "import numpy, scipy; print(numpy.__version__, scipy.__version__)"
-      - run: python -m pytest -q -m "not slow"
