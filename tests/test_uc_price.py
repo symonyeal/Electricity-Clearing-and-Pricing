@@ -506,18 +506,16 @@ def test_compact_hull_equals_enumerated_hull_at_random(sd):
     assert a.pi.ravel() == pytest.approx(b.pi.ravel(), abs=1e-4)
 
 
+INFEASIBLE_SEEDS = {3, 8, 9, 12, 13, 14, 19, 23, 29, 30, 37, 38, 40, 42, 48, 51, 52, 55, 63, 64, 66,
+                    67, 76, 78, 83, 86, 89, 90, 94, 95, 99, 108, 110, 124, 127, 132, 136}
+
+
 def test_random_family_has_104_feasible_markets():
-    """The documented seed range contains 104 feasible and 37 infeasible clearings."""
-    n = 0
-    for sd in range(141):
-        g, d = _rand(sd)
-        try:
-            uc(g, d)
-        except ValueError as e:
-            assert str(e).startswith("this demand did not clear [infeasible:")
-        else:
-            n += 1
-    assert n == 104
+    """The documented seed range contains 104 feasible and 37 infeasible clearings, by seed."""
+    infeasible = {sd for sd in range(141) if _clear(sd) is None}
+    assert infeasible == INFEASIBLE_SEEDS, (
+        f"wrongly infeasible {sorted(infeasible - INFEASIBLE_SEEDS)}, "
+        f"wrongly feasible {sorted(INFEASIBLE_SEEDS - infeasible)}")
 
 
 def test_a_numerical_failure_does_not_exclude_a_seed(monkeypatch):
