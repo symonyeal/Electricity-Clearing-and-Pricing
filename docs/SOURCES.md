@@ -128,6 +128,7 @@ Rockafellar and Uryasev under Storage.
 | [SciPy `milp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.milp.html) | MIP status, `mip_gap`, and `mip_dual_bound` |
 | [SciPy `linprog`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) | LP solution and equality marginals |
 | [HiGHS](https://highs.dev/) | LP and MIP backend |
+| [NVIDIA cuOpt](https://github.com/NVIDIA/cuopt), [settings](https://docs.nvidia.com/cuopt/user-guide/latest/lp-qp-milp-settings.html) | Platform and default tolerances, read for the decision not to adopt it |
 | [pytest](https://docs.pytest.org/) | Verification runner |
 | [Ruff](https://docs.astral.sh/ruff/) | Static check |
 
