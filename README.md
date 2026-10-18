@@ -1,5 +1,36 @@
 # Electricity Clearing and Pricing
 
+## In plain terms
+
+In a wholesale electricity market, an operator decides each day which power plants will run
+and posts a price for each hour. Some plants have costs that one price per hour cannot
+cover, such as a large start-up cost or a minimum output they cannot go below. Markets
+handle this with side payments to those plants, made outside the posted price and charged
+back to consumers. These payments are called *uplift*.
+
+How much uplift is paid depends on the rule used to set the price. This project computes
+the alternative rules exactly on small textbook systems, so the simpler rules used in real
+markets have an exact answer to be compared with.
+
+**What we found.**
+
+- On a two-plant example from the US regulator FERC, the standard rule posts $90 per
+  megawatt-hour at the peak and needs $1,690 in side payments. An alternative rule
+  (convex-hull pricing) posts $276 at the peak and cuts side payments by 78%, to $365. The
+  plants run the same way under both rules; only who pays, and how visibly, changes.
+- Leaving grid congestion out of that calculation gives a wrong answer, with no warning.
+- A small battery (1 MW, 4 MWh) trading in New York City's market in 2025 would have netted
+  about $41,000. That is about 22% of the $190,720 it could have earned with perfect
+  knowledge of future prices. This figure comes from an earlier version of the code and
+  has not been re-run.
+
+**What this does not show.** These are small systems, not a full market. The project
+compares pricing rules; it does not run a market.
+
+The rest of this page is written for specialists.
+
+## Overview
+
 Reproducible small-system models for nonconvex electricity-market clearing, price
 formation, and price-taking storage. Each model is checked against an independent
 formulation or external benchmark, so the reported result identifies both the
