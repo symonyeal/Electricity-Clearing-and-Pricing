@@ -145,6 +145,9 @@ def cmd_report(cf, a, log):
     for p in replay.POL:
         if (d / p / "metrics.json").exists():
             runs[p] = json.loads((d / p / "metrics.json").read_text())
+            m = runs[p]["metrics"]
+            if "tariff" not in m:
+                m["tariff"] = read(d / p / "config.toml").tar * m["throughput"]
     if not runs:
         raise ValueError(f"no exported runs under {d}")
     dy = {p: _daily(d / p / "daily.csv") for p in runs}
@@ -158,9 +161,9 @@ def cmd_report(cf, a, log):
            "", "## Volume", "",
            report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
                       ["Policy", "Day-ahead MWh", "Imbalance MWh", "Grid MWh",
-                       "Discharged MWh", "Cycles", "Delivered energy", "Spread"],
+                       "Discharged MWh", "Cycles", "Delivered energy", "Spread", "Tariff"],
                       ["policy", "da_mwh", "imb_mwh", "throughput", "discharged",
-                       "cycles", "arb", "spread"], {"cycles": 1}),
+                       "cycles", "arb", "spread", "tariff"], {"cycles": 1}),
            "", "## Solver and data", "",
            report.tbl([{**runs[p]["metrics"], "policy": NAME[p]} for p in runs],
                       ["Policy", "Solves", "Seconds", "ms per solve", "Max gap",

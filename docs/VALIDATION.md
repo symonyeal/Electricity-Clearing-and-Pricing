@@ -39,6 +39,24 @@ The pglib-uc MIP test is marked `slow`. Tests pin the `opt` tag against a solve 
 return a positive gap, and pin that `qd` is built from the solver's bound rather than its
 incumbent.
 
+## Tariff-aware replay, 2026-10-20
+
+The public replay rejects the two-hour [10, 12] round trip at a symmetric rate of 2:
+net changes from -2 under the former settlement-only charge to 0, with no charge,
+discharge or position. The rate-5 risk-neutral replay on `tests/test_bid.py`'s three-day
+fixture (`rho = 0.5`, 2025-11-01 through 2025-11-03) settles -31.555081475237, with
+104.763130434783 tariff on 20.952626086957 MWh grid throughput. The decomposition
+residual is below 1e-9. Negative realized net remains possible under forecast errors.
+Resettling the captured former schedule at the same rate gives -4.663693812175:
+the new policy reduces its tariff from 162.650737240076 to 104.763130434783 but
+reduces realized net by 26.891387663062 on this fixture. Objective consistency is not
+an empirical profitability improvement.
+
+With the rate zero, an exact comparison against the captured pre-change fixture found
+no differences in any of its eleven interval fields; net remains 157.987043427901.
+This comparison covers the fixture, not a rerun of the annual study. The
+[NYISO calibration record](NYISO.md) documents the remaining market-rule limitations.
+
 ## Pricing
 
 The small unit-commitment model is checked against three published cases. The integer

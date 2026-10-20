@@ -192,38 +192,42 @@ perfect-foresight run with `bk > 1` is therefore no longer an upper reference on
 policies could earn; it is foresight bidding into its own price. Read the `fore` row with
 `bk = 0`, which is how the study above is run.
 
-### The tariff is charged after the decision, not inside it
+### The tariff enters the policy
 
-`tar` is a post-hoc charge. The optimizing battery is built with throughput cost
-`kd + fee`; both the day-ahead offer and the real-time dispatch read that record, and
-settlement then charges `tar` on metered charge and discharge on top of it. **A run with
-`tar > 0` therefore takes the same schedule it would have taken at `tar = 0` and subtracts
-the charge afterwards.** That is an ex-post stress test of an existing policy, not a policy
-that has been told what the energy costs.
+Both the day-ahead offer and real-time dispatch optimize throughput cost
+`kd + fee + tar`. Settlement charges the same tariff once on metered charging and
+discharging. The `fee` interval and daily columns continue to include transaction cost
+and tariff together, preserving their existing accounting convention. The metrics add
+`tariff` separately, so the decomposition is
 
-The consequence is that a large enough tariff makes the selected trade lose money. Two
-five-minute periods, $E=C=D=1$ MWh/MW, unit efficiencies, zero endpoints, `kd = fee = 0`,
-`tar = 2` and prices $[10, 12]$:
+$$
+\mathrm{arb}+\mathrm{spread}-\mathrm{tariff}=\mathrm{net}.
+$$
 
-| Quantity | Value |
-| --- | ---: |
-| Chosen schedule | charge $[1,0]$, discharge $[0,1]$ |
-| Profit the model optimized | $+0.166667$ |
-| Tariff settled | $0.333333$ |
-| Net actually settled | $-0.166667$ |
-| What pricing the tariff would choose | no trade, net $0$ |
+Here `arb` deducts degradation and transaction cost; `tariff` is the configured rate
+times grid throughput. It is already included in `costs`, through `fee`, and must not
+be deducted from `net` again. The generated report includes the separate tariff column.
+Old exported runs without that metric reconstruct it from their saved configuration
+and throughput; their schedules and solver scores retain their original provenance.
 
-The reported decomposition inherits the same boundary. `arb` in `market/report.py` is
-defined against `kd + fee` only, so `arb + spread - net` reconciles at `tar = 0` and misses
-by exactly the metered tariff otherwise — replaying `config/ci.toml` at $\rho=0.5$ and
-`tar = 5` under the risk-neutral policy, both sides are $162.650737240$. The superseded
-array-position analog alignment gave $149.143047259$ on that same run. The two sides agree
-at every coefficient and only the amount moves: the file's own $\rho=0$ gives
-$134.884930057$ on both.
+This is an approved behavior change on 2026-10-20. Previously `tar` was charged only
+after scheduling. A two-hour, unit-efficiency, 1 MW / 1 MWh battery with zero endpoints,
+zero other costs, prices [10, 12], and `tar = 2` previously completed a round trip and
+settled -2. The tariff-aware policy selects no trade and settles 0. The regression uses
+the public replay interface and checks both metered directions.
 
-None of this moves a published result: every committed run uses `tar = 0`, which is the
-default, and the tests assert that the defaults reproduce the baseline to the cent. Pricing
-the tariff into the objective is item 2 of [Open issues](ISSUES.md).
+At `tar = 0`, objective coefficients and settlement are unchanged. Every committed
+annual result uses that default; the tariff change does not require rerunning those
+results. Their separate pre-alignment provenance above still applies. Nonzero-tariff
+runs must be recomputed because their offers, dispatch, and risk scores can change.
+The old three-day fixture with `rho = 0.5` had a tariff-only reconciliation residual
+of 162.650737240 at `tar = 5` (149.143047259 before clock-hour analog alignment;
+134.884930057 at `rho = 0`). Those are historical evidence of the old accounting
+boundary, not results of the tariff-aware policy.
+
+The charge remains a generic symmetric sensitivity parameter. The
+[NYISO calibration record](NYISO.md) distinguishes published qualification and charging
+rules from assumed battery inputs and identifies the remaining calibration work.
 
 ## Reproduction
 
@@ -244,7 +248,7 @@ uses the network. Tests use committed fixtures.
 ## Limits
 
 - Published prices are outputs of the market, not proof that modeled positions would clear.
-- `tar` is charged in settlement and not priced into the policy.
+- `tar` is a symmetric sensitivity charge; NYISO tariff calibration is incomplete.
 - The configured bid time, information lag, and settlement convention are study assumptions.
 - The daily terminal target excludes multi-day arbitrage.
 - Corrected archive prices may differ from prices available to a participant in real time.

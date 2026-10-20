@@ -46,7 +46,7 @@ repository rests on. Change the rows in one place, or state why a route needs it
 | --- | --- |
 | `ex3`'s full p-cut hull is $422 while the FERC talk reports $146.33. | Both are exact, over different feasible sets. Do not tune the unrestricted hull toward the restricted value. |
 | `stoch.lmp` returns `cv` as `nan` and a `z` unequal to `cl`'s. | Correct. `lmp` prices a new expected-cost re-dispatch; [Joint](docs/JOINT.md) says so. |
-| `market/bid.py` charges `tar` in settlement but the policy optimizes `kd + fee`. | Deliberate. `arb + spread - net` therefore misses by exactly the metered tariff when `tar > 0`. [Market interface](docs/MARKET.md) states the boundary; the repair is item 2 of [Open issues](docs/ISSUES.md). |
+| `tar` enters the offer and dispatch objective as well as settlement. | The configured metered cost is `kd + fee + tar`. The report separates the tariff: `arb + spread - tariff = net`. A nonzero rate changes policy decisions; zero preserves the baseline. |
 | The storage mode cut `c/C + d/D <= 1` is not the hull of the resource. | Correct as documented. The state-of-charge rows couple periods the cut treats separately. Do not upgrade the claim. |
 | Reserve prices at zero in `pglib_uc` on most periods. | Correct. Reserve carries no cost of its own and prices only where ramping or start-up binds. |
 | Two hulls disagree on one seeded market in 141. | Correct. Both are dual-optimal and pay the same; the data does not choose. The test asserts the difference. |

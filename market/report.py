@@ -10,7 +10,7 @@
 #   cyc,thr    : equivalent full cycles and grid throughput in MWh
 #   da_mwh     : day-ahead volume; imb_mwh : volume that settled as imbalance instead
 #   arb,spread : the exact split of net into delivered energy and the position's
-#                day-ahead minus real-time spread; the two sum to net by identity
+#                day-ahead minus real-time spread; arb + spread - tariff = net
 #   iv,dy,mo   : interval, daily and monthly rows
 
 import datetime as dt
@@ -80,10 +80,8 @@ def metrics(rn, cf, seed=0, B=10000):
           "max_deviation": float(np.abs(g - rn.iv["q"]).max()),
           "max_cap_violation": (0.0 if cf.cap is None else
                                 float(np.maximum(np.abs(g - rn.iv["q"]) - cf.cap, 0).max())),
-          # arb carries kd + fee and not cf.tar, matching the cost the policy optimized
-          # against. arb + spread - net therefore reconciles at tar = 0 and misses by
-          # exactly the metered tariff otherwise; docs/MARKET.md states that boundary and
-          # docs/ISSUES.md carries the repair as open work.
+          # Keep the metered tariff separate so the split reconciles at every rate.
+          "tariff": float(cf.tar * thr),
           "arb": float((g * np.nan_to_num(rn.iv["prt"])
                         - (cf.kd + cf.fee) * (rn.iv["c"] + rn.iv["d"])).sum() * DTB),
           "spread": float((rn.iv["q"] * (np.nan_to_num(rn.iv["pda"])
