@@ -8,13 +8,12 @@ the [audit](AUDIT.md) of the decomposition, settlement and risk studies left ope
 ## Modelling
 
 1. **Calibrate `market/bid.py`** to one market's published tariff and qualification manual.
-   The mechanism is implemented; the parameters are not anyone's.
-2. **Price `tar` inside the policy** rather than after it: put it into `_bat(...).k`, give
-   the report identity its own tariff component, and add a high-rate no-trade regression.
-   [Market interface](MARKET.md) states the boundary this leaves. It is not bundled with
-   item 1 because moving a cost into the objective changes which trades a policy takes, so
-   it changes every result it touches and belongs with the calibration that gives the rate
-   a number.
+   [NYISO source mapping](NYISO.md) identifies qualification and charging rules, but a
+   participant-specific tariff case is still uncalibrated. The generic duration screen is
+   not NYISO's minimum-output test; the symmetric rate cannot encode every listed charge.
+2. **Closed 2026-10-20: price `tar` inside the policy.** Both offer and dispatch include
+   the configured tariff. The report separates it and a public-replay regression rejects
+   a losing round trip. [Market interface](MARKET.md) states the resulting identity.
 3. **A convex hull price for the joint feasible set.** The joint and stochastic clearings
    pin the integers, so the nonconvexity is left as make-whole. `models/settle.py` builds
    one resource's hull exactly for small horizons; a storage oracle for `models/dw.py` is

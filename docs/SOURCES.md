@@ -94,6 +94,20 @@ not the original price available at each historical decision time. The differenc
 measured. Bid time, information lag, full acceptance, self-dispatch, and settlement are
 explicit study assumptions; they are not attributed to NYISO manuals.
 
+## NYISO rules
+
+Read on 2026-10-20 for the [calibration record](NYISO.md). These sources identify rules
+and limitations; no participant-specific charge is calibrated from them.
+
+| Source | Use |
+| --- | --- |
+| [NYISO Order 841 compliance filing, 2018-12-03](https://nyisoviewer.etariff.biz/ViewerDocLibrary/FercDockets/20181203_NYISOFilngLttr_OrdrNo841_23105.htm), Part IV.A.1, pp. 12–13 | Historical proposed ESR minimum capability: 0.1 MW for one hour; not one hour at full rated power. |
+| [FERC 172 FERC paragraph 61,119, 2020-08-03](https://nyisoviewer.etariff.biz/ViewerDocLibrary/FercOrders/20200803%20Ordr%20Cmplnc%20Rhrng_25896.htm), paragraphs 4, 6, 8–10 | Wholesale charging energy at LMP, and conditional transmission charging. Acceptance subject to further compliance; not a current rate schedule. |
+| [NYISO ESR Settlements Quick Reference Sheet](https://www.nyiso.com/documents/20142/1389407/11-ESR-Settlements-Quick-Reference-Sheet.pdf/9847e410-bb93-4e5c-96fb-31ec550271b0) | Training list of ESR settlement components including TSC/NTAC and Rate Schedule 1; no numerical rate taken from it. |
+
+The [Accounting and Billing Manual](https://www.nyiso.com/documents/20142/2923231/acctbillmnl.pdf)
+returned a JavaScript verification page on that date and was not read.
+
 ## Decomposition
 
 [Decomposition](DW.md) implements the Dantzig–Wolfe extreme-point master in

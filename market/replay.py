@@ -40,18 +40,8 @@ def _w(cf, pol):
 
 
 def _bat(cf, e0, ef, dt):
-    """The battery the policy optimizes against.
-
-    Throughput cost is kd + fee and deliberately not cf.tar. The tariff is charged in
-    settle, after the schedule has been chosen, so a run at tar > 0 takes the schedule it
-    would have taken at tar = 0 and pays the charge afterwards: an ex-post stress test of
-    an existing policy rather than a policy that was told the rate. A large enough rate can
-    therefore make the selected trade lose money. That boundary is deliberate and is stated
-    in docs/MARKET.md; pricing the tariff into the objective is open work, item 2 of
-    docs/ISSUES.md, because it changes which trades a policy takes and so changes every
-    result it touches.
-    """
-    return B(cf.e, cf.c, cf.d, cf.ec, cf.ed, e0, ef, cf.kd + cf.fee, dt)
+    """The policy battery, including every configured metered throughput cost."""
+    return B(cf.e, cf.c, cf.d, cf.ec, cf.ed, e0, ef, cf.kd + cf.fee + cf.tar, dt)
 
 
 def _tg(cf, e, n, dt):

@@ -66,7 +66,8 @@ reported result. Each row gives the choice and the operational or numerical reas
 | Default to full acceptance at no charge with every resource admitted. | It is the replay's own assumption, and the baseline must not move. |
 | Supply the curve, the charge and the screens as parameters. | Calibrating them needs a tariff, which is a different kind of work. |
 | Screen qualification before the first solve. | An ineligible resource has no result worth computing. |
-| Charge `tar` in settlement and leave it out of the optimizing objective. | The charge is an ex-post stress test of a policy chosen without it; pricing it in is a calibration question, not a correction, and is open work. |
+| Include `tar` in both offer and dispatch throughput costs. | The approved change on 2026-10-20 makes the policy respond to its configured charge. Settlement charges it once; `arb + spread - tariff = net`. Defaults remain zero. |
+| Keep NYISO tariff calibration open until the participant and charge basis are specified. | NYISO distinguishes injections, withdrawals, and dispatch conditions. A symmetric metered rate is a sensitivity parameter, not a published NYISO tariff. [Calibration](NYISO.md) records the source mapping. |
 | Require a whole, finite step count, spread, rate and screen threshold. | A nan passes a sign test, turns a screen into one that cannot refuse, and fails later somewhere that does not name the configuration. |
 
 ## Storage

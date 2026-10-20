@@ -423,6 +423,14 @@ def test_cli_runs_and_reports(tmp_path):
     assert m["metrics"]["arb"] + m["metrics"]["spread"] == pytest.approx(
         m["metrics"]["net"], abs=1e-9)
     assert m["environment"]["numpy"] and "revision" in m["environment"]
+    # Older exports predate the separate tariff metric; reporting still reads them.
+    for pol in ("idle", "det", "cvar"):
+        p = tmp_path / pol / "metrics.json"
+        old = json.loads(p.read_text())
+        del old["metrics"]["tariff"]
+        p.write_text(json.dumps(old))
+    run_market.main(["report", "--cfg", "config/ci.toml", "--dir", str(tmp_path), "--quiet"])
+    assert (tmp_path / "tables.md").read_text() == t
 
 
 def test_local_time_of_export(tmp_path, fr):

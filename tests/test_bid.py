@@ -10,13 +10,16 @@
 #   cv         : one offer curve
 #   a,b        : the same replay under two configurations
 
+import datetime as dt
+
 import numpy as np
 import pytest
 
 from market import replay
 from market.bid import accept, charge, clear, curve, qual
 from market.cfg import Cf
-from market.nyiso import frame
+from market.nyiso import Day, frame
+from market.report import metrics
 
 FX = "tests/fixtures/nyiso"
 CF = Cf(root=FX, L=7, S=4, sp=12, lag=2, bt=(2, 6), bd=(6, 12),
@@ -148,14 +151,26 @@ def test_defaults_reproduce_the_baseline(fr):
     assert b.iv["d"] == pytest.approx(a.iv["d"])
 
 
-def test_a_tariff_only_adds_cost(fr):
-    """Charging metered energy cannot raise settlement, and raises the charge line."""
-    a = replay.run(fr, CF, "neutral", *CF.te)
-    b = replay.run(fr, CF.rep(tar=5.0), "neutral", *CF.te)
-    fa = float(replay.settle(a.iv, CF)["fee"].sum())
-    fb = float(replay.settle(b.iv, CF.rep(tar=5.0))["fee"].sum())
-    assert fb > fa
-    assert fb == pytest.approx(fa + 5.0 * float((b.iv["c"] + b.iv["d"]).sum()) / 12.0)
+def test_a_high_tariff_stops_physical_trading():
+    """A two-hour spread of 2 cannot pay a round-trip tariff of 4 per MWh."""
+    day = Day(dt.date(2025, 1, 1), 0, 7200, np.array([10.0, 12.0]),
+              np.repeat([10.0, 12.0], 12), np.full(24, 300), np.repeat([0, 1], 12))
+    cf = CF.rep(e=1.0, ec=1.0, ed=1.0, e0=0.0, ef=0.0, kd=0.0, fee=0.0, tar=2.0)
+    b = replay.run([day], cf, "fore", "2025-01-01", "2025-01-01")
+    assert b.iv["c"] == pytest.approx(np.zeros(len(b.iv["c"])), abs=1e-9)
+    assert b.iv["d"] == pytest.approx(np.zeros(len(b.iv["d"])), abs=1e-9)
+    assert b.iv["q"] == pytest.approx(np.zeros(len(b.iv["q"])), abs=1e-9)
+    assert b.dy[0]["net"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_tariff_reconciles_the_report(fr):
+    """Metered tariff is separate from arbitrage and charged exactly once in net."""
+    cf = CF.rep(tar=5.0)
+    b = replay.run(fr, cf, "neutral", *cf.te)
+    m = metrics(b, cf, B=20)
+    assert m["tariff"] > 0
+    assert m["tariff"] == pytest.approx(5 * m["throughput"])
+    assert m["arb"] + m["spread"] - m["tariff"] == pytest.approx(m["net"], abs=1e-9)
 
 
 def test_an_offer_curve_cannot_take_more_than_the_position(fr):
