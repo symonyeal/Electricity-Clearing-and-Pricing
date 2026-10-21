@@ -43,8 +43,8 @@ the [audit](AUDIT.md) of the decomposition, settlement and risk studies left ope
     installed only the newest. The job pinned to Python 3.12, NumPy 1.26.0 and SciPy
     1.12.0 has not run; SciPy 1.12 has no CPython 3.14 wheel, so it cannot run here.
 11. **HiGHS upstream reports.** The two presolve defects have extracted reproducers in
-    `../emm-audit-scratch/repro`, outside the repository ([Audit](AUDIT.md)). No issue is
-    filed. File both, then delete the scratch directory.
+    [`audit/repro`](../audit/repro) ([Audit](AUDIT.md)); both still reproduce under SciPy
+    1.18.1 (20 October 2026). No issue is filed.
 12. **Settlement prices away from the load.** Load-bus prices are bounded on the optimal
     face; prices at buses without load are not, since demand cannot fall below zero there,
     so tests on them test the payment rule. Complementary slackness is checked on radial
