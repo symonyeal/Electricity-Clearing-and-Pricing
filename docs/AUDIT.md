@@ -38,13 +38,15 @@ heuristic effort 0, all 159 new tests passed; SciPy passes both options to HiGHS
 - It cited `docs/INDUSTRY.md` four times; that file was never written. The citations are
   removed.
 - It deferred the isolated presolve timings, which had finished. They are below.
-- Its evidence lived in `../emm-audit-scratch`. Every finding is now recorded in a test or
-  a runner table here; the scratch directory holds only the evidence below.
+- Its evidence lived in a scratch directory outside the repository. Every finding is now
+  recorded in a test or a runner table here, and the HiGHS reproducers are in
+  [`audit/repro`](../audit/repro).
 
 ## Evidence recorded only here
 
-**Presolve in `_om`.** On against off in `_om` alone, default tolerances
-(`../emm-audit-scratch/performance/om.py`):
+**Presolve in `_om`.** On against off in `_om` alone, default tolerances. The harness
+patched a presolve argument into `_mi` on the uncommitted audit tree; no committed
+revision has that argument, so the table is a record and cannot be rerun:
 
 | | Presolve on | Presolve off |
 | --- | ---: | ---: |
@@ -62,7 +64,9 @@ that succeeded at HEAD return the same value and price, and the other seven now 
 capped `rx` at seed 2, and both capped hulls at seeds 36, 116 and 129. None is a bound
 route.
 
-**HiGHS reproducers** (`../emm-audit-scratch/repro`), runnable without this repository:
+**HiGHS reproducers** ([`audit/repro`](../audit/repro)), each with its data beside it and
+runnable on its own, `python audit/repro/<script>`; rerun under SciPy 1.18.1 on 20 October
+2026 with the same results:
 
 | Script | Result |
 | --- | --- |
