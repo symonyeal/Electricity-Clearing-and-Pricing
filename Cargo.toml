@@ -1,0 +1,21 @@
+[package]
+name = "ecp"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Unit commitment, convex-hull prices and uplift on small electricity systems"
+license = "MIT"
+repository = "https://github.com/symonyeal/Electricity-Clearing-and-Pricing"
+
+[dependencies]
+highs = "2.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[profile.release]
+lto = "thin"
+
+[lints.clippy]
+needless_range_loop = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"

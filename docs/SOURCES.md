@@ -1,150 +1,19 @@
 # Sources
 
-This register separates the market-practice references from the mathematical and data
-sources used by the live formulations and validation cases.
-
-Only sources used by a live formulation, dataset, or validation case are listed.
-
-## Unit commitment and prices
-
-| Source | Use |
+| Source | Implemented use |
 | --- | --- |
-| Gribik, P. R., Hogan, W. W. and Pope, S. L. (2007), [“Market-Clearing Electricity Prices and Energy Uplift”](http://www.lmpmarketdesign.com/papers/Gribik_Hogan_Pope_Price_Uplift_123107.pdf), working paper, 31 December 2007 | Convex hull pricing and the uplift it minimizes; the origin of the rule `hc` and `hl` compute |
-| Liberopoulos, G. and Andrianesis, P. (2016), [“Critical Review of Pricing Schemes in Markets with Non-Convex Costs”](https://doi.org/10.1287/opre.2015.1451), *Operations Research* 64(1), 17–31 | The taxonomy the three priced rules sit inside |
-| Hua, B. and Baldick, R. (2017), [“A Convex Primal Formulation for Convex Hull Pricing”](https://arxiv.org/abs/1605.05002), *IEEE Transactions on Power Systems* 32(5), 3814–3823 | Convex-primal CHP and examples `ex1` and `ex2` |
-| O'Neill, R. P., Castillo, A., Eldridge, B. and Hytowitz, R. B. (2017), [“Dual Pricing Algorithm in ISO Markets”](https://doi.org/10.1109/TPWRS.2016.2614891), *IEEE Transactions on Power Systems* 32(4), 3308–3310 | Axiomatic dual pricing; reference [4] of the FERC talk the AIC case rests on |
-| Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [“A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing”](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf) | AIC, payments, and `ex3` |
-| Chen, Y., O'Neill, R. P. and Whitman, P. (2020), [Optimization Online version](https://optimization-online.org/2020/09/8004/) | Restricted-block result used to interpret AIC make-whole payments |
-| Balas, E. (1998), [“Disjunctive Programming: Properties of the Convex Hull of Feasible Points”](https://doi.org/10.1016/S0166-218X(98)00136-X) | Schedule-wise union-of-polyhedra formulation `hl`; the storage hull $H$ of `models/settle.py`, over the resource's mode patterns |
-| Yu, Y., Guan, Y. and Chen, Y. (2020), [“An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing”](https://arxiv.org/abs/1910.12994) | Interval-graph unit hull `hc` |
-| Knueven, B., Ostrowski, J. and Watson, J.-P. (2020), [“On Mixed-Integer Programming Formulations for the Unit Commitment Problem”](https://doi.org/10.1287/ijoc.2019.0944) | Unit-commitment rows and pglib-uc reference formulation |
-| Rajan, D. and Takriti, S. (2005), [“Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs”](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070) | Minimum up/down inequalities |
-| Stott, B., Jardim, J. and Alsac, O. (2009), [“DC Power Flow Revisited”](https://doi.org/10.1109/TPWRS.2009.2021235) | Lossless DC network model |
-| Beck, A. (2014), [*Introduction to Nonlinear Optimization: Theory, Algorithms, and Applications with MATLAB*](https://doi.org/10.1137/1.9781611973655), MOS-SIAM, ch. 12, pp. 237–240; Theorem 10.7 | Definition of the Lagrangian dual and Theorem 12.3, weak duality, which fixes what `qd` must minimize over and bounds `dw`'s certificate; Theorem 10.7, the KKT conditions for linearly constrained problems, from which [Risk-averse prices](RISK.md) reads the CVaR duals |
-
-The FERC talk is also stored locally as `Research PDF Files\electricity pricing.pdf`, and
-Beck as `Research PDF Files\beck.pdf`.
-
-### Production practice
-
-What is actually settled, against which the priced rules here are a measurement. Cited by
-[Pricing](PRICING.md), "What is settled in practice".
-
-| Source | Use |
-| --- | --- |
-| MISO (2024), [“Fast Start Pricing / ELMP at MISO”](https://stakeholdercenter.caiso.com/InitiativeDocuments/Presentation-Fast%20Start-Pricing-ELMP-at-MISO-Dec-19-2024.pdf), presented to the CAISO stakeholder process, 19 December 2024 | The partial-commitment relaxation, the unenforced ramp-down row, Fast Start Resource eligibility, the phase dates, and the Phase I and Phase II results |
-| Guan, Y. (2019), [“Optimal Convex Hull Pricing and MISO Case Studies”](https://www.ferc.gov/sites/default/files/2020-09/T4-3-Guan.pdf), FERC Technical Conference, June 2019 | The interval dynamic program behind `hc`, and its $O(T^2)$ proposition |
-| Ahunbay, M. Ş., Bichler, M., Dobos, T. and Knörr, J. (2023), [“Solving Large-Scale Electricity Market Pricing Problems in Polynomial Time”](https://arxiv.org/abs/2312.07071) | An alternative that changes the allocation rather than the price: approximate competitive equilibrium with no budget deficit |
-| FERC Staff (2014), [“Staff Analysis of Uplift in RTO and ISO Markets”](https://www.ferc.gov/sites/default/files/2020-05/08-13-14-uplift_3.pdf), August 2014 | The uplift problem as the regulator states it. Docket No. AD14-14-000, *Price Formation in Energy and Ancillary Services Markets Operated by Regional Transmission Organizations and Independent System Operators*, Notice of 19 June 2014, named in the README |
-| NYISO, [“Formulas For Determining Bid Production Cost Guarantee”](https://www.nyiso.com/documents/20142/36318208/MST%2018%20022223%20MC.pdf/ef89c9e4-27ac-cce8-e1be-50922168e5aa), Market Services Tariff §18 | The name and form of the make-whole payment in the market this repository replays |
-| Monitoring Analytics (2025), [*2024 State of the Market Report for PJM*, §4 Energy Uplift](https://www.monitoringanalytics.com/reports/PJM_State_of_the_Market/2024/2024-som-pjm-sec4.pdf) | PJM's operating reserve credits, and an independent market monitor's annual uplift accounting |
-
-Guan's deck is served from FERC's `2020-09` directory; its slides and PDF date are June 2019.
-Reference [4] of the FERC talk gives the O'Neill dual-pricing pages as 3301–3310; the
-publisher's own deposit gives 3308–3310, which is what is recorded above.
-
-### Small cases
-
-| Case | Source and restriction |
-| --- | --- |
-| `ex1` | Hua–Baldick Table 1; one period |
-| `ex2` | Hua–Baldick Table 3; start-up and shut-down ramps are set equal to normal ramps to recover the published period-2 commitment |
-| `ex3` | Chen–O'Neill–Whitman slides 13–15; its two AIC values belong to two feasible sets, recorded in [Pricing](PRICING.md) |
-| `ex4` | Synthetic three-bus DC loop |
-| `ex5` | Synthetic offers and demand with the directional `NO-NO1_NO-NO2` capacity from [electricitymaps](https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/exchanges/NO-NO1_NO-NO2.yaml) |
-
-## pglib-uc
-
-[`models/pglib_uc.py`](../models/pglib_uc.py) implements equations (1)–(24) of the
-[pglib-uc model](https://github.com/power-grid-lib/pglib-uc/blob/master/MODEL.pdf) from
-independent rows. The library's reference code is MIT-licensed; its cases are CC-BY-4.0.
-
-| Local file | Official file | SHA-256 |
-| --- | --- | --- |
-| `data/pglib_uc/rts_gmlc_2020-03-05.json` | [RTS-GMLC 2020-03-05](https://github.com/power-grid-lib/pglib-uc/blob/master/rts_gmlc/2020-03-05.json) | `0F89BF93327B5F90BB7381C1E7AE08614B60DEF2390E2E8940F40B9CF825045F` |
-
-The official `uc_model.py` relaxation under HiGHS gives `2480427.041110388`; the local
-independent formulation gives `2480427.0411103913`.
-
-## Storage
-
-| Source | Use |
-| --- | --- |
-| Rockafellar, R. T. and Uryasev, S. (2000), [“Optimization of Conditional Value-at-Risk”](https://sites.math.washington.edu/~rtr/papers/rtr179-CVaR1.pdf) | Scenario epigraph for loss CVaR, and for the risk-averse clearing whose duals `stoch.cvd` reads |
-| Rockafellar, R. T. and Uryasev, S. (2002), [“Conditional Value-at-Risk for General Loss Distributions”](https://sites.math.washington.edu/~rtr/papers/rtr187-CVaR2.pdf) | Discrete tails and probability atoms |
-| [HydroBoost `a7bea5e`](https://github.com/idaholab/HydroBoost/tree/a7bea5eb05ae) | Storage balance and mutually exclusive operating modes, restricted here to one battery and energy trading |
-| [LOGOS `5a09f88`](https://github.com/idaholab/LOGOS/tree/5a09f888535a) | Independent precedent for the mean/CVaR objective |
-| [PJM two-settlement overview](https://learn.pjm.com/three-priorities/buying-and-selling-energy/energy-markets.aspx) | General forward-plus-deviation accounting convention; no PJM rule set is implemented |
-
-No upstream package is a runtime dependency. The equations are implemented directly in
-SciPy. The completed local-code review is in the
-[archive](../_archive/20260916-focus-reset/documentation/INL.md).
-
-## NYISO replay
-
-| Source | Use |
-| --- | --- |
-| [NYISO day-ahead zonal LBMP, P-2A](http://mis.nyiso.com/public/P-2Alist.htm) | Hourly day-ahead prices |
-| [NYISO real-time zonal LBMP, P-24A](http://mis.nyiso.com/public/P-24Alist.htm) | Five-minute real-time prices |
-| Monthly files under `http://mis.nyiso.com/public/csv/{report}/{YYYYMM01}{report}_zone_csv.zip` | Executed price record, downloaded 2026-09-15 |
-| Künsch, H. R. (1989), [“The Jackknife and the Bootstrap for General Stationary Observations”](https://doi.org/10.1214/aos/1176347265) | Moving-block bootstrap for annual net settlement |
-
-NYISO states that corrected prices are reposted. The replay uses the archive as downloaded,
-not the original price available at each historical decision time. The difference is not
-measured. Bid time, information lag, full acceptance, self-dispatch, and settlement are
-explicit study assumptions; they are not attributed to NYISO manuals.
-
-## NYISO rules
-
-Read on 2026-10-20 for the [calibration record](NYISO.md). These sources identify rules
-and limitations; no participant-specific charge is calibrated from them.
-
-| Source | Use |
-| --- | --- |
-| [NYISO Order 841 compliance filing, 2018-12-03](https://nyisoviewer.etariff.biz/ViewerDocLibrary/FercDockets/20181203_NYISOFilngLttr_OrdrNo841_23105.htm), Part IV.A.1, pp. 12–13 | Historical proposed ESR minimum capability: 0.1 MW for one hour; not one hour at full rated power. |
-| [FERC 172 FERC paragraph 61,119, 2020-08-03](https://nyisoviewer.etariff.biz/ViewerDocLibrary/FercOrders/20200803%20Ordr%20Cmplnc%20Rhrng_25896.htm), paragraphs 4, 6, 8–10 | Wholesale charging energy at LMP, and conditional transmission charging. Acceptance subject to further compliance; not a current rate schedule. |
-| [NYISO ESR Settlements Quick Reference Sheet](https://www.nyiso.com/documents/20142/1389407/11-ESR-Settlements-Quick-Reference-Sheet.pdf/9847e410-bb93-4e5c-96fb-31ec550271b0) | Training list of ESR settlement components including TSC/NTAC and Rate Schedule 1; no numerical rate taken from it. |
-
-The [Accounting and Billing Manual](https://www.nyiso.com/documents/20142/2923231/acctbillmnl.pdf)
-returned a JavaScript verification page on that date and was not read.
-
-## Decomposition
-
-[Decomposition](DW.md) implements the Dantzig–Wolfe extreme-point master in
-`models/dw.py` and measures it against the direct hulls.
-
-| Source | Use |
-| --- | --- |
-| Andrianesis, P., Bertsimas, D., Caramanis, M. C. and Hogan, W. W. (2020), [“Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition”](https://arxiv.org/abs/2012.13331), §II–III, pp. 3–5 | The master, the reduced cost, the self-scheduling oracle and finite convergence that `dw.cg` implements |
-| Wolsey, L. A. (2021), *Integer Programming*, 2nd ed., Wiley, ch. 10, pp. 195–209; §§11.2–11.3, pp. 215–217; p. 226 | Lagrangian duality, the reformulation, initialization from a feasible solution, and exact final pricing |
-| Dantzig, G. B. and Wolfe, P. (1960), [“Decomposition Principle for Linear Programs”](https://doi.org/10.1287/opre.8.1.101), *Operations Research* 8(1), 101–111 | Original decomposition |
-| Bertsimas, D. and Tsitsiklis, J. N. (1997), *Introduction to Linear Optimization*, Athena Scientific, §4.3, Theorems 4.3–4.5; §5.3, Theorem 5.2, pp. 215–216; §6.1; §6.3; §6.4, Theorem 6.1, pp. 252–253; §6.5, p. 259 | Weak and strong duality and complementary slackness; the optimal duals as the subgradients of the value in the right-hand side, which bounds a price on its face; delayed column generation and its cutting-plane dual; the decomposition bound; Benders as Dantzig–Wolfe on the dual |
-| Nemirovski, A. (2024), *Introduction to Linear Optimization*, World Scientific, §3.1.3, pp. 176–179, Proposition 3.2 | Certificates of optimality in linear optimization |
-| Knueven, B., Ostrowski, J., Castillo, A. and Watson, J.-P. (2022), [“A computationally efficient algorithm for computing convex hull prices”](https://doi.org/10.1016/j.cie.2021.107806), *Computers & Industrial Engineering* 163, 107806 | The Benders alternative, named and not implemented |
-
-The local copies of Bertsimas–Tsitsiklis and Nemirovski were read for the section and
-theorem numbers above.
-
-## Risk-averse prices
-
-[Risk-averse prices](RISK.md) derives the duals of the CVaR clearing from its KKT
-conditions, Beck Theorem 10.7 and Bertsimas–Tsitsiklis §4.3 above, and the epigraph of
-Rockafellar and Uryasev under Storage.
-
-| Source | Use |
-| --- | --- |
-| Birge, J. R. and Louveaux, F. (2011), *Introduction to Stochastic Programming*, 2nd ed., Springer, ch. 4 | WS, RP, EEV, EVPI and VSS, and the chain WS ≤ RP ≤ EEV that `models/risk.py` evaluates under the expectation and under the risk measure |
-
-## Solver contracts
-
-| Tool | Contract used |
-| --- | --- |
-| [SciPy `milp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.milp.html) | MIP status, `mip_gap`, and `mip_dual_bound` |
-| [SciPy `linprog`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html) | LP solution and equality marginals |
-| [HiGHS](https://highs.dev/) | LP and MIP backend |
-| [NVIDIA cuOpt](https://github.com/NVIDIA/cuopt), [settings](https://docs.nvidia.com/cuopt/user-guide/latest/lp-qp-milp-settings.html) | Platform and default tolerances, read for the decision not to adopt it |
-| [pytest](https://docs.pytest.org/) | Verification runner |
-| [Ruff](https://docs.astral.sh/ruff/) | Static check |
-
-The previous reading list, pit references, and repository-review notes are preserved in the
-[archived source register](../_archive/20260916-focus-reset/documentation/SOURCES.md).
+| Gribik, Hogan and Pope (2007), [Market-Clearing Electricity Prices and Energy Uplift](http://www.lmpmarketdesign.com/papers/Gribik_Hogan_Pope_Price_Uplift_123107.pdf) | Convex-hull pricing and uplift |
+| Liberopoulos and Andrianesis (2016), [Critical Review of Pricing Schemes in Markets with Non-Convex Costs](https://doi.org/10.1287/opre.2015.1451), Operations Research 64(1), 17-31 | Classification of price rules |
+| Hua and Baldick (2017), [A Convex Primal Formulation for Convex Hull Pricing](https://arxiv.org/abs/1605.05002), IEEE TPWRS 32(5), 3814-3823 | Convex primal pricing; cases 1 and 2 |
+| Chen, O'Neill and Whitman (2020), [A Unified Approach to Solve Convex Hull Pricing and Average Incremental Cost Pricing](https://www.ferc.gov/sites/default/files/2020-06/W2-1_Chen_et_al.pdf) | AIC and case 3; [Optimization Online version](https://optimization-online.org/2020/09/8004/) records the restricted-block result |
+| Balas (1998), [Disjunctive Programming: Properties of the Convex Hull of Feasible Points](https://doi.org/10.1016/S0166-218X(98)00136-X) | Trajectory hull `hl` |
+| Yu, Guan and Chen (2020), [An Extended Integral Unit Commitment Formulation and an Iterative Algorithm for Convex Hull Pricing](https://arxiv.org/abs/1910.12994) | Interval hull `hc` |
+| Knueven, Ostrowski and Watson (2020), [On Mixed-Integer Programming Formulations for the Unit Commitment Problem](https://doi.org/10.1287/ijoc.2019.0944) | Unit rows; [pglib formulation](https://github.com/power-grid-lib/pglib-uc/blob/master/MODEL.pdf) |
+| Rajan and Takriti (2005), [Minimum Up/Down Polytopes of the Unit Commitment Problem with Start-Up Costs](https://www.semanticscholar.org/paper/b88642e36b414d5929fed48593d0ac46ae3e2070) | Minimum run/down inequalities |
+| Stott, Jardim and Alsac (2009), [DC Power Flow Revisited](https://doi.org/10.1109/TPWRS.2009.2021235) | Lossless DC network model |
+| Beck (2014), [Introduction to Nonlinear Optimization](https://doi.org/10.1137/1.9781611973655), chapter 12, Theorem 12.3 | Lagrangian dual and weak duality |
+| Andrianesis, Bertsimas, Caramanis and Hogan (2020), [Computation of Convex Hull Prices in Electricity Markets with Non-Convexities using Dantzig-Wolfe Decomposition](https://arxiv.org/abs/2012.13331), sections II-III | Generated master, resource oracle and final pricing |
+| Dantzig and Wolfe (1960), [Decomposition Principle for Linear Programs](https://doi.org/10.1287/opre.8.1.101), Operations Research 8(1), 101-111 | Column generation |
+| Bertsimas and Tsitsiklis (1997), Introduction to Linear Optimization, sections 4.3, 5.3 and 6.4 | Duality, subgradients and the decomposition bound |
+| [electricitymaps directional exchange](https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/exchanges/NO-NO1_NO-NO2.yaml) | Case 5 capacity pair; offers and demand are synthetic |
+| [HiGHS](https://highs.dev/), [Rust binding](https://docs.rs/highs/2.4.0/highs/) | LP/MIP solves, equality duals and objective bounds |
