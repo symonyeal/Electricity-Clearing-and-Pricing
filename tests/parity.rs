@@ -1,5 +1,7 @@
+//! Values and payments against the independent baseline in fixtures/pricing.json.
 use ecp::{
-    clearing::{self, Market},
+    clearing, hull,
+    market::Market,
     pricing::{self, Pay},
 };
 use serde_json::Value;
@@ -58,7 +60,7 @@ fn demand_payment(pi: &[Vec<f64>], d: &[Vec<f64>]) -> f64 {
 }
 
 #[test]
-fn python_pricing_baseline_matches_rust_values_and_payments() {
+fn baseline_values_and_payments_match() {
     let fixture: Value = serde_json::from_str(FIXTURE).expect("pricing fixture is valid JSON");
     let cases = fixture["cases"].as_array().expect("fixture has cases");
     assert_eq!(cases.len(), 29, "fixture case count changed");
@@ -96,15 +98,15 @@ fn python_pricing_baseline_matches_rust_values_and_payments() {
 
         let rx = clearing::rx(&market, None).unwrap_or_else(|e| panic!("{name}.rx failed: {e}"));
         expect_cost(rx.z, expected, name, "rx");
-        let chp = ecp::hull::hc(&market, None).unwrap_or_else(|e| panic!("{name}.hc failed: {e}"));
+        let chp = hull::hc(&market, None).unwrap_or_else(|e| panic!("{name}.hc failed: {e}"));
         expect_cost(chp.z, expected, name, "hc");
-        let qd = pricing::qd(&market, &chp.pi, None)
-            .unwrap_or_else(|e| panic!("{name}.qd_chp failed: {e}"));
-        close(qd, number(&expected["qd_chp"]), &format!("{name}.qd_chp"));
-        let hl = ecp::hull::hl(&market, None).unwrap_or_else(|e| panic!("{name}.hl failed: {e}"));
-        expect_cost(hl.z, expected, name, "hl");
+        close(
+            chp.lb,
+            number(&expected["qd_chp"]),
+            &format!("{name}.qd_chp"),
+        );
         let arbitrary = matrix(&case["arbitrary_prices"]);
-        let qd = pricing::qd(&market, &arbitrary, None)
+        let qd = hull::qd(&market, &arbitrary, None)
             .unwrap_or_else(|e| panic!("{name}.qd_arbitrary failed: {e}"));
         close(
             qd,
@@ -116,8 +118,7 @@ fn python_pricing_baseline_matches_rust_values_and_payments() {
             let lmp = clearing::lmp(&market, &uc, None)
                 .unwrap_or_else(|e| panic!("{name}: LMP failed: {e}"));
             expect_cost(lmp.z, expected, name, "lmp");
-            let cap = pricing::pc(&market, &uc, 1e-6, Some(&lmp))
-                .unwrap_or_else(|e| panic!("{name}: PC failed: {e}"));
+            let cap = pricing::pc(&market, &uc, &lmp.pi);
             let cap_want = matrix(&expected["pc"]);
             for (i, (got, want)) in cap.iter().zip(&cap_want).enumerate() {
                 for (t, (&a, &b)) in got.iter().zip(want).enumerate() {
@@ -127,8 +128,7 @@ fn python_pricing_baseline_matches_rust_values_and_payments() {
 
             for (route, sol) in [
                 ("rx_capped", clearing::rx(&market, Some(&cap))),
-                ("hc_capped", ecp::hull::hc(&market, Some(&cap))),
-                ("hl_capped", ecp::hull::hl(&market, Some(&cap))),
+                ("hc_capped", hull::hc(&market, Some(&cap))),
             ] {
                 let sol = sol.unwrap_or_else(|e| panic!("{name}.{route} failed: {e}"));
                 expect_cost(sol.z, expected, name, route);

@@ -4,12 +4,18 @@ use std::{
 };
 
 #[test]
-fn json_input_and_builtin_case_use_the_same_engine() {
-    let named = Command::new(env!("CARGO_BIN_EXE_ecp"))
-        .args(["case", "1", "chp"])
-        .output()
-        .unwrap();
-    assert!(named.status.success());
+fn builtin_case_file_and_stdin_agree() {
+    let run = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_ecp"))
+            .args(args)
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        out.stdout
+    };
+    let named = run(&["case", "1", "chp"]);
+    assert_eq!(named, run(&["solve", "cases/1.json", "chp"]));
     let mut process = Command::new(env!("CARGO_BIN_EXE_ecp"))
         .args(["solve", "-", "chp"])
         .stdin(Stdio::piped())
@@ -20,11 +26,11 @@ fn json_input_and_builtin_case_use_the_same_engine() {
         .stdin
         .take()
         .unwrap()
-        .write_all(include_bytes!("../examples/market.json"))
+        .write_all(include_bytes!("../cases/1.json"))
         .unwrap();
     let from_json = process.wait_with_output().unwrap();
     assert!(from_json.status.success());
-    let a: serde_json::Value = serde_json::from_slice(&named.stdout).unwrap();
+    let a: serde_json::Value = serde_json::from_slice(&named).unwrap();
     let b: serde_json::Value = serde_json::from_slice(&from_json.stdout).unwrap();
     assert_eq!(a, b);
     assert!((a["pi"][0][0].as_f64().unwrap() - 12.0).abs() < 1e-5);
@@ -58,4 +64,32 @@ fn invalid_input_is_an_error_without_a_result() {
             .unwrap()
             .contains("unknown field")
     );
+}
+
+#[test]
+fn case_3_reproduces_the_published_prices_and_uplift() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ecp"))
+        .args(["case", "3"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let r: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    // Prices and payments hold to the solver tolerances of the parity comparator.
+    let at = |v: &serde_json::Value| v.as_f64().unwrap();
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-6 + 1e-7 * b.abs().max(1.);
+    let up = |rule: &str| {
+        r[format!("pay_{rule}")]["up"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(at)
+            .sum::<f64>()
+    };
+    assert!(close(at(&r["uc"]["z"]), 7_340.));
+    for (rule, peak, uplift) in [("lmp", 90., 1_690.), ("chp", 276., 365.)] {
+        assert!(close(at(&r[rule]["pi"][0][2]), peak), "{rule} peak");
+        assert!(close(up(rule), uplift), "{rule} uplift");
+    }
+    // The 1e-6 MW AIC ceiling relaxation lowers the peak price by about 1.2e-4.
+    assert!((at(&r["aic"]["pi"][0][2]) - 422.).abs() < 1e-3, "aic peak");
 }

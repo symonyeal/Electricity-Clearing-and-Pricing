@@ -1,343 +1,183 @@
-//! Direct generator hulls from trajectories and interval graphs.
+//! Convex-hull prices from each unit's interval graph (Yu, Guan and Chen 2020).
 //!
-//! `hl` uses Balas' union formulation over every feasible on/off trajectory. `hc`
-//! uses the equivalent source-to-sink interval graph, whose run arcs number O(T²).
-use crate::clearing::{Market, Sol};
+//! Nodes 0..t are periods at which a unit is free to start, t is the sink and t + 1 the
+//! source. An idle arc spends one period off; an on-arc runs an interval [s, s + n) and then
+//! spends md periods off, carrying the perspective of that interval's dispatch polytope.
+//! A unit's hull is the flow polytope of its graph: O(T²) arcs and O(T³) dispatch columns.
 use crate::{
-    lp::{self, Problem},
+    lp::Problem,
+    market::{Market, Sol, cap},
     unit::{self, Unit},
 };
 
-const ENUM_T: usize = 16;
-const HULL_VARIABLES: usize = 100_000;
 const TOL: f64 = 1e-7;
 
-#[derive(Clone)]
-struct Disjunct {
-    a: Vec<Vec<f64>>,
-    b: Vec<f64>,
-    k: f64,
-    u: Vec<f64>,
-}
-#[derive(Clone)]
+/// Arc from → to, running periods s..s + n (n = 0 when idle) under rows a q ≤ b λ.
 struct Arc {
     from: usize,
     to: usize,
     s: usize,
-    e: usize,
-    a: Vec<Vec<f64>>,
-    b: Vec<f64>,
+    n: usize,
+    q: Problem,
     k: f64,
 }
 
-fn bits(t: usize) -> Result<Vec<Vec<f64>>, String> {
-    if t > ENUM_T {
-        return Err(format!(
-            "trajectory enumeration is limited to {ENUM_T} periods"
-        ));
-    }
-    Ok((0..(1usize << t))
-        .map(|mask| (0..t).map(|k| ((mask >> k) & 1) as f64).collect())
-        .collect())
-}
-
-fn disjuncts(x: &Unit, t: usize, cap: Option<&[f64]>) -> Result<Vec<Disjunct>, String> {
-    let mut out = Vec::new();
-    for u in bits(t)? {
-        if let Some((a, b, k)) = unit::trajectory(x, t, &u, cap) {
-            out.push(Disjunct { a, b, k, u });
-        }
-    }
-    if out.is_empty() {
-        return Err("a unit has no feasible schedule".into());
-    }
-    Ok(out)
-}
-
+/// Dispatch rows of the single on-interval [s, s + n) and its fixed cost, or None.
 fn interval(
-    x: &Unit,
+    y: &Unit,
     t: usize,
     s: usize,
-    e: usize,
-    cap: Option<&[f64]>,
-) -> Option<(Vec<Vec<f64>>, Vec<f64>, f64)> {
+    n: usize,
+    ceil: Option<&[f64]>,
+) -> Option<(Problem, f64)> {
     let mut u = vec![0.; t];
-    u[s..=e].fill(1.);
-    let (a, b, k) = unit::trajectory(x, t, &u, cap)?;
-    let mut aa = Vec::new();
-    let mut bb = Vec::new();
-    for (row, rhs) in a.iter().zip(b) {
-        let q = row[s..=e].to_vec();
-        if q.iter().all(|v| v.abs() <= TOL) {
-            if rhs < -TOL {
-                return None;
-            }
-        } else {
-            aa.push(q);
-            bb.push(rhs);
+    u[s..s + n].fill(1.);
+    let (q, k) = unit::trajectory(y, t, &u, ceil)?;
+    let mut r = Problem::default();
+    for (a, &b) in q.a.iter().zip(&q.b) {
+        let a: Vec<_> = a
+            .iter()
+            .filter(|(j, _)| (s..s + n).contains(j))
+            .map(|&(j, v)| (j - s, v))
+            .collect();
+        if !a.is_empty() {
+            r.row(a, b);
+        } else if b < -TOL {
+            return None;
         }
     }
-    Some((aa, bb, k))
+    Some((r, k))
 }
 
-/// Balas trajectory hull; at most 16 periods per unit.
-pub fn hl(m: &Market, cap: Option<&[Vec<f64>]>) -> Result<Sol, String> {
-    let m = m.clone().validated()?;
-    let t = m.d[0].len();
-    let net = m.net.as_ref().unwrap();
-    m.check_cap(cap)?;
-    let sets: Vec<Vec<Disjunct>> =
+fn arcs(x: &Unit, t: usize, ceil: Option<&[f64]>) -> Vec<Arc> {
+    let on = |y: &Unit, from: usize, s: usize, n: usize| {
+        interval(y, t, s, n, ceil).map(|(q, k)| Arc {
+            from,
+            to: (s + n + x.md).min(t),
+            s,
+            n,
+            q,
+            k,
+        })
+    };
+    let idle = |from, to| Arc {
+        from,
+        to,
+        s: 0,
+        n: 0,
+        q: Problem::default(),
+        k: 0.,
+    };
+    let mut v: Vec<Arc> = (0..t).map(|q| idle(q, q + 1)).collect();
+    if x.u0 == 1 {
+        // Continue the initial run for n periods, or stop at once (n = 0).
+        v.extend((1..=t).filter_map(|n| on(x, t + 1, 0, n)));
+        v.extend(on(x, t + 1, 0, 0));
+    } else {
+        v.push(idle(t + 1, x.md.saturating_sub(x.e0()).min(t)));
+    }
+    // Later runs start from rest, free of the initial state.
+    let y = Unit {
+        u0: 0,
+        p0: 0.,
+        e0: None,
+        ..x.clone()
+    };
+    for s in 0..t {
+        v.extend((1..=t - s).filter_map(|n| on(&y, s, s, n)));
+    }
+    v
+}
+
+/// Price the product of the units' exact hulls. lb is the Lagrangian value at the
+/// selected price, which certifies it: lb = z at a convex-hull price.
+pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
+    let t = m.t();
+    let w = t + 2;
+    let sets: Vec<Vec<Arc>> =
         m.g.iter()
             .enumerate()
-            .map(|(i, x)| disjuncts(x, t, cap.map(|c| c[i].as_slice())))
-            .collect::<Result<_, _>>()?;
-    let count: usize = sets.iter().map(|s| s.len() * (t + 1)).sum();
-    if count > HULL_VARIABLES {
-        return Err(format!(
-            "hl is limited to {HULL_VARIABLES} variables; this market needs {count}"
-        ));
-    }
-    let mut p = Problem::new();
-    let mut offsets = Vec::new();
-    for (i, set) in sets.iter().enumerate() {
-        let mut os = Vec::new();
-        for d in set {
-            let o = p.col(m.g[i].c, 0., f64::INFINITY, false);
-            for _ in 1..t {
-                p.col(m.g[i].c, 0., f64::INFINITY, false);
-            }
-            let l = p.col(d.k, 0., 1., false);
-            os.push((o, l, d));
+            .map(|(i, x)| arcs(x, t, cap(ceil, i)))
+            .collect();
+    let mut p = Problem::default();
+    // Columns per arc: n dispatch columns from o, then its flow λ.
+    let cols: Vec<Vec<(usize, usize)>> = sets
+        .iter()
+        .zip(&m.g)
+        .map(|(set, x)| {
+            set.iter()
+                .map(|a| {
+                    let o = p.c.len();
+                    for _ in 0..a.n {
+                        p.col(x.c, 0., f64::INFINITY, false);
+                    }
+                    (o, p.col(a.k, 0., 1., false))
+                })
+                .collect()
+        })
+        .collect();
+    // Flow conservation: one unit of flow leaves each source; the sink row stays empty.
+    for (set, c) in sets.iter().zip(&cols) {
+        let r0 = p.ae.len();
+        for q in 0..w {
+            p.eq(vec![], if q == t + 1 { 1. } else { 0. });
         }
-        offsets.push(os);
-    }
-    for set in &offsets {
-        let terms: Vec<_> = set.iter().map(|(_, l, _)| (*l, 1.)).collect();
-        p.eq(terms, 1.);
-    }
-    let balance_start = p.ae.len();
-    for b in 0..net.nb {
-        for k in 0..t {
-            p.eq(vec![], m.d[b][k]);
-        }
-    }
-    for (i, set) in offsets.iter().enumerate() {
-        for (o, _, _) in set {
-            for k in 0..t {
-                p.ae[balance_start + net.bus[i] * t + k].push((*o + k, 1.));
+        for (a, &(_, l)) in set.iter().zip(c) {
+            p.ae[r0 + a.from].push((l, 1.));
+            if a.to != t {
+                p.ae[r0 + a.to].push((l, -1.));
             }
         }
     }
-    for set in &offsets {
-        for (o, l, d) in set {
-            for (a, b) in d.a.iter().zip(&d.b) {
-                let mut terms: Vec<_> = a
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, v)| v.abs() > 0.)
-                    .map(|(k, v)| (*o + k, *v))
-                    .collect();
-                terms.push((*l, -*b));
+    let mut inj = vec![];
+    for (i, (set, c)) in sets.iter().zip(&cols).enumerate() {
+        for (a, &(o, l)) in set.iter().zip(c) {
+            for (r, &b) in a.q.a.iter().zip(&a.q.b) {
+                let mut terms: Vec<_> = r.iter().map(|&(j, v)| (o + j, v)).collect();
+                terms.push((l, -b));
                 p.row(terms, 0.);
             }
+            inj.extend((0..a.n).map(|j| (i, a.s + j, o + j, 1.)));
         }
     }
-    net.append(t, balance_start, &mut p);
-    let r = lp::price(&p, net.nb * t)?;
-    let mut outp = vec![vec![0.; t]; m.g.len()];
-    let mut outu = outp.clone();
-    for (i, set) in offsets.iter().enumerate() {
-        for (o, l, d) in set {
-            for k in 0..t {
-                outp[i][k] += r.x[o + k];
-                outu[i][k] += r.x[*l] * d.u[k];
+    m.close(&mut p, inj);
+    let (r, pi) = m.price(&p)?;
+    let mut out = vec![vec![0.; t]; m.g.len()];
+    let mut u = out.clone();
+    for (i, (set, c)) in sets.iter().zip(&cols).enumerate() {
+        for (a, &(o, l)) in set.iter().zip(c) {
+            for j in 0..a.n {
+                out[i][a.s + j] += r.x[o + j];
+                u[i][a.s + j] += r.x[l];
             }
         }
     }
+    let lb = qd(m, &pi, ceil)?;
     Ok(Sol {
         z: r.z,
-        p: outp,
-        u: outu,
-        pi: r.dual[r.dual.len() - net.nb * t..]
-            .chunks(t)
-            .map(|q| q.to_vec())
-            .collect(),
+        p: out,
+        u,
+        pi,
         st: r.st,
-        gap: r.gap,
-        lb: r.lb,
+        gap: (r.z - lb) / r.z.abs().max(1.),
+        lb,
     })
 }
 
-/// Exact interval-graph hull with O(T^2) candidate run arcs.
-pub fn hc(m: &Market, cap: Option<&[Vec<f64>]>) -> Result<Sol, String> {
-    let m = m.clone().validated()?;
-    let t = m.d[0].len();
-    let net = m.net.as_ref().unwrap();
-    m.check_cap(cap)?;
-    let mut sets: Vec<Vec<Arc>> = Vec::new();
-    for x0 in &m.g {
-        let x = x0.filled();
-        let mut arcs = Vec::new();
-        for q in 0..t {
-            arcs.push(Arc {
-                from: q,
-                to: q + 1,
-                s: 0,
-                e: 0,
-                a: vec![],
-                b: vec![],
-                k: 0.,
-            });
-        }
-        if x.u0 == 1 {
-            for e in 0..t {
-                if let Some((a, b, k)) =
-                    interval(&x, t, 0, e, cap.map(|c| c[sets.len()].as_slice()))
-                {
-                    arcs.push(Arc {
-                        from: t + 1,
-                        to: (e + 1 + x.md).min(t),
-                        s: 0,
-                        e,
-                        a,
-                        b,
-                        k,
-                    });
-                }
-            }
-            let u = vec![0.; t];
-            if let Some((_, b, k)) =
-                unit::trajectory(&x, t, &u, cap.map(|c| c[sets.len()].as_slice()))
-                && b.iter().all(|z| *z >= -TOL)
-            {
-                arcs.push(Arc {
-                    from: t + 1,
-                    to: x.md.min(t),
-                    s: 0,
-                    e: 0,
-                    a: vec![],
-                    b: vec![],
-                    k,
-                });
-            }
-        } else {
-            let init = (x.md.saturating_sub(x.e0.unwrap_or(x.md))).min(t);
-            arcs.push(Arc {
-                from: t + 1,
-                to: init,
-                s: 0,
-                e: 0,
-                a: vec![],
-                b: vec![],
-                k: 0.,
-            });
-        }
-        let mut y = x.clone();
-        y.u0 = 0;
-        y.p0 = 0.;
-        y.e0 = Some(y.mu.max(y.md));
-        for s in 0..t {
-            for e in s..t {
-                if let Some((a, b, k)) =
-                    interval(&y, t, s, e, cap.map(|c| c[sets.len()].as_slice()))
-                {
-                    arcs.push(Arc {
-                        from: s,
-                        to: (e + 1 + x.md).min(t),
-                        s,
-                        e,
-                        a,
-                        b,
-                        k,
-                    });
-                }
-            }
-        }
-        sets.push(arcs);
+/// Lagrangian value q(π) = π·d + Σ_i min self-schedule cost_i(π) + W(π) from certified
+/// unit bounds; q(π) ≤ clearing cost for every π (weak duality).
+pub fn qd(m: &Market, pi: &[Vec<f64>], ceil: Option<&[Vec<f64>]>) -> Result<f64, String> {
+    let t = m.t();
+    let mut z: f64 = pi
+        .iter()
+        .flatten()
+        .zip(m.d.iter().flatten())
+        .map(|(a, b)| a * b)
+        .sum();
+    for (i, x) in m.g.iter().enumerate() {
+        z += unit::oracle(x, t, &pi[m.net.bus[i]], cap(ceil, i))
+            .solve(true)?
+            .lb;
     }
-    let mut p = Problem::new();
-    let mut os = Vec::<Vec<(usize, usize, &Arc)>>::new();
-    for (i, set) in sets.iter().enumerate() {
-        let mut v = Vec::new();
-        for a in set {
-            let n = if a.a.is_empty() { 0 } else { a.e - a.s + 1 };
-            let o = if n > 0 {
-                let o = p.col(m.g[i].c, 0., f64::INFINITY, false);
-                for _ in 1..n {
-                    p.col(m.g[i].c, 0., f64::INFINITY, false);
-                }
-                o
-            } else {
-                p.c.len()
-            };
-            let lam = p.col(a.k, 0., 1., false);
-            v.push((o, lam, a));
-        }
-        os.push(v);
-    }
-    let w = t + 2;
-    let balance_start = p.ae.len();
-    for _ in 0..m.g.len() * w + net.nb * t {
-        p.eq(vec![], 0.);
-    }
-    for i in 0..m.g.len() {
-        p.be[i * w + t + 1] = 1.;
-    }
-    for b in 0..net.nb {
-        for k in 0..t {
-            p.be[m.g.len() * w + b * t + k] = m.d[b][k];
-        }
-    }
-    for (i, set) in os.iter().enumerate() {
-        for (o, l, a) in set {
-            for (q, r) in [(a.from, 1.), (a.to, -1.)] {
-                if q != t {
-                    p.ae[balance_start + i * w + q].push((*l, r));
-                }
-            }
-            if !a.a.is_empty() {
-                for k in a.s..=a.e {
-                    p.ae[balance_start + m.g.len() * w + net.bus[i] * t + k]
-                        .push((*o + k - a.s, 1.));
-                }
-                for (ar, br) in a.a.iter().zip(&a.b) {
-                    let mut terms: Vec<_> = ar
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, v)| v.abs() > 0.)
-                        .map(|(j, v)| (*o + j, *v))
-                        .collect();
-                    terms.push((*l, -*br));
-                    p.row(terms, 0.);
-                }
-            }
-        }
-    }
-    let bs = balance_start + m.g.len() * w;
-    net.append(t, bs, &mut p);
-    let r = lp::price(&p, net.nb * t)?;
-    let mut outp = vec![vec![0.; t]; m.g.len()];
-    let mut outu = outp.clone();
-    for (i, set) in os.iter().enumerate() {
-        for (o, l, a) in set {
-            if !a.a.is_empty() {
-                for k in a.s..=a.e {
-                    outp[i][k] += r.x[o + k - a.s];
-                    outu[i][k] += r.x[*l];
-                }
-            }
-        }
-    }
-    Ok(Sol {
-        z: r.z,
-        p: outp,
-        u: outu,
-        pi: r.dual[r.dual.len() - net.nb * t..]
-            .chunks(t)
-            .map(|q| q.to_vec())
-            .collect(),
-        st: r.st,
-        gap: r.gap,
-        lb: r.lb,
-    })
+    Ok(z + m.net.value(t, pi)?)
 }

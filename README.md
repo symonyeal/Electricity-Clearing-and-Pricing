@@ -1,59 +1,53 @@
 # Electricity Clearing and Pricing
 
 Rust models for unit commitment, electricity prices and uplift on small power systems.
-The engine clears generation on DC or directional transport networks, then computes
-locational marginal prices (LMP), convex-hull prices (CHP), and average-incremental-cost
-prices (AIC). HiGHS solves the linear and mixed-integer programs through a native Rust
-binding; running the engine requires no Python interpreter.
+The engine clears generation over DC lines and transfer limits, then computes locational
+marginal prices (LMP), convex-hull prices (CHP) and average-incremental-cost prices
+(AIC), and settles the clearing at each. HiGHS solves the linear and mixed-integer
+programs through a native Rust binding.
 
 ## Background
 
 A plant's start-up cost and minimum output can prevent hourly energy prices from covering
-its operating cost. Markets compensate plants through side payments called uplift.
-This project compares the price rules that determine those payments against exact hulls
-on small systems. It is a research benchmark for price formation.
+its operating cost. Markets compensate plants through side payments called uplift. This
+project compares price rules by the uplift they leave, using exact unit hulls on small
+systems. It is a research benchmark for price formation.
 
 The FERC two-unit case clears at $7,340. Its peak LMP is $90/MWh with $1,690 uplift;
-CHP is $276/MWh with $365 uplift. The full p-cut AIC hull gives $422/MWh. The talk's
-$146.33 uses a restricted schedule set; both results retain their stated feasible sets.
-[Formulation](docs/PRICING.md) and [sources](docs/SOURCES.md).
+CHP is $276/MWh with $365 uplift. The full p-cut AIC hull gives $422/MWh; the talk's
+$146.33 prices a restricted schedule set. [Model](docs/MODEL.md),
+[validation](docs/VALIDATION.md) and [sources](docs/SOURCES.md).
 
 ## Run
 
 Install stable Rust, a C++ toolchain, CMake and libclang. The first build compiles the
-bundled HiGHS library. On Windows, use Visual Studio's C++ build tools; set `CMAKE` and
-`LIBCLANG_PATH` if those tools are outside `PATH`.
+bundled HiGHS library. On Windows, use Visual Studio's C++ build tools and set `CMAKE`
+and `LIBCLANG_PATH` if those tools are outside `PATH`.
 
 ```text
 cargo build --locked
 cargo run --locked -- case 3
 cargo run --locked -- case 4 chp
-cargo run --locked -- solve examples/market.json lmp
+cargo run --locked -- solve cases/2.json lmp
 ```
 
-`ecp` writes JSON to standard output and errors to standard error with a nonzero exit
-code. Input can also come from standard input: `ecp solve - chp`. Routes are `uc`, `en`,
-`rx`, `lmp`, `chp`, `hl`, `cg`, `aic`, and `all` (default). `en` enumerates commitments;
-`rx` relaxes them; `hl` uses the trajectory hull; `cg` generates columns.
-Output includes the achieved gap, objective bound and
-price-selection stage.
+`ecp` writes JSON to standard output, and errors to standard error with a nonzero exit
+code; `ecp solve - chp` reads standard input. Routes are `uc`, `lmp`, `rx`, `chp`,
+`aic` and `all` (default), which reports every rule's prices and the settlement
+(`pay_lmp`, `pay_chp`, `pay_aic`). Results carry the bound, gap and price-selection stage.
 
 ## Structure
 
 | Location | Owns |
 | --- | --- |
-| `src/unit.rs` | Generator data, defaults and the shared feasible set |
-| `src/network.rs` | DC and directional transport constraints; network dual term |
+| `src/unit.rs` | Unit data, defaults, the feasible set and fixed-schedule dispatch |
+| `src/network.rs` | DC lines and transfer limits; the network Lagrangian term |
+| `src/market.rs` | Validated input, nodal balances and balance prices |
 | `src/clearing.rs` | Integer clearing, relaxation and fixed-commitment dispatch |
-| `src/hull.rs` | Interval and trajectory hull formulations |
-| `src/dw.rs` | Column generation and repriced dual certificates |
-| `src/pricing.rs` | Self-scheduling bounds, AIC ceilings and uplift |
-| `src/lp.rs` | Sparse programs, solver certificates and dual-face selection |
-| `src/main.rs` | JSON input and command routing |
-
-The [design](docs/DESIGN.md) records module contracts, input conventions and limits.
-The maintained tree contains one implementation. Earlier Python studies and historical
-result bundles remain in Git history at `ec91593` and in the local archive.
+| `src/hull.rs` | Interval-graph hulls and the Lagrangian certificate |
+| `src/pricing.rs` | Settlement, AIC ceilings and the comparison of rules |
+| `src/lp.rs` | Sparse programs, HiGHS, solver certificates and dual-face selection |
+| `src/main.rs` | Command routing and the built-in cases in `cases/` |
 
 ## Checks
 
@@ -63,12 +57,8 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-The Rust parity fixture records outputs from Python revision `ec91593`: published cases,
-seeded systems and initial-state, zero-demand and infeasible boundaries. Objectives,
-payments and dual bounds are checked separately because schedules and dual prices can
-be nonunique. [Validation](docs/VALIDATION.md) gives the scope and reproduction commands.
+The parity fixture pins 29 markets to an independent implementation at revision
+`ec91593`. The engine has no contingencies, losses, reserves or market mitigation;
+ISO-scale performance is unmeasured, and optimality holds to solver tolerances.
 
-The engine has no contingencies, losses, reserve co-optimization or market mitigation.
-ISO-scale performance is unmeasured. All optimality claims are to solver tolerances.
-
-MIT license. [Bibliography](docs/SOURCES.md).
+MIT license.

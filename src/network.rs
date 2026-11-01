@@ -1,165 +1,117 @@
+//! Lossless DC lines and directional transfer limits between buses.
+//!
+//! A DC line [a, b, x, f] carries (θ_a − θ_b)/x from a to b with |flow| ≤ f; θ_0 = 0.
+//! A transfer [a, b, [lo, hi]] with a < b carries a free flow in [lo, hi] from a to b.
 use crate::lp::Problem;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-/// A DC grid or a set of directional interzonal transfer limits.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Network {
     pub bus: Vec<usize>,
-    pub ln: Vec<Line>,
-    pub nb: usize,
-    #[serde(default = "dc")]
-    pub fm: String,
     #[serde(default)]
-    pub zn: Vec<String>,
+    pub ln: Vec<Line>,
 }
-fn dc() -> String {
-    "dc".into()
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
+
+#[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Line {
     Dc((usize, usize, f64, f64)),
     Ntc((usize, usize, (f64, f64))),
 }
+
 impl Network {
-    pub fn validate(&self, g: usize) -> Result<Self, String> {
-        if self.nb == 0 || self.bus.len() != g || self.bus.iter().any(|b| *b >= self.nb) {
+    /// Check g unit locations and the lines against nb buses.
+    pub fn check(&self, g: usize, nb: usize) -> Result<(), String> {
+        if self.bus.len() != g || self.bus.iter().any(|b| *b >= nb) {
             return Err("every unit must sit at a bus of the network".into());
         }
-        if self.fm != "dc" && self.fm != "ntc" {
-            return Err("the line model must be dc or ntc".into());
-        }
         for l in &self.ln {
-            match (self.fm.as_str(), l) {
-                ("dc", Line::Dc((a, b, x, lim)))
-                    if *a < self.nb
-                        && *b < self.nb
-                        && a != b
-                        && x.is_finite()
-                        && *x > 0.
-                        && lim.is_finite()
-                        && *lim > 0. => {}
-                ("ntc", Line::Ntc((a, b, (lo, hi))))
-                    if *a < *b
-                        && *b < self.nb
-                        && lo.is_finite()
-                        && hi.is_finite()
-                        && *lo < 0.
-                        && *hi > 0. => {}
-                _ => return Err("line shape or limits do not match the network model".into()),
+            let ok = match *l {
+                Line::Dc((a, b, x, f)) => {
+                    a < nb && b < nb && a != b && x.is_finite() && x > 0. && f.is_finite() && f > 0.
+                }
+                Line::Ntc((a, b, (lo, hi))) => {
+                    a < b && b < nb && lo.is_finite() && hi.is_finite() && lo < 0. && hi > 0.
+                }
+            };
+            if !ok {
+                return Err("line endpoints or limits are invalid".into());
             }
         }
-        if !self.zn.is_empty()
-            && (self.zn.len() != self.nb
-                || self
-                    .zn
-                    .iter()
-                    .collect::<std::collections::HashSet<_>>()
-                    .len()
-                    != self.nb)
-        {
-            return Err("zone keys must be one per zone and distinct".into());
-        }
-        Ok(self.clone())
+        Ok(())
     }
-    /// Add flow variables and their coefficients to existing nodal balance equations.
-    pub fn append(&self, t: usize, balance_start: usize, p: &mut Problem) {
-        if self.ln.is_empty() {
-            return;
-        }
-        if self.fm == "dc" {
-            let mut th = vec![vec![0; t]; self.nb];
-            for b in 0..self.nb {
-                for k in 0..t {
-                    th[b][k] = p.col(
-                        0.,
-                        if b == 0 { 0. } else { f64::NEG_INFINITY },
-                        if b == 0 { 0. } else { f64::INFINITY },
-                        false,
-                    );
-                }
-            }
-            for line in &self.ln {
-                if let Line::Dc((a, b, x, lim)) = line {
-                    for k in 0..t {
-                        p.ae[balance_start + a * t + k]
-                            .extend([(th[*a][k], -1. / x), (th[*b][k], 1. / x)]);
-                        p.ae[balance_start + b * t + k]
-                            .extend([(th[*a][k], 1. / x), (th[*b][k], -1. / x)]);
-                        p.row(vec![(th[*a][k], 1. / x), (th[*b][k], -1. / x)], *lim);
-                        p.row(vec![(th[*a][k], -1. / x), (th[*b][k], 1. / x)], *lim);
-                    }
-                }
-            }
+
+    /// Add the network's columns and rows for nb buses over t periods to p. Returns its
+    /// balance terms (b·t + k, column, coefficient): net import into bus b in period k.
+    pub(crate) fn grid(&self, nb: usize, t: usize, p: &mut Problem) -> Vec<(usize, usize, f64)> {
+        let th: Vec<usize> = if self.ln.iter().any(|l| matches!(l, Line::Dc(_))) {
+            (0..nb * t)
+                .map(|j| {
+                    let r = if j < t { 0. } else { f64::INFINITY };
+                    p.col(0., -r, r, false)
+                })
+                .collect()
         } else {
-            for line in &self.ln {
-                if let Line::Ntc((a, b, (lo, hi))) = line {
+            vec![]
+        };
+        let mut terms = vec![];
+        for l in &self.ln {
+            match *l {
+                Line::Dc((a, b, x, f)) => {
                     for k in 0..t {
-                        let f = p.col(0., *lo, *hi, false);
-                        p.ae[balance_start + a * t + k].push((f, -1.));
-                        p.ae[balance_start + b * t + k].push((f, 1.));
+                        let (i, j, y) = (th[a * t + k], th[b * t + k], 1. / x);
+                        terms.extend([
+                            (a * t + k, i, -y),
+                            (a * t + k, j, y),
+                            (b * t + k, i, y),
+                            (b * t + k, j, -y),
+                        ]);
+                        p.row(vec![(i, y), (j, -y)], f);
+                        p.row(vec![(i, -y), (j, y)], f);
+                    }
+                }
+                Line::Ntc((a, b, (lo, hi))) => {
+                    for k in 0..t {
+                        let j = p.col(0., lo, hi, false);
+                        terms.extend([(a * t + k, j, -1.), (b * t + k, j, 1.)]);
                     }
                 }
             }
         }
+        terms
+    }
+
+    /// W(π) = min over network flows of −Σ π_bk · (net import into b in k): the network
+    /// term left by relaxing the nodal balances at prices π[b][k].
+    pub fn value(&self, t: usize, pi: &[Vec<f64>]) -> Result<f64, String> {
+        if self.ln.is_empty() {
+            return Ok(0.);
+        }
+        let mut p = Problem::default();
+        for (r, j, a) in self.grid(pi.len(), t, &mut p) {
+            p.c[j] -= pi[r / t][r % t] * a;
+        }
+        Ok(p.solve(false)?.z)
     }
 }
 
-/// Minimise the network term left by relaxing nodal balances at prices pi.
-pub fn value(net: &Network, t: usize, pi: &[Vec<f64>]) -> Result<f64, String> {
-    if pi.len() != net.nb || pi.iter().any(|r| r.len() != t) {
-        return Err("pi must have one price per bus and period".into());
+#[cfg(test)]
+mod tests {
+    use crate::{clearing::uc, hull::hc, market::Market, network::*, unit::Unit};
+
+    #[test]
+    fn mixed_dc_and_transfer_lines_clear_and_certify() {
+        let g = vec![Unit::new(0., 100., 10.), Unit::new(0., 100., 50.)];
+        let net = Network {
+            bus: vec![0, 2],
+            ln: vec![Line::Dc((0, 1, 1., 30.)), Line::Ntc((1, 2, (-20., 20.)))],
+        };
+        let m = Market::new(g, vec![vec![0.], vec![10.], vec![60.]], Some(net)).unwrap();
+        let s = hc(&m, None).unwrap();
+        // 30 MW crosses the DC line, 20 MW of it reaches bus 2; unit 1 serves the rest.
+        assert!((uc(&m, None).unwrap().z - (30. * 10. + 40. * 50.)).abs() < 1e-6);
+        assert!((s.z - 2_300.).abs() < 1e-6);
+        assert!(s.gap.abs() < 1e-7);
     }
-    if net.ln.is_empty() {
-        return Ok(0.0);
-    }
-    let mut p = Problem::new();
-    if net.fm == "dc" {
-        let mut th = vec![vec![0; t]; net.nb];
-        for b in 0..net.nb {
-            for k in 0..t {
-                let c = net
-                    .ln
-                    .iter()
-                    .filter_map(|l| {
-                        if let Line::Dc((a, q, x, _)) = l {
-                            Some(if *a == b {
-                                -(pi[*q][k] - pi[*a][k]) / x
-                            } else if *q == b {
-                                -(pi[*a][k] - pi[*q][k]) / x
-                            } else {
-                                0.
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .sum();
-                th[b][k] = p.col(
-                    c,
-                    if b == 0 { 0. } else { f64::NEG_INFINITY },
-                    if b == 0 { 0. } else { f64::INFINITY },
-                    false,
-                );
-            }
-        }
-        for l in &net.ln {
-            if let Line::Dc((a, b, x, lim)) = l {
-                for k in 0..t {
-                    p.row(vec![(th[*a][k], 1. / x), (th[*b][k], -1. / x)], *lim);
-                    p.row(vec![(th[*a][k], -1. / x), (th[*b][k], 1. / x)], *lim);
-                }
-            }
-        }
-    } else {
-        for l in &net.ln {
-            if let Line::Ntc((a, b, (lo, hi))) = l {
-                for k in 0..t {
-                    p.col(pi[*a][k] - pi[*b][k], *lo, *hi, false);
-                }
-            }
-        }
-    }
-    Ok(p.solve(false)?.z)
 }
