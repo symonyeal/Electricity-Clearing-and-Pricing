@@ -1,0 +1,5 @@
+# highs-sys builds HiGHS through the cmake crate, which strips optimization flags and then sets
+# CMake's release flags without them: on MSVC the solver was compiled unoptimized. cl.exe reads
+# extra options from CL; elsewhere the variable is unused.
+[env]
+CL = "/O2"
