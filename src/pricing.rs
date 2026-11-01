@@ -1,47 +1,28 @@
-//! Self-scheduling bounds, AIC output ceilings and settlement.
+//! Settlement at a price, AIC output ceilings and the full comparison of price rules.
 use crate::{
-    clearing::{self, Market, Sol},
+    clearing::{lmp, rx, uc},
     hull::hc,
+    market::{Market, Sol},
     unit::{self, Unit},
 };
+use serde::Serialize;
+
 const TOL: f64 = 1e-7;
+/// AIC output relaxation above a losing block's cleared dispatch, MW.
+const EP: f64 = 1e-6;
 
-/// Evaluate the unit-commitment Lagrangian dual from certified unit bounds.
-pub fn qd(m: &Market, pi: &[Vec<f64>], cap: Option<&[Vec<f64>]>) -> Result<f64, String> {
-    let m = m.validated()?;
-    let net = m.net.as_ref().unwrap();
-    let t = m.d[0].len();
-    m.check_cap(cap)?;
-    if pi.len() != net.nb
-        || pi
-            .iter()
-            .any(|r| r.len() != t || r.iter().any(|v| !v.is_finite()))
-    {
-        return Err("pi must hold one finite price per bus and period".into());
-    }
-    let mut val = 0.;
-    for b in 0..net.nb {
-        for k in 0..t {
-            val += pi[b][k] * m.d[b][k];
-        }
-    }
-    for (i, x) in m.g.iter().enumerate() {
-        let p = unit::oracle(x, t, &pi[net.bus[i]], cap.map(|c| c[i].as_slice()));
-        let s = p.solve(true)?;
-        val += s.lb;
-    }
-    val += crate::network::value(net, t, pi)?;
-    Ok(val)
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+/// Per unit: realised profit r, make-whole mw, lost opportunity loc and total uplift up.
+#[derive(Clone, Debug, Serialize)]
 pub struct Pay {
     pub r: Vec<f64>,
     pub mw: Vec<f64>,
     pub loc: Vec<f64>,
     pub up: Vec<f64>,
 }
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+
+/// The integer clearing, each rule's prices and the uplift each rule's prices leave.
+/// chp_r and aic_r price the continuous relaxation of the same feasible sets.
+#[derive(Clone, Debug, Serialize)]
 pub struct Run {
     pub uc: Sol,
     pub lmp: Sol,
@@ -49,136 +30,103 @@ pub struct Run {
     pub chp_r: Sol,
     pub aic: Sol,
     pub aic_r: Sol,
+    pub pay_lmp: Pay,
+    pub pay_chp: Pay,
+    pub pay_aic: Pay,
 }
+
+/// Maximal on-blocks [s, e] of commitment u, with whether each begins with a start-up.
 fn blocks(x: &Unit, u: &[f64]) -> Vec<(usize, usize, bool)> {
     let mut v = Vec::new();
-    let mut t = 0;
-    while t < u.len() {
-        if u[t] < 0.5 {
-            t += 1;
+    let mut k = 0;
+    while k < u.len() {
+        if u[k] < 0.5 {
+            k += 1;
             continue;
         }
-        let s = t;
-        while t + 1 < u.len() && u[t + 1] > 0.5 {
-            t += 1;
+        let s = k;
+        while k + 1 < u.len() && u[k + 1] > 0.5 {
+            k += 1;
         }
-        v.push((s, t, s > 0 || x.u0 == 0));
-        t += 1;
+        v.push((s, k, s > 0 || x.u0 == 0));
+        k += 1;
     }
     v
 }
-fn profit(x: &Unit, pi: &[f64], p: &[f64], s: usize, e: usize, start: bool) -> f64 {
+
+fn profit(x: &Unit, pi: &[f64], p: &[f64], (s, e, start): (usize, usize, bool)) -> f64 {
     (s..=e).map(|k| (pi[k] - x.c) * p[k]).sum::<f64>()
         - x.nl * (e - s + 1) as f64
-        - x.su * if start { 1. } else { 0. }
+        - if start { x.su } else { 0. }
 }
-/// Realised block profit and make-whole, lost-opportunity and total uplift.
+
+/// Settle clearing s at prices pi. Total uplift is the best self-scheduled profit less
+/// realised profit; make-whole covers losing blocks up to that uplift; lost opportunity
+/// is the remainder. The cap binds only on losses a unit's initial state forces on it:
+/// a unit that starts offline can always drop a losing block.
 pub fn pay(m: &Market, s: &Sol, pi: &[Vec<f64>]) -> Result<Pay, String> {
-    let m = m.validated()?;
-    let net = m.net.as_ref().unwrap();
-    let t = m.d[0].len();
-    if s.p.len() != m.g.len()
-        || s.u.len() != m.g.len()
-        || pi.len() != net.nb
-        || pi
-            .iter()
-            .any(|r| r.len() != t || r.iter().any(|v| !v.is_finite()))
-    {
-        return Err("pay needs one finite price, output and commitment per unit and period".into());
-    }
-    let mut r = vec![0.; m.g.len()];
-    let mut mw = r.clone();
+    let t = m.t();
+    let (mut r, mut mw, mut up) = (vec![], vec![], vec![]);
     for (i, x) in m.g.iter().enumerate() {
-        if s.p[i].len() != t
-            || s.u[i].len() != t
-            || s.p[i].iter().any(|v| !v.is_finite())
-            || s.u[i].iter().any(|v| ![0., 1.].contains(v))
-        {
-            return Err("pay needs an integer commitment and finite output".into());
-        }
-        let Some((a, b, _)) = unit::trajectory(x, t, &s.u[i], None) else {
-            return Err("the cleared commitment breaks a unit's limits".into());
-        };
-        if a.iter().zip(&b).any(|(row, rhs)| {
-            row.iter().zip(&s.p[i]).map(|(a, p)| a * p).sum::<f64>() > *rhs + 1e-6
-        }) {
-            return Err("the cleared output breaks a unit's limits".into());
-        }
-        for (a, b, start) in blocks(x, &s.u[i]) {
-            let z = profit(x, &pi[net.bus[i]], &s.p[i], a, b, start);
-            r[i] += z;
-            mw[i] += (-z).max(0.);
-        }
-    }
-    let mut up = vec![0.; m.g.len()];
-    for (i, x) in m.g.iter().enumerate() {
-        let q = unit::oracle(x, t, &pi[net.bus[i]], None);
-        let o = q.solve(true)?;
-        up[i] = -o.lb - r[i];
+        let pi = &pi[m.net.bus[i]];
+        let z: Vec<f64> = blocks(x, &s.u[i])
+            .into_iter()
+            .map(|b| profit(x, pi, &s.p[i], b))
+            .collect();
+        let best = -unit::oracle(x, t, pi, None).solve(true)?.lb;
+        r.push(z.iter().sum::<f64>());
+        up.push(best - r[i]);
+        mw.push(
+            z.iter()
+                .map(|z| (-z).max(0.))
+                .sum::<f64>()
+                .min(up[i].max(0.)),
+        );
     }
     let loc = up.iter().zip(&mw).map(|(a, b)| a - b).collect();
     Ok(Pay { r, mw, loc, up })
 }
-/// Cap output on cleared blocks that fail to cover their cost at LMP.
-pub fn pc(m: &Market, s: &Sol, ep: f64, l: Option<&Sol>) -> Result<Vec<Vec<f64>>, String> {
-    let m = m.validated()?;
-    if !ep.is_finite() || ep <= 0. {
-        return Err("ep must be positive and finite".into());
-    }
-    let l = match l {
-        Some(q) => q.clone(),
-        None => clearing::lmp(&m, s, None)?,
-    };
-    let net = m.net.as_ref().unwrap();
-    let t = m.d[0].len();
-    if s.p.len() != m.g.len()
-        || s.u.len() != m.g.len()
-        || s.p
-            .iter()
-            .any(|r| r.len() != t || r.iter().any(|x| !x.is_finite()))
-        || s.u
-            .iter()
-            .any(|r| r.len() != t || r.iter().any(|x| ![0.0, 1.0].contains(x)))
-        || l.pi.len() != net.nb
-        || l.pi
-            .iter()
-            .any(|r| r.len() != t || r.iter().any(|x| !x.is_finite()))
-    {
-        return Err(
-            "pc needs one cleared output, commitment and LMP per unit, bus and period".into(),
-        );
-    }
-    let mut cap = vec![vec![0.; t]; m.g.len()];
+
+/// AIC ceilings: full capacity, except cleared blocks that lose money at prices pi are
+/// capped at their dispatch plus EP, and periods with no cleared output at zero.
+pub fn pc(m: &Market, s: &Sol, pi: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let mut cap = vec![];
     for (i, x) in m.g.iter().enumerate() {
-        cap[i].fill(x.hi);
-        for (a, b, start) in blocks(x, &s.u[i]) {
-            if profit(x, &l.pi[net.bus[i]], &s.p[i], a, b, start) < 0. {
-                for k in a..=b {
-                    cap[i][k] = x.hi.min(s.p[i][k] + ep);
+        let mut c = vec![x.hi; m.t()];
+        for b @ (s0, e, _) in blocks(x, &s.u[i]) {
+            if profit(x, &pi[m.net.bus[i]], &s.p[i], b) < 0. {
+                for k in s0..=e {
+                    c[k] = x.hi.min(s.p[i][k] + EP);
                 }
             }
         }
-        for k in 0..t {
-            if s.p[i][k] <= TOL {
-                cap[i][k] = 0.;
+        for (c, &p) in c.iter_mut().zip(&s.p[i]) {
+            if p <= TOL {
+                *c = 0.;
             }
         }
+        cap.push(c);
     }
-    Ok(cap)
+    cap
 }
-/// Clear once, then calculate LMP and unrestricted and capped hull prices.
-pub fn run(m: &Market, ep: f64) -> Result<Run, String> {
-    let m = m.validated()?;
-    let uc = clearing::uc(&m, None)?;
-    let lmp = clearing::lmp(&m, &uc, None)?;
-    let cap = pc(&m, &uc, ep, Some(&lmp))?;
+
+/// Clear once, then price with LMP, CHP and AIC and settle the clearing at each.
+pub fn run(m: &Market) -> Result<Run, String> {
+    let uc = uc(m, None)?;
+    let lmp = lmp(m, &uc, None)?;
+    let cap = pc(m, &uc, &lmp.pi);
+    let chp = hc(m, None)?;
+    let aic = hc(m, Some(&cap))?;
     Ok(Run {
-        chp: hc(&m, None)?,
-        chp_r: clearing::rx(&m, None)?,
-        aic: hc(&m, Some(&cap))?,
-        aic_r: clearing::rx(&m, Some(&cap))?,
+        pay_lmp: pay(m, &uc, &lmp.pi)?,
+        pay_chp: pay(m, &uc, &chp.pi)?,
+        pay_aic: pay(m, &uc, &aic.pi)?,
+        chp_r: rx(m, None)?,
+        aic_r: rx(m, Some(&cap))?,
         uc,
         lmp,
+        chp,
+        aic,
     })
 }
 
@@ -186,59 +134,54 @@ pub fn run(m: &Market, ep: f64) -> Result<Run, String> {
 mod tests {
     use super::*;
 
-    fn unit(c: f64, hi: f64) -> Unit {
-        Unit {
-            lo: 0.,
-            hi,
-            c,
-            nl: 0.,
-            su: 0.,
-            ru: None,
-            rd: None,
-            sr: None,
-            dr: None,
-            mu: 1,
-            md: 1,
-            u0: 0,
-            p0: 0.,
-            e0: None,
-        }
-    }
-    fn market(g: Unit, d: Vec<f64>) -> Market {
-        Market {
-            g: vec![g],
-            d: vec![d],
-            net: None,
-        }
-    }
-    fn same_price(m: &Market) {
-        let a = crate::hull::hl(m, None).unwrap();
-        let b = hc(m, None).unwrap();
-        assert!((a.z - b.z).abs() < 1e-7, "{} != {}", a.z, b.z);
-        assert!((a.pi[0][0] - b.pi[0][0]).abs() < 1e-7);
+    fn market(x: Unit, d: Vec<f64>) -> Market {
+        Market::new(vec![x], vec![d], None).unwrap()
     }
 
     #[test]
     fn negative_energy_cost_keeps_hull_output_bounded() {
-        let m = market(unit(-5., 10.), vec![5.]);
-        let s = hc(&m, None).unwrap();
+        let s = hc(&market(Unit::new(0., 10., -5.), vec![5.]), None).unwrap();
         assert!((s.z + 25.).abs() < 1e-7);
         assert!((s.p[0][0] - 5.).abs() < 1e-7);
         assert!((s.pi[0][0] + 5.).abs() < 1e-7);
     }
 
     #[test]
-    fn interval_hulls_match_at_initial_on_and_down_states() {
-        let mut on = unit(10., 10.);
-        on.u0 = 1;
-        on.p0 = 5.;
-        on.mu = 2;
-        on.e0 = Some(1);
-        same_price(&market(on, vec![5., 0.]));
+    fn forced_initial_loss_is_not_make_whole() {
+        // On for two more periods whatever the price: losing 20 is the unit's best schedule.
+        let x = Unit {
+            nl: 20.,
+            u0: 1,
+            p0: 50.,
+            mu: 3,
+            e0: Some(1),
+            ..Unit::new(10., 50., 45.)
+        };
+        let m = market(x, vec![12.4]);
+        let s = uc(&m, None).unwrap();
+        let q = pay(&m, &s, &lmp(&m, &s, None).unwrap().pi).unwrap();
+        assert!((q.r[0] + 20.).abs() < 1e-5);
+        assert!(q.up[0].abs() < 1e-5 && q.mw[0].abs() < 1e-5 && q.loc[0].abs() < 1e-5);
+    }
 
-        let mut down = unit(20., 10.);
-        down.md = 2;
-        down.e0 = Some(1);
-        same_price(&market(down, vec![0., 5.]));
+    #[test]
+    fn hull_is_certified_at_initial_on_and_down_states() {
+        let on = Unit {
+            u0: 1,
+            p0: 5.,
+            mu: 2,
+            e0: Some(1),
+            ..Unit::new(0., 10., 10.)
+        };
+        let down = Unit {
+            md: 2,
+            e0: Some(1),
+            ..Unit::new(0., 10., 20.)
+        };
+        for (x, d, z) in [(on, vec![5., 0.], 50.), (down, vec![0., 5.], 100.)] {
+            let s = hc(&market(x, d), None).unwrap();
+            assert!((s.z - z).abs() < 1e-7, "{} != {z}", s.z);
+            assert!(s.gap.abs() < 1e-7, "lb {} below z {}", s.lb, s.z);
+        }
     }
 }

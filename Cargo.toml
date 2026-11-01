@@ -1,6 +1,6 @@
 [package]
 name = "ecp"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Unit commitment, convex-hull prices and uplift on small electricity systems"
@@ -17,5 +17,3 @@ lto = "thin"
 
 [lints.clippy]
 needless_range_loop = "allow"
-too_many_arguments = "allow"
-type_complexity = "allow"

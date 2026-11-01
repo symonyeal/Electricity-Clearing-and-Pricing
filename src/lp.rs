@@ -1,4 +1,8 @@
 //! Sparse linear programs and canonical balance duals; no market-specific rows.
+//!
+//! Problem: minimise c·x subject to a x ≤ b, ae x = be, lb ≤ x ≤ ub, x_j integer where
+//! integer[j]. Solution.dual holds the equality duals; st names the stage that produced
+//! them: opt or gap for a direct solve, otherwise a `price` stage.
 use highs::{HighsModelStatus, RowProblem, Sense};
 
 pub type Row = Vec<(usize, f64)>;
@@ -22,14 +26,10 @@ pub struct Solution {
     pub dual: Vec<f64>,
     pub gap: f64,
     pub lb: f64,
-    pub st: String,
+    pub st: &'static str,
 }
 
 impl Problem {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn col(&mut self, c: f64, lo: f64, hi: f64, integer: bool) -> usize {
         let j = self.c.len();
         self.c.push(c);
@@ -43,11 +43,31 @@ impl Problem {
         self.a.push(a);
         self.b.push(b);
     }
+
     pub fn eq(&mut self, a: Row, b: f64) {
         self.ae.push(a);
         self.be.push(b);
     }
 
+    /// Copy q's columns and rows into self; returns the index of q's first column.
+    pub fn append(&mut self, q: &Problem) -> usize {
+        let o = self.c.len();
+        self.c.extend(&q.c);
+        self.lb.extend(&q.lb);
+        self.ub.extend(&q.ub);
+        self.integer.extend(&q.integer);
+        let shift = |a: &Row| a.iter().map(|&(j, v)| (o + j, v)).collect();
+        for (a, &b) in q.a.iter().zip(&q.b) {
+            self.row(shift(a), b);
+        }
+        for (a, &b) in q.ae.iter().zip(&q.be) {
+            self.eq(shift(a), b);
+        }
+        o
+    }
+
+    /// Solve with HiGHS. A bound solve disables presolve and tightens feasibility to 1e-9
+    /// so that `lb` is the solver's certified objective bound.
     pub fn solve(&self, bound: bool) -> Result<Solution, String> {
         self.solve_with(bound, false, false)
     }
@@ -124,6 +144,7 @@ impl Problem {
         }
         let solved = model.try_solve().map_err(|e| format!("solve: {e:?}"))?;
         let status = solved.status();
+        // Presolve can report infeasibility of a feasible program; confirm without it.
         if status == HighsModelStatus::Infeasible && !bound && !no_presolve {
             return self.solve_with(false, true, ipm);
         }
@@ -147,7 +168,7 @@ impl Problem {
             dual: s.dual_rows()[self.a.len()..].to_vec(),
             gap,
             lb,
-            st: if gap == 0.0 { "opt" } else { "gap" }.into(),
+            st: if gap == 0.0 { "opt" } else { "gap" },
         })
     }
 }
@@ -156,12 +177,13 @@ fn ceiling(v: f64) -> f64 {
     v + 1e-9 * v.abs().max(1.0)
 }
 
-/// Minimize demand payment over the optimal dual face, then refine balance prices.
-/// The last nt equalities are balance rows. All primal bounds enter the dual explicitly.
+/// Minimise demand payment over the optimal dual face, then refine balance prices.
+/// The last nt ≥ 1 equalities are balance rows; all primal bounds enter the dual
+/// explicitly, and stationarity is an equality. Stages: raw (face LP failed), pay
+/// (nt > 24: payment only), probe (an interior point of the face agrees with the vertex),
+/// walk (lexicographic minimum over the balance prices), part (walk stopped early).
 pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
-    if nt > p.be.len() || p.integer.iter().any(|x| *x) {
-        return Err("pricing requires a continuous program and valid balance count".into());
-    }
+    assert!((1..=p.be.len()).contains(&nt) && !p.integer.iter().any(|x| *x));
     let mut p = p.clone();
     for j in 0..p.c.len() {
         if p.lb[j].is_finite() {
@@ -174,12 +196,8 @@ pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
         p.ub[j] = f64::INFINITY;
     }
     let mut s = p.solve(false)?;
-    s.st = "dual".into();
-    if nt == 0 {
-        return Ok(s);
-    }
     let (m, e, n) = (p.a.len(), p.ae.len(), p.c.len());
-    let mut d = Problem::new();
+    let mut d = Problem::default();
     for j in 0..m + e {
         let c = if j >= m + e - nt { p.be[j - m] } else { 0.0 };
         d.col(
@@ -207,7 +225,7 @@ pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
         ceiling(-s.z),
     );
     let Ok(q) = d.solve(false) else {
-        s.st = "raw".into();
+        s.st = "raw";
         return Ok(s);
     };
     s.dual = q.x[m..].to_vec();
@@ -220,7 +238,7 @@ pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
         ceiling(q.z),
     );
     if nt > 24 {
-        s.st = "pay".into();
+        s.st = "pay";
         return Ok(s);
     }
     let mut probe = d.clone();
@@ -235,7 +253,7 @@ pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f64::max);
         if delta <= 1e-3 {
-            s.st = "probe".into();
+            s.st = "probe";
             return Ok(s);
         }
     }
@@ -243,13 +261,13 @@ pub fn price(p: &Problem, nt: usize) -> Result<Solution, String> {
         d.c.fill(0.0);
         d.c[m + e - nt + t] = 1.0;
         let Ok(q) = d.solve(false) else {
-            s.st = "part".into();
+            s.st = "part";
             return Ok(s);
         };
         s.dual = q.x[m..].to_vec();
         d.row(vec![(m + e - nt + t, 1.0)], ceiling(q.z));
     }
-    s.st = "walk".into();
+    s.st = "walk";
     Ok(s)
 }
 
@@ -258,7 +276,7 @@ mod tests {
     use super::*;
     #[test]
     fn free_column_dual_is_equality() {
-        let mut p = Problem::new();
+        let mut p = Problem::default();
         p.col(7.0, f64::NEG_INFINITY, f64::INFINITY, false);
         p.eq(vec![(0, 1.0)], 3.0);
         let s = price(&p, 1).unwrap();
@@ -267,7 +285,7 @@ mod tests {
     }
     #[test]
     fn integer_certificate_and_failure() {
-        let mut p = Problem::new();
+        let mut p = Problem::default();
         p.col(1.0, 0.0, 3.0, true);
         p.row(vec![(0, -1.0)], -1.5);
         let s = p.solve(true).unwrap();

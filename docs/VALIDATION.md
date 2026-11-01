@@ -1,30 +1,46 @@
 # Validation
 
-The native engine is compared against the independent Python implementation at revision
-`ec91593`. `tests/fixtures/pricing.json` records input data, solver-stack versions,
-outcomes and the expected infeasibility for 29 markets:
+## Cases
 
-- Five published or synthetic network cases, `ex1` through `ex5`.
-- Twenty seeded two-unit, three-period markets, seeds 0 through 19.
-- Initial-on and initial-off duration obligations, zero demand and infeasible minimum output.
+`cases/1.json` to `cases/5.json` are the built-in cases, run with `ecp case <n>`.
 
-The parity test checks UC, relaxation, LMP, both direct hull values and their AIC-capped
-values; output ceilings; Lagrangian values at hull and arbitrary prices; and payment
-components for the five named cases. It checks demand payment separately from price
-coordinates. It also verifies that its comparator rejects a deliberately wrong pair.
-This is a numerical comparison over that fixture, not bitwise identity for every input.
+| Case | Construction | Pinned result |
+| --- | --- | --- |
+| 1 | Hua-Baldick, one period | LMP 50/MWh; CHP 12/MWh |
+| 2 | Hua-Baldick, three periods and ramping | CHP (60, 60, 65.6)/MWh |
+| 3 | Chen-O'Neill-Whitman FERC case | Clearing 7,340; peak LMP 90, CHP 276, full p-cut AIC 422/MWh |
+| 4 | Synthetic equal-reactance three-bus loop | Clearing 2,100; hull nodal prices (10, 30, 50)/MWh |
+| 5 | Synthetic two-zone offers and demand | Transfer bounds [−3500, 2200] MW; clearing 275,000 |
 
-Other native checks cover free-column dual stationarity, integer bound read-back,
-infeasibility, negative energy cost, initial-state hull agreement, clearing enumeration
-and generated hulls against direct hulls.
+In case 3, LMP leaves 1,690 of uplift, all make-whole; CHP leaves 365, all lost
+opportunity. The FERC talk reports an AIC price of 146.33/MWh. Restricting the second
+unit to its cleared and off schedules gives that value; the full p-cut hull used here
+gives 422. These are different feasible sets, and the talk does not establish that its
+AIC row used the later cuts, so 146.33 is not treated as the unrestricted answer.
 
-The comparison tolerance is 1e-6 plus 1e-7 times the larger magnitude, with a minimum
-scale of one. It applies to numeric values without rounding the fixture. The suite also
-checks JSON/stdin routing and rejects malformed offers and unknown routes.
+## Checks
 
-Before archiving the old runtime, its full suite passed 649 tests on Python 3.14.7,
-NumPy 2.5.3 and SciPy 1.18.1 (2026-10-30). This establishes the baseline's test state;
-the maintained gates below execute only Rust.
+`tests/fixtures/pricing.json` holds 29 markets and their outputs from the independent
+implementation at revision `ec91593`, with its solver-stack versions:
+
+- the five cases above;
+- twenty seeded two-unit, three-period markets, seeds 0 to 19;
+- initial-on and initial-off duration obligations, zero demand and infeasible minimum
+  output.
+
+`tests/parity.rs` compares the clearing, relaxation, LMP and hull costs, the hull and
+relaxation costs under AIC ceilings, the ceilings themselves, the Lagrangian value at the
+hull price and at arbitrary prices, and, for the five cases, every payment component and
+demand payment. Price coordinates can be nonunique when value and demand payment agree,
+so coordinates are not compared. The tolerance is 1e-6 plus 1e-7 times the larger
+magnitude, with scale at least one; the comparator is shown to reject a wrong pair. This
+is a numerical comparison over the fixture, not identity for every input.
+
+`tests/cli.rs` reproduces the case 3 results above from the command line and checks
+standard-input routing and rejection of malformed input. Unit tests cover free-column
+dual stationarity, integer bound read-back, infeasibility, negative energy cost, hull
+certificates at initial-on and initial-off states, mixed DC and transfer networks, and
+a loss forced by initial state.
 
 ## Reproduce
 
@@ -34,11 +50,6 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-The fixture's producing implementation is recoverable from Git revision `ec91593`.
-The generator and original numerical outputs are preserved in the local archive.
-Their runtime is unnecessary for the maintained checks. Later solver versions can choose
-different optimal faces, so the comparator checks values and payments at stated tolerances.
-
-Historical validation and larger Python experiments remain in Git history at that
-revision. They do not establish native runtime, native scale or a full-year replay after
-clock-alignment repairs.
+The fixture's producing implementation and earlier studies are recoverable from revision
+`ec91593`; their runtime is not needed for these checks. Later solver versions can choose
+different optimal faces, which is why values and payments, not coordinates, are compared.
