@@ -29,12 +29,23 @@ cargo build --locked
 cargo run --locked -- case 3
 cargo run --locked -- case 4 chp
 cargo run --locked -- solve cases/2.json lmp
+cargo run --locked -- case 3 study
 ```
 
 `ecp` writes JSON to standard output, and errors to standard error with a nonzero exit
 code; `ecp solve - chp` reads standard input. Routes are `uc`, `lmp`, `rx`, `chp`,
 `aic` and `all` (default), which reports every rule's prices and the settlement
-(`pay_lmp`, `pay_chp`, `pay_aic`). Results carry the bound, gap and price-selection stage.
+(`pay_lmp`, `pay_chp`, `pay_aic`). Results carry the bound, gap, primal `status` and
+separate `price_selection`. `study` explores demand sensitivity with 17 adaptively placed
+samples over 80–100% of the supplied demand, retaining the full input and each settlement.
+[Method and source choice](docs/STUDY.md).
+
+The library keeps `Market` and binary `Clearing` immutable. Read market data through
+`units()`, `demand()` and `network()`; rebuild through `Market::new` after a change.
+Fixed-commitment pricing and settlement accept `Clearing`, while relaxations return
+`Sol`. Price and ceiling matrices are checked at each public entry point. Numerical
+failures use typed `Error` variants. In version 0.4, `pc` returns `Result` and the old
+combined `st` output is replaced by `status` and `price_selection`.
 
 ## Structure
 
@@ -46,7 +57,8 @@ code; `ecp solve - chp` reads standard input. Routes are `uc`, `lmp`, `rx`, `chp
 | `src/clearing.rs` | Integer clearing, relaxation and fixed-commitment dispatch |
 | `src/hull.rs` | Interval-graph hulls and the Lagrangian certificate |
 | `src/pricing.rs` | Settlement, AIC ceilings and the comparison of rules |
-| `src/lp.rs` | Sparse programs, HiGHS, solver certificates and dual-face selection |
+| `src/lp.rs` | Sparse programs, HiGHS and solver certificates |
+| `src/study.rs` | Adaptive demand sensitivity using the existing pricing route |
 | `src/main.rs` | Command routing and the built-in cases in `cases/` |
 
 ## Checks

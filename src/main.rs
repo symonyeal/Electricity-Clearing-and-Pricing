@@ -1,11 +1,11 @@
-use ecp::{clearing, hull, market::Market, pricing};
+use ecp::{clearing, hull, market::Market, pricing, study};
 use std::{
     env, fs,
     io::{self, Read},
 };
 
-const USAGE: &str = "ecp case <1..5> [uc|lmp|rx|chp|aic|all]
-ecp solve <market.json|-> [uc|lmp|rx|chp|aic|all]
+const USAGE: &str = "ecp case <1..5> [uc|lmp|rx|chp|aic|all|study]
+ecp solve <market.json|-> [uc|lmp|rx|chp|aic|all|study]
 
 Default route: all. JSON output on stdout; errors on stderr.";
 
@@ -49,10 +49,11 @@ fn execute(args: &[String]) -> Result<(), String> {
         "chp" => serde_json::to_value(hull::hc(&m, None)?),
         "aic" => {
             let s = clearing::uc(&m, None)?;
-            let cap = pricing::pc(&m, &s, &clearing::lmp(&m, &s, None)?.pi);
+            let cap = pricing::pc(&m, &s, &clearing::lmp(&m, &s, None)?.pi)?;
             serde_json::to_value(hull::hc(&m, Some(&cap))?)
         }
         "all" => serde_json::to_value(pricing::run(&m)?),
+        "study" => serde_json::to_value(study::demand(&m)),
         _ => return Err(format!("unknown route: {route}")),
     }
     .map_err(|e| e.to_string())?;

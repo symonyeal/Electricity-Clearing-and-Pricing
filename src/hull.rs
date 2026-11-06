@@ -4,6 +4,7 @@
 //! source. An idle arc spends one period off; an on-arc runs an interval [s, s + n) and then
 //! spends md periods off, carrying the perspective of that interval's dispatch polytope.
 //! A unit's hull is the flow polytope of its graph: O(T²) arcs and O(T³) dispatch columns.
+use crate::error::Error;
 use crate::{
     lp::Problem,
     market::{Market, Sol, cap},
@@ -91,7 +92,8 @@ fn arcs(x: &Unit, t: usize, ceil: Option<&[f64]>) -> Vec<Arc> {
 
 /// Price the product of the units' exact hulls. lb is the Lagrangian value at the
 /// selected price, which certifies it: lb = z at a convex-hull price.
-pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
+pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, Error> {
+    m.caps(ceil)?;
     let t = m.t();
     let w = t + 2;
     let sets: Vec<Vec<Arc>> =
@@ -140,8 +142,8 @@ pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
             inj.extend((0..a.n).map(|j| (i, a.s + j, o + j, 1.)));
         }
     }
-    m.close(&mut p, inj);
-    let (r, pi) = m.price(&p)?;
+    let balances = m.close(&mut p, inj);
+    let (r, pi, selection) = m.price(&p, &balances)?;
     let mut out = vec![vec![0.; t]; m.g.len()];
     let mut u = out.clone();
     for (i, (set, c)) in sets.iter().zip(&cols).enumerate() {
@@ -158,7 +160,8 @@ pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
         p: out,
         u,
         pi,
-        st: r.st,
+        status: r.status,
+        price_selection: Some(selection),
         gap: (r.z - lb) / r.z.abs().max(1.),
         lb,
     })
@@ -166,7 +169,9 @@ pub fn hc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
 
 /// Lagrangian value q(π) = π·d + Σ_i min self-schedule cost_i(π) + W(π) from certified
 /// unit bounds; q(π) ≤ clearing cost for every π (weak duality).
-pub fn qd(m: &Market, pi: &[Vec<f64>], ceil: Option<&[Vec<f64>]>) -> Result<f64, String> {
+pub fn qd(m: &Market, pi: &[Vec<f64>], ceil: Option<&[Vec<f64>]>) -> Result<f64, Error> {
+    m.prices(pi)?;
+    m.caps(ceil)?;
     let t = m.t();
     let mut z: f64 = pi
         .iter()

@@ -1,108 +1,143 @@
 //! Integer clearing, its continuous relaxation and fixed-commitment dispatch.
-//!
-//! Each program stacks one block per unit, whose first t columns are dispatch, and closes
-//! the nodal balances over them.
+use crate::error::Error;
 use crate::{
     lp::Problem,
-    market::{Market, Sol, cap},
-    unit,
+    market::{Clearing, Market, Sol, cap},
+    unit::{self, Block},
 };
 
-fn stack(m: &Market, blocks: impl IntoIterator<Item = Problem>) -> (Problem, Vec<usize>) {
-    let t = m.t();
-    let mut p = Problem::default();
-    let o: Vec<usize> = blocks.into_iter().map(|q| p.append(&q)).collect();
-    m.close(
-        &mut p,
-        o.iter()
-            .enumerate()
-            .flat_map(|(i, &j)| (0..t).map(move |k| (i, k, j + k, 1.))),
-    );
-    (p, o)
+struct System {
+    p: Problem,
+    dispatch: Vec<Vec<usize>>,
+    commitment: Vec<Vec<usize>>,
+    balances: Vec<usize>,
 }
 
-/// The commitment program over every unit's full feasible set.
-fn system(m: &Market, ceil: Option<&[Vec<f64>]>, integer: bool) -> (Problem, Vec<usize>) {
-    let t = m.t();
-    stack(
+fn stack(m: &Market, blocks: impl IntoIterator<Item = Block>) -> System {
+    let mut p = Problem::default();
+    let (mut dispatch, mut commitment) = (vec![], vec![]);
+    for q in blocks {
+        let o = p.append(&q.p);
+        dispatch.push(q.dispatch.iter().map(|j| o + j).collect::<Vec<_>>());
+        commitment.push(q.commitment.iter().map(|j| o + j).collect::<Vec<_>>());
+    }
+    let balances = m.close(
+        &mut p,
+        dispatch
+            .iter()
+            .enumerate()
+            .flat_map(|(i, r)| r.iter().enumerate().map(move |(k, &j)| (i, k, j, 1.))),
+    );
+    System {
+        p,
+        dispatch,
+        commitment,
+        balances,
+    }
+}
+
+fn system(m: &Market, ceil: Option<&[Vec<f64>]>, integer: bool) -> Result<System, Error> {
+    m.caps(ceil)?;
+    Ok(stack(
         m,
         m.g.iter().enumerate().map(|(i, x)| {
-            let mut q = unit::rows(x, t, cap(ceil, i));
-            q.integer[t..].fill(integer);
+            let mut q = unit::rows(x, m.t(), cap(ceil, i));
+            q.integrality(integer);
             q
         }),
-    )
+    ))
 }
 
-/// x[o_i + s + k] for each unit i and period k, with magnitudes below 1e-9 set to zero.
-fn take(x: &[f64], o: &[usize], s: usize, t: usize) -> Vec<Vec<f64>> {
-    o.iter()
-        .map(|&j| {
-            x[j + s..j + s + t]
-                .iter()
-                .map(|&v| if v.abs() < 1e-9 { 0. } else { v })
+fn take(x: &[f64], cols: &[Vec<usize>]) -> Vec<Vec<f64>> {
+    cols.iter()
+        .map(|r| {
+            r.iter()
+                .map(|&j| if x[j].abs() < 1e-9 { 0. } else { x[j] })
                 .collect()
         })
         .collect()
 }
 
-/// Minimise commitment and dispatch cost on the market's complete feasible set.
-pub fn uc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
-    let t = m.t();
-    let (p, o) = system(m, ceil, true);
-    let s = p.solve(false)?;
-    let u = take(&s.x, &o, t, t)
-        .into_iter()
-        .map(|r| r.into_iter().map(f64::round).collect())
-        .collect();
-    Ok(Sol {
-        z: s.z,
-        p: take(&s.x, &o, 0, t),
-        u,
-        pi: vec![],
-        st: s.st,
-        gap: s.gap,
-        lb: s.lb,
+/// Minimise commitment and dispatch cost. Only this binary result can be settled or fixed.
+///
+/// ```compile_fail
+/// # use ecp::{clearing, market::Market, unit::Unit};
+/// # let m = Market::new(vec![Unit::new(0.,10.,5.)],vec![vec![5.]],None).unwrap();
+/// let relaxation = clearing::rx(&m, None).unwrap();
+/// clearing::lmp(&m, &relaxation, None); // fractional result is not a Clearing
+/// ```
+pub fn uc(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Clearing, Error> {
+    let q = system(m, ceil, true)?;
+    let s = q.p.solve(false)?;
+    let mut u = take(&s.x, &q.commitment);
+    for v in u.iter_mut().flatten() {
+        if (*v - v.round()).abs() > 1e-6 {
+            return Err("solver returned a nonbinary commitment".into());
+        }
+        *v = v.round();
+    }
+    Ok(Clearing {
+        market: m.clone(),
+        sol: Sol {
+            z: s.z,
+            p: take(&s.x, &q.dispatch),
+            u,
+            pi: vec![],
+            status: s.status,
+            price_selection: None,
+            gap: s.gap,
+            lb: s.lb,
+        },
     })
 }
 
-/// Relax commitment integrality and select canonical balance prices.
-pub fn rx(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
-    let t = m.t();
-    let (p, o) = system(m, ceil, false);
-    let (s, pi) = m.price(&p)?;
+/// Relax commitment integrality and select balance prices.
+pub fn rx(m: &Market, ceil: Option<&[Vec<f64>]>) -> Result<Sol, Error> {
+    let q = system(m, ceil, false)?;
+    let (s, pi, selection) = m.price(&q.p, &q.balances)?;
     Ok(Sol {
         z: s.z,
-        p: take(&s.x, &o, 0, t),
-        u: take(&s.x, &o, t, t),
+        p: take(&s.x, &q.dispatch),
+        u: take(&s.x, &q.commitment),
         pi,
-        st: s.st,
+        status: s.status,
+        price_selection: Some(selection),
         gap: 0.,
         lb: s.z,
     })
 }
 
-/// Re-dispatch with binary commitment s.u fixed and select its balance prices; the
-/// commitment's fixed costs are added after pricing.
-pub fn lmp(m: &Market, s: &Sol, ceil: Option<&[Vec<f64>]>) -> Result<Sol, String> {
-    let t = m.t();
-    let mut k = 0.;
-    let mut blocks = Vec::with_capacity(m.g.len());
+/// Re-dispatch a binary clearing from this exact market and select its balance prices.
+pub fn lmp(m: &Market, s: &Clearing, ceil: Option<&[Vec<f64>]>) -> Result<Clearing, Error> {
+    s.check(m)?;
+    m.caps(ceil)?;
+    let mut fixed = 0.;
+    let mut blocks = vec![];
     for (i, x) in m.g.iter().enumerate() {
-        let (q, f) = unit::trajectory(x, t, &s.u[i], cap(ceil, i))
+        let (p, f) = unit::trajectory(x, m.t(), &s.u[i], cap(ceil, i))
             .ok_or("the fixed commitment breaks a unit's own limits")?;
-        k += f;
-        blocks.push(q);
+        fixed += f;
+        blocks.push(Block {
+            p,
+            dispatch: (0..m.t()).collect(),
+            commitment: vec![],
+            start: vec![],
+            stop: vec![],
+        });
     }
-    let (p, o) = stack(m, blocks);
-    let (r, pi) = m.price(&p)?;
-    Ok(Sol {
-        z: r.z + k,
-        p: take(&r.x, &o, 0, t),
-        u: s.u.clone(),
-        pi,
-        st: r.st,
-        gap: 0.,
-        lb: r.z + k,
+    let q = stack(m, blocks);
+    let (r, pi, selection) = m.price(&q.p, &q.balances)?;
+    Ok(Clearing {
+        market: m.clone(),
+        sol: Sol {
+            z: r.z + fixed,
+            p: take(&r.x, &q.dispatch),
+            u: s.u.clone(),
+            pi,
+            status: r.status,
+            price_selection: Some(selection),
+            gap: 0.,
+            lb: r.z + fixed,
+        },
     })
 }

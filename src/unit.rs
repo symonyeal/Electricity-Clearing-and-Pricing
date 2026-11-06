@@ -6,11 +6,11 @@
 //! before the horizon; e0 periods spent in state u0. Omitted ramps default to hi and e0 to
 //! max(mu, md).
 use crate::lp::Problem;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const TOL: f64 = 1e-7;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Unit {
     pub lo: f64,
@@ -106,7 +106,23 @@ impl Unit {
 
 /// The unit's feasible set over columns [p | u | v | w], with cost c p + nl u + su v.
 /// Initial-state obligations fix u by bounds; cap[k] bounds p_k.
-pub fn rows(x: &Unit, t: usize, cap: Option<&[f64]>) -> Problem {
+pub(crate) struct Block {
+    pub p: Problem,
+    pub dispatch: Vec<usize>,
+    pub commitment: Vec<usize>,
+    pub start: Vec<usize>,
+    pub stop: Vec<usize>,
+}
+
+impl Block {
+    pub fn integrality(&mut self, integer: bool) {
+        for &j in self.commitment.iter().chain(&self.start).chain(&self.stop) {
+            self.p.integer[j] = integer;
+        }
+    }
+}
+
+pub(crate) fn rows(x: &Unit, t: usize, cap: Option<&[f64]>) -> Block {
     let [ru, rd, sr, dr] = x.ramps();
     let (e0, u0) = (x.e0(), f64::from(x.u0));
     let mut q = Problem::default();
@@ -114,9 +130,9 @@ pub fn rows(x: &Unit, t: usize, cap: Option<&[f64]>) -> Problem {
         q.col(x.c, 0., x.hi, false);
     }
     for k in 0..t {
-        let (lo, hi) = if x.u0 == 1 && k + e0 < x.mu {
+        let (lo, hi) = if x.u0 == 1 && k.saturating_add(e0) < x.mu {
             (1., 1.)
-        } else if x.u0 == 0 && k + e0 < x.md {
+        } else if x.u0 == 0 && k.saturating_add(e0) < x.md {
             (0., 0.)
         } else {
             (0., 1.)
@@ -178,23 +194,37 @@ pub fn rows(x: &Unit, t: usize, cap: Option<&[f64]>) -> Problem {
         }
         q.eq(a, if k == 0 { -u0 } else { 0. });
     }
-    q
+    Block {
+        p: q,
+        dispatch: (0..t).collect(),
+        commitment: (t..2 * t).collect(),
+        start: (2 * t..3 * t).collect(),
+        stop: (3 * t..4 * t).collect(),
+    }
 }
 
 /// The unit's self-schedule at prices pi: its feasible set with revenue pi·p subtracted.
 pub(crate) fn oracle(x: &Unit, t: usize, pi: &[f64], cap: Option<&[f64]>) -> Problem {
     let mut p = rows(x, t, cap);
-    for k in 0..t {
-        p.c[k] -= pi[k];
+    for (&j, &v) in p.dispatch.iter().zip(pi) {
+        p.p.c[j] -= v;
     }
-    p.integer[t..].fill(true);
-    p
+    p.integrality(true);
+    p.p
 }
 
 /// Fix binary schedule u in `rows`: returns the dispatch block {p : a p ≤ b, 0 ≤ p ≤ hi}
 /// over t columns and its fixed cost nl Σu + su Σv, or None when u breaks the unit's limits.
 pub fn trajectory(x: &Unit, t: usize, u: &[f64], cap: Option<&[f64]>) -> Option<(Problem, f64)> {
-    let full = rows(x, t, cap);
+    if t == 0
+        || x.check().is_err()
+        || u.len() != t
+        || u.iter().any(|v| *v != 0. && *v != 1.)
+        || cap.is_some_and(|c| c.len() != t || c.iter().any(|v| !v.is_finite() || *v < 0.))
+    {
+        return None;
+    }
+    let full = rows(x, t, cap).p;
     if (0..t).any(|k| u[k] < full.lb[t + k] || u[k] > full.ub[t + k]) {
         return None;
     }
@@ -237,6 +267,21 @@ pub fn trajectory(x: &Unit, t: usize, u: &[f64], cap: Option<&[f64]>) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn auxiliary_column_is_not_a_commitment_variable() {
+        let mut q = rows(&Unit::new(0., 10., 5.), 1, None);
+        let j = q.p.col(0., 0., 2., false);
+        q.integrality(true);
+        assert!(!q.p.integer[j]);
+        assert!(!q.p.integer[q.dispatch[0]]);
+        assert!(
+            q.commitment
+                .iter()
+                .chain(&q.start)
+                .chain(&q.stop)
+                .all(|&j| q.p.integer[j])
+        );
+    }
     #[test]
     fn trajectory_fixes_schedule_and_respects_minimum_up_time() {
         let x = Unit {
