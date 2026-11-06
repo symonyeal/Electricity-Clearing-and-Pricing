@@ -90,7 +90,10 @@ fn baseline_values_and_payments_match() {
                     .as_str()
                     .unwrap_or_else(|| panic!("{name}: unexpected UC error: {e}"));
                 if want.contains("infeasible") {
-                    assert!(e.to_lowercase().contains("infeasible"), "{name}: {e}");
+                    assert!(
+                        e.to_string().to_lowercase().contains("infeasible"),
+                        "{name}: {e}"
+                    );
                 }
                 None
             }
@@ -118,7 +121,7 @@ fn baseline_values_and_payments_match() {
             let lmp = clearing::lmp(&market, &uc, None)
                 .unwrap_or_else(|e| panic!("{name}: LMP failed: {e}"));
             expect_cost(lmp.z, expected, name, "lmp");
-            let cap = pricing::pc(&market, &uc, &lmp.pi);
+            let cap = pricing::pc(&market, &uc, &lmp.pi).unwrap();
             let cap_want = matrix(&expected["pc"]);
             for (i, (got, want)) in cap.iter().zip(&cap_want).enumerate() {
                 for (t, (&a, &b)) in got.iter().zip(want).enumerate() {
@@ -138,15 +141,15 @@ fn baseline_values_and_payments_match() {
                 let pay = pricing::pay(&market, &uc, &lmp.pi)
                     .unwrap_or_else(|e| panic!("{name}.pay_lmp failed: {e}"));
                 expect_pay(&pay, expected, name, "pay_lmp");
-                let paid = demand_payment(&lmp.pi, &market.d);
-                let want = demand_payment(&matrix(&expected["lmp"]["pi"]), &market.d);
+                let paid = demand_payment(&lmp.pi, market.demand());
+                let want = demand_payment(&matrix(&expected["lmp"]["pi"]), market.demand());
                 close(paid, want, &format!("{name}.lmp demand payment"));
 
                 let pay = pricing::pay(&market, &uc, &chp.pi)
                     .unwrap_or_else(|e| panic!("{name}.pay_chp failed: {e}"));
                 expect_pay(&pay, expected, name, "pay_chp");
-                let paid = demand_payment(&chp.pi, &market.d);
-                let want = demand_payment(&matrix(&expected["hc"]["pi"]), &market.d);
+                let paid = demand_payment(&chp.pi, market.demand());
+                let want = demand_payment(&matrix(&expected["hc"]["pi"]), market.demand());
                 close(paid, want, &format!("{name}.chp demand payment"));
 
                 let pay = pricing::pay(&market, &uc, &arbitrary)

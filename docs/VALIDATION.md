@@ -42,6 +42,20 @@ dual stationarity, integer bound read-back, infeasibility, negative energy cost,
 certificates at initial-on and initial-off states, mixed DC and transfer networks, and
 a loss forced by initial state.
 
+`tests/boundaries.rs` rejects ragged/nonfinite prices, malformed ceilings, fractional
+or incomplete fixed schedules, and clearing reuse after a market change. Compile-fail
+examples prevent market mutation and supplying a relaxation to fixed-commitment pricing.
+Handle tests append a continuous auxiliary column and an equality after balances;
+prices and integer domains keep their meanings. A finite price grid checks weak duality
+on the original two-bus counterexample. These are bounded regressions, not a proof over
+all markets. Injected dual-face failure verifies that raw prices cannot satisfy the
+payment-selection policy; a 25-coordinate case reports payment-only quality. Typed
+infeasible and unbounded outcomes are checked separately from solver faults.
+
+The adaptive study is checked against analytic costs and zero uplift for a one-unit
+linear market. Its FERC case run retains all 17 settlements; it is exploratory sensitivity
+analysis, with the input and limitations described in [the method](STUDY.md).
+
 ## Reproduce
 
 ```text

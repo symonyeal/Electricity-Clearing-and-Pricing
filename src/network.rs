@@ -2,10 +2,10 @@
 //!
 //! A DC line [a, b, x, f] carries (θ_a − θ_b)/x from a to b with |flow| ≤ f; θ_0 = 0.
 //! A transfer [a, b, [lo, hi]] with a < b carries a free flow in [lo, hi] from a to b.
-use crate::lp::Problem;
-use serde::Deserialize;
+use crate::{error::Error, lp::Problem};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Network {
     pub bus: Vec<usize>,
@@ -13,7 +13,7 @@ pub struct Network {
     pub ln: Vec<Line>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum Line {
     Dc((usize, usize, f64, f64)),
@@ -84,7 +84,16 @@ impl Network {
 
     /// W(π) = min over network flows of −Σ π_bk · (net import into b in k): the network
     /// term left by relaxing the nodal balances at prices π[b][k].
-    pub fn value(&self, t: usize, pi: &[Vec<f64>]) -> Result<f64, String> {
+    pub fn value(&self, t: usize, pi: &[Vec<f64>]) -> Result<f64, Error> {
+        if t == 0
+            || pi.is_empty()
+            || pi
+                .iter()
+                .any(|r| r.len() != t || r.iter().any(|v| !v.is_finite()))
+        {
+            return Err("network prices must be a nonempty finite bus-by-period matrix".into());
+        }
+        self.check(self.bus.len(), pi.len())?;
         if self.ln.is_empty() {
             return Ok(0.);
         }
