@@ -20,7 +20,7 @@ AIC row used the later cuts, so 146.33 is not treated as the unrestricted answer
 
 ## Checks
 
-`tests/fixtures/pricing.json` holds 29 markets and their outputs from the independent
+`tests/fixtures/pricing.json` holds 29 markets and their outputs from the earlier
 implementation at revision `ec91593`, with its solver-stack versions:
 
 - the five cases above;

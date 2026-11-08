@@ -67,7 +67,7 @@ fn priority(a: &Point, b: &Point) -> f64 {
 /// Scaling is a modeled perturbation of supplied inputs, never an observed demand forecast.
 pub fn demand(m: &Market) -> Study {
     let mut points: Vec<_> = (0..5)
-        .map(|i| point(m, 0.8 + 0.05 * f64::from(i)))
+        .map(|i| point(m, f64::from(80 + 5 * i) / 100.))
         .collect();
     while points.len() < 17 {
         let j = points

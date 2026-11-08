@@ -1,4 +1,4 @@
-//! Regression cases from the independent architecture review.
+//! Boundary and regression cases.
 use ecp::{
     clearing, hull,
     market::Market,

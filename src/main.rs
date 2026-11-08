@@ -17,6 +17,17 @@ const CASES: [&str; 5] = [
     include_str!("../cases/5.json"),
 ];
 
+/// Whether any result carries `price_selection: "payment"`.
+fn payment_only(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Object(o) => o
+            .iter()
+            .any(|(k, x)| (k == "price_selection" && x == "payment") || payment_only(x)),
+        serde_json::Value::Array(a) => a.iter().any(payment_only),
+        _ => false,
+    }
+}
+
 fn execute(args: &[String]) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] || args == ["-h"] {
         println!("{USAGE}");
@@ -57,6 +68,12 @@ fn execute(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("unknown route: {route}")),
     }
     .map_err(|e| e.to_string())?;
+    if payment_only(&result) {
+        eprintln!(
+            "ecp: warning: more than 24 balance rows; prices minimise demand payment only \
+             (price_selection \"payment\") and are one vertex of the optimal dual face"
+        );
+    }
     println!(
         "{}",
         serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?

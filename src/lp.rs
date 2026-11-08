@@ -7,6 +7,9 @@ use crate::error::Error;
 use highs::{HighsModelStatus, RowProblem, Sense};
 use serde::Serialize;
 
+/// Tolerance for feasibility and sign tests on model quantities.
+pub const TOL: f64 = 1e-7;
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {

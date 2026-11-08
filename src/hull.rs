@@ -6,12 +6,10 @@
 //! A unit's hull is the flow polytope of its graph: O(T²) arcs and O(T³) dispatch columns.
 use crate::error::Error;
 use crate::{
-    lp::Problem,
+    lp::{Problem, TOL},
     market::{Market, Sol, cap},
     unit::{self, Unit},
 };
-
-const TOL: f64 = 1e-7;
 
 /// Arc from → to, running periods s..s + n (n = 0 when idle) under rows a q ≤ b λ.
 struct Arc {

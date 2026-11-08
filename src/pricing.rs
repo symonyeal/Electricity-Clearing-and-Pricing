@@ -1,6 +1,6 @@
 //! Settlement at a price, AIC output ceilings and the full comparison of price rules.
 use crate::error::Error;
-use crate::lp::{Problem, Solution};
+use crate::lp::{Problem, Solution, TOL};
 use crate::{
     clearing::{lmp, rx, uc},
     hull::hc,
@@ -31,7 +31,6 @@ impl Selection {
     }
 }
 
-const TOL: f64 = 1e-7;
 /// AIC output relaxation above a losing block's cleared dispatch, MW.
 const EP: f64 = 1e-6;
 

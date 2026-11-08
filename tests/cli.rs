@@ -93,3 +93,34 @@ fn case_3_reproduces_the_published_prices_and_uplift() {
     // The 1e-6 MW AIC ceiling relaxation lowers the peak price by about 1.2e-4.
     assert!((at(&r["aic"]["pi"][0][2]) - 422.).abs() < 1e-3, "aic peak");
 }
+
+#[test]
+fn payment_only_selection_is_reported_on_stderr() {
+    let market = serde_json::json!({
+        "g": [{"lo": 0, "hi": 10, "c": 5}, {"lo": 0, "hi": 10, "c": 7}],
+        "d": [vec![4; 24], vec![4; 24]],
+        "net": {"bus": [0, 1], "ln": [[0, 1, 0.1, 50.0]]}
+    });
+    let mut process = Command::new(env!("CARGO_BIN_EXE_ecp"))
+        .args(["solve", "-", "lmp"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    process
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(market.to_string().as_bytes())
+        .unwrap();
+    let out = process.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let r: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(r["price_selection"], "payment");
+    assert!(String::from_utf8(out.stderr).unwrap().contains("warning"));
+}

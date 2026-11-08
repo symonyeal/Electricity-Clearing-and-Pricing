@@ -1,4 +1,4 @@
-//! Values and payments against the independent baseline in fixtures/pricing.json.
+//! Values and payments against the frozen earlier implementation in fixtures/pricing.json.
 use ecp::{
     clearing, hull,
     market::Market,
@@ -103,6 +103,7 @@ fn baseline_values_and_payments_match() {
         expect_cost(rx.z, expected, name, "rx");
         let chp = hull::hc(&market, None).unwrap_or_else(|e| panic!("{name}.hc failed: {e}"));
         expect_cost(chp.z, expected, name, "hc");
+        assert!(chp.gap.abs() < 1e-6, "{name}: chp gap {}", chp.gap);
         close(
             chp.lb,
             number(&expected["qd_chp"]),

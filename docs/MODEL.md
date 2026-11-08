@@ -55,18 +55,17 @@ programs request zero relative gap and read back the achieved gap and objective 
 Bound solves disable presolve and use 1e-9 feasibility tolerances. A presolve
 infeasibility is retried without presolve; other failures keep the solver status.
 
-`lp::price` minimises demand payment over the optimal dual face, probes the face with an
+`pricing::price` minimises demand payment over the optimal dual face, probes the face with an
 interior-point solve without crossover, and otherwise walks the balance prices
 lexicographically. Dual stationarity is an equality, including at free angle columns,
-and the balance equalities must be the last rows. The output `st` names the stage.
+and the balance equalities must be the last rows. The output `price_selection` names the stage.
 
-| `st` | Meaning |
+| `price_selection` | Meaning |
 | --- | --- |
-| `opt`, `gap` | Direct solve; integer gap zero or positive |
 | `probe` | Interior point and vertex agree within 1e-3/MWh |
 | `walk` | Lexicographic walk over the balance prices completed |
-| `part` | Walk stopped early; the last completed stage is returned |
-| `pay` | More than 24 balance rows; demand payment minimised only |
+| `partial` | Walk stopped early; the last completed stage is returned |
+| `payment` | More than 24 balance rows; demand payment minimised only |
 | `raw` | Face program failed; raw solver duals |
 
 The face ceiling holds each stage within 1e-9 relative (scale at least 1); the probe

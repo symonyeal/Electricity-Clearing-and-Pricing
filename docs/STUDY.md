@@ -45,7 +45,4 @@ not to the unsampled intervals.
 
 The [retained run](results/ferc-study.json) contains all 17 successful samples from
 version 0.4.0. Reproduce it with `cargo run --release --locked -- case 3 study`.
-An independent calculation checked the source parameters, binary schedules, output
-and ramp constraints, energy balances, costs, realized profits, uplift components,
-CHP duality gaps and adaptive sample placements. This checks the reported finite
-experiment; it does not establish behavior between samples.
+The run is a finite experiment; it does not establish behavior between samples.

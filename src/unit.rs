@@ -5,10 +5,8 @@
 //! start-up and shut-down ramps; mu, md minimum up/down periods; u0, p0 state and output
 //! before the horizon; e0 periods spent in state u0. Omitted ramps default to hi and e0 to
 //! max(mu, md).
-use crate::lp::Problem;
+use crate::lp::{Problem, TOL};
 use serde::{Deserialize, Serialize};
-
-const TOL: f64 = 1e-7;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]

@@ -16,7 +16,10 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid(s) | Self::Solver(s) => f.write_str(s),
-            _ => write!(f, "{self:?}"),
+            Self::Infeasible => f.write_str("infeasible: the market has no feasible schedule"),
+            Self::Unbounded => f.write_str("the program is unbounded"),
+            Self::UnboundedOrInfeasible => f.write_str("unbounded or infeasible program"),
+            Self::Limited => f.write_str("the solver stopped at its limit"),
         }
     }
 }

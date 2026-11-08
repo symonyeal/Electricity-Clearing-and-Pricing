@@ -69,8 +69,22 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-The parity fixture pins 29 markets to an independent implementation at revision
-`ec91593`. The engine has no contingencies, losses, reserves or market mitigation;
+CHP time grows quickly with the horizon and the unit count (hull columns are O(T³) per unit).
+One `ecp solve MARKET chp` run each, single bus, 24 hourly periods, units of 40–70 MW with
+minimum output, start-up and no-load costs and 2-hour minimum up and down times, on a shared
+laptop; `uc` and `lmp` on the same markets take seconds:
+
+| Units | CHP time |
+|---:|---:|
+| 3 | 10 s |
+| 6 | 197 s |
+| 12 | over 900 s (stopped) |
+
+Above 24 balance rows (buses × periods) prices minimise demand payment only; the result
+reports `price_selection: "payment"` and `ecp` prints a warning on standard error.
+
+The parity fixture pins 29 markets to outputs of the earlier implementation at revision
+`ec91593`, frozen as JSON. The engine has no contingencies, losses, reserves or market mitigation;
 ISO-scale performance is unmeasured, and optimality holds to solver tolerances.
 
 MIT license.
