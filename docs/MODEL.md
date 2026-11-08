@@ -57,7 +57,7 @@ infeasibility is retried without presolve; other failures keep the solver status
 
 `pricing::price` minimises demand payment over the optimal dual face, probes the face with an
 interior-point solve without crossover, and otherwise walks the balance prices
-lexicographically. Dual stationarity is an equality, including at free angle columns,
+lexicographically (one LP per row, so only up to 24 rows). Dual stationarity is an equality, including at free angle columns,
 and the balance equalities must be the last rows. The output `price_selection` names the stage.
 
 | `price_selection` | Meaning |
@@ -65,7 +65,7 @@ and the balance equalities must be the last rows. The output `price_selection` n
 | `probe` | Interior point and vertex agree within 1e-3/MWh |
 | `walk` | Lexicographic walk over the balance prices completed |
 | `partial` | Walk stopped early; the last completed stage is returned |
-| `payment` | More than 24 balance rows; demand payment minimised only |
+| `payment` | More than 24 balance rows and the probe disagrees with the vertex; demand payment minimised only |
 | `raw` | Face program failed; raw solver duals |
 
 The face ceiling holds each stage within 1e-9 relative (scale at least 1); the probe

@@ -203,10 +203,148 @@ impl Problem {
     }
 }
 
+/// Most balance rows the lexicographic walk is run on (one LP per row).
+const WALK_MAX: usize = 24;
+
+/// Quality of price selection, independent of optimality of the primal solve.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Selection {
+    Raw,
+    Payment,
+    Probe,
+    Walk,
+    Partial,
+}
+
+impl Selection {
+    /// Require successful demand-payment minimisation; raw primal duals do not meet it.
+    pub fn require_payment(self) -> Result<(), Error> {
+        if self == Self::Raw {
+            Err(Error::Solver("demand-payment selection failed".into()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn ceiling(v: f64) -> f64 {
+    v + 1e-9 * v.abs().max(1.0)
+}
+
+/// Minimise demand payment over the optimal dual face, then refine balance prices.
+/// `balances` identifies the balance equalities; all primal bounds enter the dual
+/// explicitly, and stationarity is an equality. Stages: raw (face LP failed), pay
+/// (nt > WALK_MAX and the probe disagrees: payment only), probe (an interior point of the face agrees with the vertex),
+/// walk (lexicographic minimum over the balance prices), part (walk stopped early).
+pub(crate) fn price(p: &Problem, balances: &[usize]) -> Result<(Solution, Selection), Error> {
+    price_with(p, balances, |d| d.solve(false))
+}
+
+fn price_with(
+    p: &Problem,
+    balances: &[usize],
+    face: impl FnOnce(&Problem) -> Result<Solution, Error>,
+) -> Result<(Solution, Selection), Error> {
+    let nt = balances.len();
+    let unique: std::collections::BTreeSet<_> = balances.iter().collect();
+    if nt == 0
+        || unique.len() != nt
+        || balances.iter().any(|&j| j >= p.be.len())
+        || p.integer.iter().any(|x| *x)
+    {
+        return Err(
+            "price selection needs distinct valid balance rows of a continuous program".into(),
+        );
+    }
+    let mut p = p.clone();
+    for j in 0..p.c.len() {
+        if p.lb[j].is_finite() {
+            p.row(vec![(j, -1.0)], -p.lb[j]);
+        }
+        if p.ub[j].is_finite() {
+            p.row(vec![(j, 1.0)], p.ub[j]);
+        }
+        p.lb[j] = f64::NEG_INFINITY;
+        p.ub[j] = f64::INFINITY;
+    }
+    let mut s = p.solve(false)?;
+    let (m, e, n) = (p.a.len(), p.ae.len(), p.c.len());
+    let mut d = Problem::default();
+    for j in 0..m + e {
+        let c = if j >= m && balances.contains(&(j - m)) {
+            p.be[j - m]
+        } else {
+            0.0
+        };
+        d.col(
+            c,
+            f64::NEG_INFINITY,
+            if j < m { 0.0 } else { f64::INFINITY },
+            false,
+        );
+    }
+    let mut stationarity = vec![vec![]; n];
+    for (i, row) in p.a.iter().chain(&p.ae).enumerate() {
+        for &(j, v) in row {
+            stationarity[j].push((i, v));
+        }
+    }
+    for (row, c) in stationarity.into_iter().zip(&p.c) {
+        d.eq(row, *c);
+    }
+    d.row(
+        p.b.iter()
+            .chain(&p.be)
+            .enumerate()
+            .map(|(j, v)| (j, -v))
+            .collect(),
+        ceiling(-s.z),
+    );
+    let Ok(q) = face(&d) else {
+        return Ok((s, Selection::Raw));
+    };
+    s.dual = q.x[m..].to_vec();
+    d.row(
+        d.c.iter()
+            .enumerate()
+            .filter(|(_, v)| **v != 0.0)
+            .map(|(j, v)| (j, *v))
+            .collect(),
+        ceiling(q.z),
+    );
+    let mut probe = d.clone();
+    probe.c.fill(0.0);
+    for b in &mut probe.b {
+        *b += 1e-7 * b.abs().max(1.0);
+    }
+    if let Ok(q) = probe.solve_with(false, false, true) {
+        let delta = balances
+            .iter()
+            .map(|&j| (q.x[m + j] - s.dual[j]).abs())
+            .fold(0.0, f64::max);
+        if delta <= 1e-3 {
+            return Ok((s, Selection::Probe));
+        }
+    }
+    if nt > WALK_MAX {
+        return Ok((s, Selection::Payment));
+    }
+    for &j in balances {
+        d.c.fill(0.0);
+        d.c[m + j] = 1.0;
+        let Ok(q) = d.solve(false) else {
+            return Ok((s, Selection::Partial));
+        };
+        s.dual = q.x[m..].to_vec();
+        d.row(vec![(m + j, 1.0)], ceiling(q.z));
+    }
+    Ok((s, Selection::Walk))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pricing::price;
     #[test]
     fn prices_follow_handles_when_an_equality_is_appended() {
         let mut p = Problem::default();
@@ -244,5 +382,31 @@ mod tests {
         let mut p = Problem::default();
         p.col(-1., 0., f64::INFINITY, false);
         assert_eq!(p.solve(false).unwrap_err(), Error::Unbounded);
+    }
+
+    #[test]
+    fn failed_face_selection_cannot_satisfy_payment_policy() {
+        let mut p = Problem::default();
+        p.col(7., 0., 10., false);
+        p.eq(vec![(0, 1.)], 3.);
+        let (s, selection) = price_with(&p, &[0], |_| {
+            Err(Error::Solver("injected face failure".into()))
+        })
+        .unwrap();
+        assert!((s.z - 21.).abs() < 1e-8);
+        assert_eq!(selection, Selection::Raw);
+        assert!(selection.require_payment().is_err());
+    }
+
+    #[test]
+    fn large_balance_sets_are_priced_by_probe_without_the_walk() {
+        let mut p = Problem::default();
+        for j in 0..25 {
+            p.col(7., 0., 10., false);
+            p.eq(vec![(j, 1.)], 3.);
+        }
+        let (_, selection) = price(&p, &(0..25).collect::<Vec<_>>()).unwrap();
+        assert_eq!(selection, Selection::Probe);
+        selection.require_payment().unwrap();
     }
 }

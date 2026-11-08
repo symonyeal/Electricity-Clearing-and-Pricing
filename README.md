@@ -80,8 +80,9 @@ laptop; `uc` and `lmp` on the same markets take seconds:
 | 6 | 197 s |
 | 12 | over 900 s (stopped) |
 
-Above 24 balance rows (buses × periods) prices minimise demand payment only; the result
-reports `price_selection: "payment"` and `ecp` prints a warning on standard error.
+Above 24 balance rows (buses × periods) the lexicographic walk is skipped: prices are accepted
+when the interior-point probe agrees with the vertex (`price_selection: "probe"`), and
+otherwise minimise demand payment only (`"payment"`, with a warning on standard error).
 
 The parity fixture pins 29 markets to outputs of the earlier implementation at revision
 `ec91593`, frozen as JSON. The engine has no contingencies, losses, reserves or market mitigation;

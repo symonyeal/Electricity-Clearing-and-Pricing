@@ -95,7 +95,7 @@ fn case_3_reproduces_the_published_prices_and_uplift() {
 }
 
 #[test]
-fn payment_only_selection_is_reported_on_stderr() {
+fn above_24_balance_rows_are_priced_by_probe_without_warning() {
     let market = serde_json::json!({
         "g": [{"lo": 0, "hi": 10, "c": 5}, {"lo": 0, "hi": 10, "c": 7}],
         "d": [vec![4; 24], vec![4; 24]],
@@ -121,6 +121,6 @@ fn payment_only_selection_is_reported_on_stderr() {
         String::from_utf8_lossy(&out.stderr)
     );
     let r: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(r["price_selection"], "payment");
-    assert!(String::from_utf8(out.stderr).unwrap().contains("warning"));
+    assert_eq!(r["price_selection"], "probe");
+    assert!(out.stderr.is_empty());
 }

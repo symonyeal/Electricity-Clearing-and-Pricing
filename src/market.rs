@@ -1,5 +1,8 @@
 //! Validated market data, the nodal balance shared by every program, and the result type.
-use crate::{error::Error, lp::Status, pricing::Selection};
+use crate::{
+    error::Error,
+    lp::{Selection, Status},
+};
 use crate::{
     lp::{Problem, Solution},
     network::Network,
@@ -164,7 +167,7 @@ impl Market {
         p: &Problem,
         rows: &[usize],
     ) -> Result<(Solution, Vec<Vec<f64>>, Selection), Error> {
-        let (s, selection) = crate::pricing::price(p, rows)?;
+        let (s, selection) = crate::lp::price(p, rows)?;
         let prices: Vec<_> = rows.iter().map(|&j| s.dual[j]).collect();
         let pi = prices.chunks(self.t()).map(<[f64]>::to_vec).collect();
         Ok((s, pi, selection))

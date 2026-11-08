@@ -49,7 +49,7 @@ Handle tests append a continuous auxiliary column and an equality after balances
 prices and integer domains keep their meanings. A finite price grid checks weak duality
 on the original two-bus counterexample. These are bounded regressions, not a proof over
 all markets. Injected dual-face failure verifies that raw prices cannot satisfy the
-payment-selection policy; a 25-coordinate case reports payment-only quality. Typed
+payment-selection policy; a 25-row case is priced by the probe, skipping the walk, and a 2-bus 24-period CLI run reports it without a warning. Typed
 infeasible and unbounded outcomes are checked separately from solver faults.
 
 The adaptive study is checked against analytic costs and zero uplift for a one-unit
