@@ -56,6 +56,23 @@ The adaptive study is checked against analytic costs and zero uplift for a one-u
 linear market. Its FERC case run retains all 17 settlements; it is exploratory sensitivity
 analysis, with the input and limitations described in [the method](STUDY.md).
 
+## CHP timing
+
+CHP time grows quickly with the horizon and the unit count (hull columns are O(T³) per unit).
+One `ecp solve MARKET chp` run each, single bus, 24 hourly periods, units of 40–70 MW with
+minimum output, start-up and no-load costs and 2-hour minimum up and down times, on a shared
+laptop; `uc` and `lmp` on the same markets take seconds:
+
+| Units | CHP time |
+|---:|---:|
+| 3 | 10 s |
+| 6 | 197 s |
+| 12 | stopped unfinished after 11.3 h |
+
+Above 24 balance rows (buses × periods) the lexicographic walk is skipped: prices are accepted
+when the interior-point probe agrees with the vertex (`price_selection: "probe"`), and
+otherwise minimise demand payment only (`"payment"`, with a warning on standard error).
+
 ## Reproduce
 
 ```text
