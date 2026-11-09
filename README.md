@@ -78,7 +78,7 @@ laptop; `uc` and `lmp` on the same markets take seconds:
 |---:|---:|
 | 3 | 10 s |
 | 6 | 197 s |
-| 12 | over 900 s (stopped) |
+| 12 | over 4 h (not finished when last checked) |
 
 Above 24 balance rows (buses × periods) the lexicographic walk is skipped: prices are accepted
 when the interior-point probe agrees with the vertex (`price_selection: "probe"`), and
